@@ -1105,7 +1105,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         "  Live progress bar → summary → ZIP of all hits\n"
         "  El ZIP contiene <code>Premium Resultados/</code> &amp; <code>Normal Resultados/</code> folders\n"
         "  Cada archivo: detalles · cookie · enlace de inicio de sesión\n"
-        "  Además: 🏆 se envía la tarjeta del mejor resultado después del ZIP\n\n"
+        "  Además: 🏆 se envía la tarjeta del mejor resultado después del ZIP\n\n\n"
         "📁 <b>Formatos compatibles:</b>\n"
         "  • <code>.txt</code>  — Netscape cookies\n"
         "  • <code>.txt</code>  — Pipe-combo: <code>email:pass | NetflixId=…</code>\n"
@@ -1129,7 +1129,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "<b>3. JSON (.json)</b>\n"
         '<code>[{"name":"NetflixId","value":"ct%3D…"}]</code>\n\n'
         "<b>4. ZIP (.zip)</b>\n"
-        "Envía un ZIP — cada <code>.txt</code> / <code>.json</code> dentro corresponde a 1 cuenta.\n\n"
+        "Envía un ZIP — cada <code>.txt</code> / <code>.json</code> dentro corresponde a 1 cuenta.\n\n\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
         "📦 <b>Modo masivo</b>\n"
         "Archivos con varias cuentas → barra de progreso en tiempo real → resumen → ZIP.\n\n"
