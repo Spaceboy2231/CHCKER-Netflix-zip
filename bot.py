@@ -2368,7 +2368,7 @@ async def loginlinks_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
             if nft.get("success"):
                 content.append(f"# Acceso PC:     {nft.get('pc_url', '')}")
                 content.append(f"# Acceso móvil: {nft.get('mobile_url', '')}")
-                content.append("# TV:            https://www.netflix.com/tv2")
+                content.append("# TV:            https://www.netflix.com/tv")
             folder = "premium/" if "premium" in plan.lower() else "hits/"
             zf.writestr(f"{folder}{i:02d}_{safe}_{plan}.txt", "\n".join(content))
 
