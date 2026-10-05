@@ -1092,7 +1092,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     if update.effective_user:
         stats_tracker.record_user(update.effective_user.id)
     await update.message.reply_text(
-        "🎬 <b>Verificador de Cookies de Netflix</b>\n"
+        "🎬 <b>BILL CYPHER CHK NF</b>\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
         "Envíame un archivo de cookies y lo verificaré <b>en tiempo real</b> con los servidores de Netflix.\n\n"
         "📋 <b>Lo que obtengo de cada cuenta:</b>\n"
@@ -1100,7 +1100,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         "  📦 Plan   ·  🎬 Quality   ·  💰 Price\n"
         "  💳 Card   ·  🌍 Country   ·  🗓️ Billing date\n"
         "  👥 Profiles  ·  ✔️ Email verified  ·  📌 Hold status\n"
-        "  🖥️ Acceso PC  ·  📱 Acceso móvil  ·  📺 Acceso TV (enlaces de un clic)\n\n"
+        "  🖥️ Acceso PC  ·  📱 Acceso móvil  ·  📺 Acceso TV (enlaces de un clic)\n\n\n"
         "📦 <b>Bulk checks:</b>\n"
         "  Live progress bar → summary → ZIP of all hits\n"
         "  El ZIP contiene <code>Premium Resultados/</code> &amp; <code>Normal Resultados/</code> folders\n"
