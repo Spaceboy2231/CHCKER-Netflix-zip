@@ -305,7 +305,7 @@ def _login_keyboard(result: dict) -> InlineKeyboardMarkup | None:
         return InlineKeyboardMarkup([[
             InlineKeyboardButton("🖥️ Acceso PC",    url=nft["pc_url"]),
             InlineKeyboardButton("📱 Acceso móvil", url=nft["mobile_url"]),
-            InlineKeyboardButton("📺 TV", url="https://www.netflix.com/tv2")
+            InlineKeyboardButton("📺 Acceso TV",    url=nft["tv_url"]),
         ]])
     return None
 
@@ -2142,7 +2142,7 @@ def _nav_keyboard(nav_key: str, page: int, total: int, result: dict) -> InlineKe
     """
     Navigation keyboard for paginated login links.
     Row 1: ◀ Prev  |  N / Total  |  Next ▶
-    Row 2: 🖥️ Acceso PC  📱 Acceso móvil  (only if NFToken available)
+    Row 2: 🖥️ Acceso PC  📱 Acceso móvil   📺 Acceso TV (only if NFToken available)
     """
     nft = result.get("nftoken")
     has_links = nft and nft.get("success")
@@ -2163,7 +2163,7 @@ def _nav_keyboard(nav_key: str, page: int, total: int, result: dict) -> InlineKe
         rows.append([
             InlineKeyboardButton("🖥️ Acceso PC",    url=nft["pc_url"]),
             InlineKeyboardButton("📱 Acceso móvil", url=nft["mobile_url"]),
-            InlineKeyboardButton("📺 TV", url="https://www.netflix.com/tv2")
+            InlineKeyboardButton("📺 Acceso TV      url=nft["tv_url"]),
             
      ])
         
@@ -2315,6 +2315,7 @@ async def loginlinks_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
                 "  ── ENLACES DE INICIO DE SESIÓN ──────────────────────────────────────",
                 f"  Acceso PC:   {nft.get('pc_url', '')}",
                 f"  Mobile:     {nft.get('mobile_url', '')}",
+                f"  Acceso TV:   {nft.get('tv_url', '')}",
             ]
             if nft.get("expires"):
                 lines.append(f"  Expires:    {nft['expires']}")
