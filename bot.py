@@ -2162,6 +2162,7 @@ def _nav_keyboard(nav_key: str, page: int, total: int, result: dict) -> InlineKe
         rows.append([
             InlineKeyboardButton("🖥️ Acceso PC",    url=nft["pc_url"]),
             InlineKeyboardButton("📱 Acceso móvil", url=nft["mobile_url"]),
+            InlineKeyboardButton("📺 TV", url="https://www.netflix.com/tv2")
             
      ])
         
