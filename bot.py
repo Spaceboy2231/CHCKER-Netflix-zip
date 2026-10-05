@@ -305,6 +305,7 @@ def _login_keyboard(result: dict) -> InlineKeyboardMarkup | None:
         return InlineKeyboardMarkup([[
             InlineKeyboardButton("🖥️ Acceso PC",    url=nft["pc_url"]),
             InlineKeyboardButton("📱 Acceso móvil", url=nft["mobile_url"]),
+            InlineKeyboardButton("📺 TV", url="https://www.netflix.com/tv2")
         ]])
     return None
 
@@ -2178,7 +2179,7 @@ async def loginlinks_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
     from checker import generate_nftoken
 
     query = update.callback_query
-    await query.answer("⏳ Creando ZIP de enlaces de inicio de sesión…")
+    await query.answer("⏳ Creando ZIP de enlaces de inicio  de sesión…")
 
     try:
         _, link_type, session_key = query.data.split(":", 2)
@@ -2365,6 +2366,7 @@ async def loginlinks_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
             if nft.get("success"):
                 content.append(f"# Acceso PC:     {nft.get('pc_url', '')}")
                 content.append(f"# Acceso móvil: {nft.get('mobile_url', '')}")
+                content.append("# TV:            https://www.netflix.com/tv2")
             folder = "premium/" if "premium" in plan.lower() else "hits/"
             zf.writestr(f"{folder}{i:02d}_{safe}_{plan}.txt", "\n".join(content))
 
