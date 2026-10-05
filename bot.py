@@ -1100,7 +1100,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         "  📦 Plan   ·  🎬 Quality   ·  💰 Price\n"
         "  💳 Card   ·  🌍 Country   ·  🗓️ Billing date\n"
         "  👥 Profiles  ·  ✔️ Email verified  ·  📌 Hold status\n"
-        "  🖥️ Acceso PC  ·  📱 Acceso móvil  ·  Acceso Tv (enlaces de un clic)\n\n"
+        "  🖥️ Acceso PC  ·  📱 Acceso móvil  ·  📺 Acceso TV (enlaces de un clic)\n\n"
         "📦 <b>Bulk checks:</b>\n"
         "  Live progress bar → summary → ZIP of all hits\n"
         "  El ZIP contiene <code>Premium Resultados/</code> &amp; <code>Normal Resultados/</code> folders\n"
