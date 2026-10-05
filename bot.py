@@ -305,7 +305,7 @@ def _login_keyboard(result: dict) -> InlineKeyboardMarkup | None:
         return InlineKeyboardMarkup([[
             InlineKeyboardButton("🖥️ Acceso PC",    url=nft["pc_url"]),
             InlineKeyboardButton("📱 Acceso móvil", url=nft["mobile_url"]),
-            InlineKeyboardButton("📺 Acceso TV",    url=nft["tv_url"]),
+            InlineKeyboardButton("📺 TV", url="https://www.netflix.com/tv9"),
         ]])
     return None
 
@@ -2164,7 +2164,7 @@ def _nav_keyboard(nav_key: str, page: int, total: int, result: dict) -> InlineKe
         rows.append([
             InlineKeyboardButton("🖥️ Acceso PC",    url=nft["pc_url"]),
             InlineKeyboardButton("📱 Acceso móvil", url=nft["mobile_url"]),
-            InlineKeyboardButton("📺 Acceso TV",    url=nft["tv_url"]),
+            InlineKeyboardButton("📺 TV", url="https://www.netflix.com/tv9"),
             
      ])
         
@@ -2368,7 +2368,7 @@ async def loginlinks_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
             if nft.get("success"):
                 content.append(f"# Acceso PC:     {nft.get('pc_url', '')}")
                 content.append(f"# Acceso móvil: {nft.get('mobile_url', '')}")
-                content.append("# TV:            https://www.netflix.com/tv")
+                content.append("# TV:            https://www.netflix.com/tv9")
             folder = "premium/" if "premium" in plan.lower() else "hits/"
             zf.writestr(f"{folder}{i:02d}_{safe}_{plan}.txt", "\n".join(content))
 
