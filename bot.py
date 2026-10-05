@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""BILL CHYPHER CHK NF"""
+"""Netflix Cookie Checker — Telegram Bot"""
 
 import os
 import io
@@ -248,17 +248,17 @@ def _settings_text(uid: int) -> str:
     mode_lbl = "🔺 FULL" if mode == "full" else "🔻 BASIC"
     dlv_lbl  = "🟨 CARDS" if delivery == "cards" else "📦 ZIP (default)"
     return (
-        "🟨 <b>BILL CIPHER // SETTINGS</b>\n"
-        "🟨━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-        f"🔺 <b>OUTPUT:</b>  {mode_lbl}\n"
-        f"  <i>Bill Cipher visual interface</i>\n\n"
-        f"🔺 <b>DELIVERY:</b>  {dlv_lbl}\n"
-        f"  <i>Existing delivery option</i>\n\n"
-        "  🟨 <b>ZIP MODE</b> — existing ZIP delivery\n"
-        "        with full details, cookies &amp; login links\n"
-        "  🟨 <b>CARD-BY-CARD</b> — existing card delivery\n"
-        "        message card with login buttons\n\n"
-        "Choose an existing option below:"
+        "<b>🔶 B I L L  C I P H E R</b>\n"
+        "<b>╔══════════════════════════╗</b>\n"
+        f"<b>◢ OUTPUT</b>  ◇ {mode_lbl}\n"
+        "  <i>THE TRIANGLE SEES EVERYTHING</i>\n\n"
+        f"<b>◢ DELIVERY</b>  ◇ {dlv_lbl}\n"
+        "  <i>SELECT YOUR EXISTING MODE</i>\n\n"
+        "  ◇ <b>ZIP</b>  // EXISTING DELIVERY\n"
+        "        FULL DETAILS + EXISTING LOGIN LINKS\n"
+        "  ◇ <b>CARDS</b> // EXISTING CARD DELIVERY\n"
+        "        MESSAGE CARDS + EXISTING BUTTONS\n\n"
+        "<b>◢ CHOOSE AN OPTION ◣</b>"
     )
 
 
@@ -268,26 +268,26 @@ def _settings_markup(uid: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
         [
             InlineKeyboardButton(
-                "✅ Full Info" if mode == "full" else "🔺 FULL",
+                "◆ FULL ◆" if mode == "full" else "◇ FULL ◇",
                 callback_data=f"setmode:{uid}:full",
             ),
             InlineKeyboardButton(
-                "✅ Basic" if mode == "basic" else "🔻 BASIC",
+                "◆ BASIC ◆" if mode == "basic" else "◇ BASIC ◇",
                 callback_data=f"setmode:{uid}:basic",
             ),
         ],
         [
             InlineKeyboardButton(
-                "✅ ZIP Mode" if delivery == "zip" else "🟨 ZIP",
+                "◆ ZIP ◆" if delivery == "zip" else "◇ ZIP ◇",
                 callback_data=f"setdelivery:{uid}:zip",
             ),
             InlineKeyboardButton(
-                "✅ Card-by-Card" if delivery == "cards" else "🟨 CARDS",
+                "◆ CARDS ◆" if delivery == "cards" else "◇ CARDS ◇",
                 callback_data=f"setdelivery:{uid}:cards",
             ),
         ],
         [
-            InlineKeyboardButton("✖ CLOSE", callback_data="closesettings"),
+            InlineKeyboardButton("◈ CLOSE ◈", callback_data="closesettings"),
         ],
     ])
 
@@ -1093,7 +1093,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         stats_tracker.record_user(update.effective_user.id)
     await update.message.reply_text(
         "🔺 <b>BILL CIPHER // CHECKER</b>\n"
-        "🟨━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        "<b>╔══════════════════════════╗</b>\n"
         "Send me a cookie file and I'll verify it <b>live</b> against Netflix's servers.\n\n"
         "🟨 <b>ACCOUNT DETAILS:</b>\n"
         "  📧 Email  ·  🔑 Password  ·  📱 Phone\n"
@@ -1121,7 +1121,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(
         "🔺 <b>BILL CIPHER // FORMAT GUIDE</b>\n"
-        "🟨━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        "<b>╔══════════════════════════╗</b>\n"
         "<b>1. Netscape (.txt)</b>\n"
         "<code>.netflix.com  TRUE  /  TRUE  9999  NetflixId  ct%3D…</code>\n\n"
         "<b>2. Pipe-combo (.txt)</b>\n"
@@ -1298,7 +1298,7 @@ async def changepw_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
     await update.message.reply_text(
         "🔐 <b>Change Password</b>  <i>[BETA]</i>\n"
-        "🟨━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        "<b>╔══════════════════════════╗</b>\n"
         "⚠️ <b>Warning:</b> This will permanently change the account's Netflix password.\n"
         "Only use this on accounts you own or have explicit permission to modify.\n\n"
         "Send /cancel at any time to abort.\n\n"
@@ -1424,7 +1424,7 @@ async def _handle_changepw_input(update: Update, uid: int, text: str) -> None:
         if result["success"]:
             await status_msg.edit_text(
                 "✅ <b>Password Changed Successfully!</b>  <i>[BETA]</i>\n"
-                "🟨━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                "<b>╔══════════════════════════╗</b>\n"
                 f"🔑 New password: <code>{new_pw}</code>\n\n"
                 "The old password no longer works.\n"
                 "<i>Keep this safe — the bot does not store it.</i>",
@@ -1433,7 +1433,7 @@ async def _handle_changepw_input(update: Update, uid: int, text: str) -> None:
         else:
             await status_msg.edit_text(
                 "❌ <b>Password Change Failed</b>  <i>[BETA]</i>\n"
-                "🟨━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                "<b>╔══════════════════════════╗</b>\n"
                 f"{result['message']}\n\n"
                 "<i>Check that the NetflixId and current password are correct, "
                 "then try again with /changepw</i>",
@@ -1462,7 +1462,7 @@ async def info_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
     await update.message.reply_text(
         "ℹ️ <b>Netflix Cookie Checker — Bot Info</b>\n"
-        "🟨━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        "<b>╔══════════════════════════╗</b>\n"
         "🤖 <b>About</b>\n"
         "  Validates Netflix cookies <b>live</b> against Netflix servers.\n"
         "  Uses Chrome124 TLS fingerprint to bypass bot detection.\n"
