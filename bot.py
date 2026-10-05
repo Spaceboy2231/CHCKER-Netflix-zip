@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verificador de Cookies de Netflix — Telegram Bot"""
+"""BILL CYPHER CHR NF"""
 
 import os
 import io
