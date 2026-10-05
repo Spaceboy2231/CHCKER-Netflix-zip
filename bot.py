@@ -213,7 +213,7 @@ def _validate_cookie_text(text: str) -> tuple[bool, str]:
         lines = [l.strip() for l in text.splitlines() if l.strip()]
         sample = lines[0][:80] if lines else text[:80]
         return False, (
-            "🚫 <b>No cookies found.</b>\n\n"
+            "❌ <b>No Netflix cookies found.</b>\n\n"
             "Required: <code>NetflixId</code> or <code>SecureNetflixId</code> cookie.\n\n"
             f"<i>File starts with:</i> <code>{sample}</code>"
         )
@@ -245,16 +245,16 @@ def _set_delivery(user_id: int, mode: str) -> None:
 def _settings_text(uid: int) -> str:
     mode     = _get_mode(uid)
     delivery = _get_delivery(uid)
-    mode_lbl = "🧿 Full Info" if mode == "full" else "📜 Basic"
-    dlv_lbl  = "💬 Card-by-Card" if delivery == "cards" else "🎁 ZIP (default)"
+    mode_lbl = "📋 Full Info" if mode == "full" else "📄 Basic"
+    dlv_lbl  = "💬 Card-by-Card" if delivery == "cards" else "📦 ZIP (default)"
     return (
-        "🧿 <b>Bill Cypher Settings</b>\n"
+        "⚙️ <b>Bot Settings</b>\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-        f"🪄 <b>Output Format:</b>  {mode_lbl}\n"
+        f"📊 <b>Output Format:</b>  {mode_lbl}\n"
         f"  <i>How each account card is displayed</i>\n\n"
-        f"📡 <b>Delivery Mode:</b>  {dlv_lbl}\n"
+        f"📤 <b>Delivery Mode:</b>  {dlv_lbl}\n"
         f"  <i>How bulk hits are sent to you</i>\n\n"
-        "  🎁 <b>ZIP mode</b> — all hits bundled in one ZIP file\n"
+        "  📦 <b>ZIP mode</b> — all hits bundled in one ZIP file\n"
         "        with full details, cookies &amp; login links\n"
         "  💬 <b>Card-by-Card</b> — each hit sent as a separate\n"
         "        message card with login buttons\n\n"
@@ -268,33 +268,33 @@ def _settings_markup(uid: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
         [
             InlineKeyboardButton(
-                "👁️ Full Info" if mode == "full" else "🧿 Full Info",
+                "✅ Full Info" if mode == "full" else "📋 Full Info",
                 callback_data=f"setmode:{uid}:full",
             ),
             InlineKeyboardButton(
-                "👁️ Basic" if mode == "basic" else "📜 Basic",
+                "✅ Basic" if mode == "basic" else "📄 Basic",
                 callback_data=f"setmode:{uid}:basic",
             ),
         ],
         [
             InlineKeyboardButton(
-                "👁️ ZIP Mode" if delivery == "zip" else "🎁 ZIP Mode",
+                "✅ ZIP Mode" if delivery == "zip" else "📦 ZIP Mode",
                 callback_data=f"setdelivery:{uid}:zip",
             ),
             InlineKeyboardButton(
-                "👁️ Card-by-Card" if delivery == "cards" else "💬 Card-by-Card",
+                "✅ Card-by-Card" if delivery == "cards" else "💬 Card-by-Card",
                 callback_data=f"setdelivery:{uid}:cards",
             ),
         ],
         [
-            InlineKeyboardButton("✖️ Close", callback_data="closesettings"),
+            InlineKeyboardButton("❌ Close", callback_data="closesettings"),
         ],
     ])
 
 
 def _cancel_keyboard(msg_id: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([[
-        InlineKeyboardButton("✖️ Cancel", callback_data=f"cancel:{msg_id}")
+        InlineKeyboardButton("🛑 Cancel", callback_data=f"cancel:{msg_id}")
     ]])
 
 
@@ -304,7 +304,7 @@ def _login_keyboard(result: dict) -> InlineKeyboardMarkup | None:
     if nft and nft.get("success"):
         return InlineKeyboardMarkup([[
             InlineKeyboardButton("🖥️ PC Login",    url=nft["pc_url"]),
-            InlineKeyboardButton("📲 Phone Login", url=nft["mobile_url"]),
+            InlineKeyboardButton("📱 Phone Login", url=nft["mobile_url"]),
         ]])
     return None
 
@@ -376,9 +376,9 @@ def _plan_title(plan_name: str, status: str) -> str:
     if status == "free":
         return "🔓 FREE ACCOUNT (No Subscription) 🔓"
     if status == "on_hold":
-        return "🟡 ON HOLD ACCOUNT 🟡"
+        return "⏸️ ON HOLD ACCOUNT ⏸️"
     if "premium" in p:
-        return "👑 PREMIUM ACCOUNT 👑"
+        return "🌟 PREMIUM ACCOUNT 🌟"
     if "standard" in p and "ads" in p:
         return "📺 STANDARD W/ ADS ACCOUNT 📺"
     if "standard" in p:
@@ -386,10 +386,10 @@ def _plan_title(plan_name: str, status: str) -> str:
     if "basic" in p or "base" in p:
         return "📱 BASIC ACCOUNT 📱"
     if "mobile" in p:
-        return "📲 MOBILE ACCOUNT 📲"
+        return "📱 MOBILE ACCOUNT 📱"
     if status == "hit":
-        return "🟢 VALID ACCOUNT 🟢"
-    return "🔴 INVALID ACCOUNT 🔴"
+        return "✅ VALID ACCOUNT ✅"
+    return "❌ INVALID ACCOUNT ❌"
 
 
 def _status_line(status: str, plan: str) -> str:
@@ -409,7 +409,7 @@ def _status_line(status: str, plan: str) -> str:
     if status == "free":
         return "🔓 Status: Valid — No Active Subscription"
     if status == "on_hold":
-        return "🟡 Status: On Hold — Payment Issue"
+        return "⏸️ Status: On Hold — Payment Issue"
     return "✅ Status: Valid"
 
 
@@ -476,7 +476,7 @@ def format_result_full(result: dict, index: int = 1, total: int = 1, source: str
 
     lines.append(_status_line(status, plan))
     lines.append("")
-    lines.append("👁️ <b>Account Details:</b>")
+    lines.append("👤 <b>Account Details:</b>")
 
     if name:
         lines.append(f"• Name: {name}")
@@ -524,13 +524,13 @@ def format_result_full(result: dict, index: int = 1, total: int = 1, source: str
     issues = result.get("account_issues") or []
     if issues:
         lines.append("")
-        lines.append("🚨 <b>Account Alerts:</b>")
+        lines.append("⚠️ <b>Account Alerts:</b>")
         for issue in issues:
             lines.append(f"  🔴 {issue}")
 
     lines.append("")
     if nf_id:
-        lines.append("🔐 <b>Cookie:</b>")
+        lines.append("🍪 <b>Cookie:</b>")
         lines.append(f"<code>NetflixId={nf_id}</code>")
         lines.append("")
 
@@ -573,7 +573,7 @@ def format_result_basic(result: dict, index: int = 1, total: int = 1, source: st
     lines.append("")
 
     # ── Identity ───────────────────────────────────────────────────────────
-    lines.append("👁️ <b>Account</b>")
+    lines.append("👤 <b>Account</b>")
     if name:
         lines.append(f"  • Name:     {name}")
     lines.append(f"  • Email:    <code>{email}</code>")
@@ -586,7 +586,7 @@ def format_result_basic(result: dict, index: int = 1, total: int = 1, source: st
     # ── Subscription ───────────────────────────────────────────────────────
     flag = _flag(country)
     country_disp = f"{country} {flag}".strip() if flag else country
-    lines.append("💎 <b>Subscription</b>")
+    lines.append("📋 <b>Subscription</b>")
     lines.append(f"  • Country:  {country_disp}")
     lines.append(f"  • Plan:     {plan or 'Unknown'}")
     lines.append(f"  • Quality:  {quality}  ·  {streams} screens")
@@ -598,12 +598,12 @@ def format_result_basic(result: dict, index: int = 1, total: int = 1, source: st
 
     # ── Cookie ─────────────────────────────────────────────────────────────
     if nf_id:
-        lines.append(f"🔐 <code>NetflixId={nf_id}</code>")
+        lines.append(f"🍪 <code>NetflixId={nf_id}</code>")
         lines.append("")
 
     # ── Warnings ───────────────────────────────────────────────────────────
     if issues:
-        lines.append("🚨 <b>Account Issues</b>")
+        lines.append("⚠️ <b>Account Issues</b>")
         for issue in issues:
             lines.append(f"  🔴 {issue}")
         lines.append("")
@@ -628,13 +628,13 @@ def format_error_card(result: dict, index: int = 1, total: int = 1, source: str 
     counter = f"  #{index}/{total}" if total > 1 else ""
 
     if status == "invalid":
-        header = f"🔴 <b>INVALID / EXPIRED{counter}</b>"
+        header = f"❌ <b>INVALID / EXPIRED{counter}</b>"
         reason = message or "Cookie is expired or invalid."
-        icon   = "🔴"
+        icon   = "❌"
     else:
-        header = f"🚨 <b>ERROR{counter}</b>"
+        header = f"⚠️ <b>ERROR{counter}</b>"
         reason = message or "Unknown error."
-        icon   = "🚨"
+        icon   = "⚠️"
 
     lines = [header, ""]
     if source:
@@ -642,7 +642,7 @@ def format_error_card(result: dict, index: int = 1, total: int = 1, source: str 
     lines.append(f"{icon} Reason: <i>{reason}</i>")
     if nf_id:
         snippet = nf_id[:40] + "…" if len(nf_id) > 40 else nf_id
-        lines.append(f"🔐 Cookie: <code>NetflixId={snippet}</code>")
+        lines.append(f"🍪 Cookie: <code>NetflixId={snippet}</code>")
 
     return "\n".join(lines)
 
@@ -1037,9 +1037,9 @@ async def send_hits_zip(update: Update, hits: list[tuple[dict, str, str]]) -> No
     zip_name = f"Netflix-Hits-{total_hits}x-{rand2}.zip"
 
     caption_parts = [
-        f"🎁 <b>Netflix-Hits-{total_hits}x-{rand2}.zip</b>",
+        f"📦 <b>Netflix-Hits-{total_hits}x-{rand2}.zip</b>",
         "",
-        f"  👑 Premium Hits  »  <b>{len(premium)}</b>",
+        f"  🌟 Premium Hits  »  <b>{len(premium)}</b>",
         f"  ✅ Normal Hits   »  <b>{len(normal)}</b>",
         f"  📊 Total         »  <b>{total_hits}</b>",
     ]
@@ -1047,7 +1047,7 @@ async def send_hits_zip(update: Update, hits: list[tuple[dict, str, str]]) -> No
         caption_parts.append(f"  ♻️ Dupes removed »  <b>{dupes_removed}</b>")
     caption_parts += [
         "",
-        "🗂️ <b>ZIP structure:</b>",
+        "📁 <b>ZIP structure:</b>",
         "  <code>Premium Hits/</code>  — Premium account files",
         "  <code>Normal Hits/</code>   — Standard / Basic / other files",
         "  <code>_SUMMARY.txt</code>   — Overview",
@@ -1092,27 +1092,27 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     if update.effective_user:
         stats_tracker.record_user(update.effective_user.id)
     await update.message.reply_text(
-        "🔺 <b>BILL CYPHER</b>\n"
+        "🎬 <b>Netflix Cookie Checker</b>\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
         "Send me a cookie file and I'll verify it <b>live</b> against Netflix's servers.\n\n"
-        "👁️ <b>Account Information:</b>\n"
-        "  📧 Email  ·  🔑 Password  ·  📲 Phone\n"
-        "  💎 Plan   ·  🎬 Quality   ·  💰 Price\n"
-        "  💳 Card   ·  🌎 Country   ·  📅 Billing date\n"
-        "  👥 Profiles  ·  🛡️ Email verified  ·  📌 Hold status\n"
-        "  🖥️ PC Login  ·  📲 Phone Login (one-click links)\n\n"
-        "🎁 <b>Bulk checks:</b>\n"
+        "📋 <b>What I extract from each account:</b>\n"
+        "  📧 Email  ·  🔑 Password  ·  📱 Phone\n"
+        "  📦 Plan   ·  🎬 Quality   ·  💰 Price\n"
+        "  💳 Card   ·  🌍 Country   ·  🗓️ Billing date\n"
+        "  👥 Profiles  ·  ✔️ Email verified  ·  📌 Hold status\n"
+        "  🖥️ PC Login  ·  📱 Phone Login (one-click links)\n\n"
+        "📦 <b>Bulk checks:</b>\n"
         "  Live progress bar → summary → ZIP of all hits\n"
         "  ZIP has <code>Premium Hits/</code> &amp; <code>Normal Hits/</code> folders\n"
         "  Each file: details · cookie · login link\n"
-        "  Plus: 👑 single best hit card sent after ZIP\n\n"
-        "🗂️ <b>Supported formats:</b>\n"
+        "  Plus: 🏆 single best hit card sent after ZIP\n\n"
+        "📁 <b>Supported formats:</b>\n"
         "  • <code>.txt</code>  — Netscape cookies\n"
         "  • <code>.txt</code>  — Pipe-combo: <code>email:pass | NetflixId=…</code>\n"
         "  • <code>.json</code> — JSON cookie export\n"
         "  • <code>.zip</code>  — Multiple files at once\n"
         "  • Paste raw cookie text directly in chat\n\n"
-        "🧿 <b>Default mode:</b> Basic (clean card)\n"
+        "⚙️ <b>Default mode:</b> Basic (clean card)\n"
         "  /mode — switch modes  ·  /help — format guide",
         parse_mode=ParseMode.HTML,
     )
@@ -1120,7 +1120,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(
-        "📖 <b>Supported Formats</b>\n"
+        "📖 <b>Supported Cookie Formats</b>\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
         "<b>1. Netscape (.txt)</b>\n"
         "<code>.netflix.com  TRUE  /  TRUE  9999  NetflixId  ct%3D…</code>\n\n"
@@ -1131,9 +1131,9 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "<b>4. ZIP (.zip)</b>\n"
         "Drop a ZIP — each <code>.txt</code> / <code>.json</code> inside = 1 account.\n\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        "🎁 <b>Bulk mode</b>\n"
+        "📦 <b>Bulk mode</b>\n"
         "Multi-account files → live progress bar → summary → ZIP.\n\n"
-        "🗂️ <b>ZIP structure (Netflix-Hits-{N}x-{##}.zip):</b>\n"
+        "🗂 <b>ZIP structure (Netflix-Hits-{N}x-{##}.zip):</b>\n"
         "  📁 <code>Premium Hits/</code>  — one file per premium account\n"
         "  📁 <code>Normal Hits/</code>   — one file per other account\n"
         "  📄 <code>_SUMMARY.txt</code>   — total counts overview\n\n"
@@ -1141,9 +1141,9 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "  • Full account details (plan, country, billing…)\n"
         "  • Cookie (Netscape format)\n"
         "  • One-click login link (PC + Mobile)\n\n"
-        "👑 <b>After ZIP:</b> single Best Hit card (top-ranked account)\n\n"
+        "🏆 <b>After ZIP:</b> single Best Hit card (top-ranked account)\n\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        "🧿 <b>All Commands</b>\n\n"
+        "⚙️ <b>All Commands</b>\n\n"
         "  /start      — Welcome &amp; overview\n"
         "  /help       — This message\n"
         "  /info       — Live stats &amp; bot info\n"
@@ -1163,14 +1163,14 @@ async def mode_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     uid = update.effective_user.id if update.effective_user else 0
     current = _get_mode(uid)
     await update.message.reply_text(
-        f"🧿 <b>Output Mode</b>\n\n"
+        f"⚙️ <b>Output Mode</b>\n\n"
         f"Current: <b>{'Full Info' if current == 'full' else 'Basic'}</b>\n\n"
         "Choose your preferred mode:",
         parse_mode=ParseMode.HTML,
         reply_markup=InlineKeyboardMarkup([
             [
-                InlineKeyboardButton("🧿 Full Info",  callback_data=f"setmode:{uid}:full"),
-                InlineKeyboardButton("📜 Basic",      callback_data=f"setmode:{uid}:basic"),
+                InlineKeyboardButton("📋 Full Info",  callback_data=f"setmode:{uid}:full"),
+                InlineKeyboardButton("📄 Basic",      callback_data=f"setmode:{uid}:basic"),
             ]
         ]),
     )
@@ -1222,7 +1222,7 @@ async def setdelivery_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         _, uid_str, new_delivery = query.data.split(":")
         uid = int(uid_str)
         _set_delivery(uid, new_delivery)
-        label = "Card-by-Card 💬" if new_delivery == "cards" else "ZIP 🎁"
+        label = "Card-by-Card 💬" if new_delivery == "cards" else "ZIP 📦"
         await query.answer(f"Delivery mode set to {label} ✅")
         await query.edit_message_text(
             _settings_text(uid),
@@ -1461,9 +1461,9 @@ async def info_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     delivery_label = "Card-by-Card 💬" if _get_delivery(uid) == "cards" else "ZIP 📦"
 
     await update.message.reply_text(
-        "👁️ <b>Bill Cypher — Bot Info</b>\n"
+        "ℹ️ <b>Netflix Cookie Checker — Bot Info</b>\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-        "🔺 <b>About</b>\n"
+        "🤖 <b>About</b>\n"
         "  Validates Netflix cookies <b>live</b> against Netflix servers.\n"
         "  Uses Chrome124 TLS fingerprint to bypass bot detection.\n"
         "  Formats: Netscape, JSON, pipe-combo, hit-file, ZIP.\n\n"
@@ -1478,10 +1478,10 @@ async def info_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         f"  👤 Unique users    »  <b>{users}</b>\n"
         f"  🔄 Active checks   »  <b>{active}</b>\n"
         f"  🚀 Speed (last 60s)»  <b>{cpm} checks/min</b>\n\n"
-        "🧿 <b>Your Settings</b>\n"
+        "⚙️ <b>Your Settings</b>\n"
         f"  Output mode:   <b>{mode_label}</b>\n"
         f"  Delivery mode: <b>{delivery_label}</b>\n\n"
-        "📖 <b>Commands</b>\n"
+        "📋 <b>Commands</b>\n"
         "  /start      — Welcome &amp; overview\n"
         "  /help       — Formats &amp; bulk mode guide\n"
         "  /info       — This page\n"
@@ -2161,7 +2161,7 @@ def _nav_keyboard(nav_key: str, page: int, total: int, result: dict) -> InlineKe
     if has_links:
         rows.append([
             InlineKeyboardButton("🖥️ PC Login",    url=nft["pc_url"]),
-            InlineKeyboardButton("📲 Phone Login", url=nft["mobile_url"]),
+            InlineKeyboardButton("📱 Phone Login", url=nft["mobile_url"]),
         ])
     return InlineKeyboardMarkup(rows)
 
@@ -2425,7 +2425,7 @@ async def navlinks_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         return
 
     link_type = parts[2]
-    header = "👑 Login Links — Premium Only" if link_type == "premium" else "🔗 Login Links — All Hits"
+    header = "🌟 Login Links — Premium Only" if link_type == "premium" else "🔗 Login Links — All Hits"
 
     result, src, _ = hits[page]
     txt = format_result(result, page + 1, total, source=src, user_id=uid)
@@ -2631,13 +2631,13 @@ async def process_cookies(
         c = auto_parse_cookies(sets[0])
         keys = [k for k in c if k in ("NetflixId", "SecureNetflixId", "nfvdid", "gsid")]
         await status_msg.edit_text(
-            f"🔐 <b>Detected:</b> 1 account — {len(c)} cookies "
+            f"🍪 <b>Detected:</b> 1 account — {len(c)} cookies "
             f"({', '.join(keys) or '…'})\n🔍 Checking…",
             parse_mode=ParseMode.HTML,
         )
     else:
         await status_msg.edit_text(
-            f"🔐 <b>Detected:</b> {len(sets)} accounts\n🔍 Starting bulk check…",
+            f"🍪 <b>Detected:</b> {len(sets)} accounts\n🔍 Starting bulk check…",
             parse_mode=ParseMode.HTML,
         )
 
@@ -2676,7 +2676,7 @@ async def process_cookie_sets(
             time_str = f"{mins}m {secs}s" if mins else f"{secs}s"
             try:
                 await status_msg.edit_text(
-                    f"✖️ <b>Cancelled</b>\n\n"
+                    f"🛑 <b>Cancelled</b>\n\n"
                     f"{make_progress_bar(batch_start, total)}  {batch_start}/{total}\n\n"
                     f"✅ {hits}  ❌ {invalids}  ⏸️ {on_hold}  🔓 {frees}  ⚠️ {errors}\n\n"
                     f"⏱️ {time_str}",
@@ -2768,7 +2768,7 @@ async def process_cookie_sets(
                         "src": src, "uid": uid, "ts": time.time(),
                     }
                     kb = InlineKeyboardMarkup([[
-                        InlineKeyboardButton("🔗 Get Login Link", callback_data=f"genlink:{session_id}"),
+                        InlineKeyboardButton("🔑 Get Login Link", callback_data=f"genlink:{session_id}"),
                     ]])
                 try:
                     await update.message.reply_text(txt, parse_mode=ParseMode.HTML, reply_markup=kb)
@@ -2867,7 +2867,7 @@ async def process_cookie_sets(
             f"  ⚠️  Errors            »  <b>{errors}</b>\n\n"
             f"  📦  Total Checked     »  <b>{total}</b>\n"
             f"  ⏱️  Time              »  <b>{time_str}</b>\n"
-            f"  ⚡  Speed             »  <b>{speed:.1f} acc/min</b>",
+            f"  🚀  Speed             »  <b>{speed:.1f} acc/min</b>",
             parse_mode=ParseMode.HTML,
         )
 
@@ -2945,7 +2945,7 @@ async def process_cookie_sets(
                     best_txt = format_result(best_result, 1, 1, source=best_src, user_id=uid)
                     best_kb  = _login_keyboard(best_result)
                     full_best = (
-                        f"👑 <b>Best Hit from this batch</b>  ·  "
+                        f"🏆 <b>Best Hit from this batch</b>  ·  "
                         f"<i>top-ranked by plan · billing · member age</i>\n\n"
                         + best_txt
                     )
