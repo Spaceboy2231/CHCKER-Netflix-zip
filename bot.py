@@ -958,6 +958,7 @@ async def send_hits_zip(update: Update, hits: list[tuple[dict, str, str]]) -> No
         if nft.get("success"):
             lines.append(box_line("Acceso PC:", nft.get("pc_url", "")))
             lines.append(box_line("Acceso móvil:", nft.get("mobile_url", "")))
+            lines.append(box_line("Acceso TV:", nft.get("tv_url", "")))
             if nft.get("expires"):
                 lines.append(box_line("Expires:", nft["expires"]))
         else:
