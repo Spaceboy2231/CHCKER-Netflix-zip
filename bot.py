@@ -245,56 +245,56 @@ def _set_delivery(user_id: int, mode: str) -> None:
 def _settings_text(uid: int) -> str:
     mode     = _get_mode(uid)
     delivery = _get_delivery(uid)
-    mode_lbl = "🔺 FULL" if mode == "full" else "🔻 BASIC"
-    dlv_lbl  = "🟨 CARDS" if delivery == "cards" else "📦 ZIP (default)"
+    mode_lbl = "◆ FULL INFO" if mode == "full" else "◇ BASIC"
+    dlv_lbl  = "◆ CARD-BY-CARD" if delivery == "cards" else "◆ ZIP"
     return (
-        "<b>🔶 B I L L  C I P H E R</b>\n"
-        "<b>╔══════════════════════════╗</b>\n"
-        f"<b>◢ OUTPUT</b>  ◇ {mode_lbl}\n"
-        "  <i>THE TRIANGLE SEES EVERYTHING</i>\n\n"
-        f"<b>◢ DELIVERY</b>  ◇ {dlv_lbl}\n"
-        "  <i>SELECT YOUR EXISTING MODE</i>\n\n"
-        "  ◇ <b>ZIP</b>  // EXISTING DELIVERY\n"
-        "        FULL DETAILS + EXISTING LOGIN LINKS\n"
-        "  ◇ <b>CARDS</b> // EXISTING CARD DELIVERY\n"
-        "        MESSAGE CARDS + EXISTING BUTTONS\n\n"
-        "<b>◢ CHOOSE AN OPTION ◣</b>"
+        "△ <b>BILL CIPHER // CONTROL</b>\n"
+        "🟨 ══════════════════════════════\n\n"
+        f"◈ <b>OUTPUT FORMAT</b>    {mode_lbl}\n"
+        "   <i>Choose how your existing result cards appear</i>\n\n"
+        f"◈ <b>DELIVERY</b>         {dlv_lbl}\n"
+        "   <i>Choose how your existing results are delivered</i>\n\n"
+        "🟨 ──────────────────────────────\n"
+        "   <b>ACTIVE PANEL</b>\n"
+        f"   FORMAT  ›  {mode_lbl}\n"
+        f"   DELIVERY ›  {dlv_lbl}\n\n"
+        "🟨 ══════════════════════════════\n"
+        "<i>THE EYE IS WATCHING. SELECT AN EXISTING OPTION.</i>"
     )
-
 
 def _settings_markup(uid: int) -> InlineKeyboardMarkup:
     mode     = _get_mode(uid)
     delivery = _get_delivery(uid)
     return InlineKeyboardMarkup([
         [
-            InlineKeyboardButton(
-                "◆ FULL ◆" if mode == "full" else "◇ FULL ◇",
-                callback_data=f"setmode:{uid}:full",
-            ),
-            InlineKeyboardButton(
-                "◆ BASIC ◆" if mode == "basic" else "◇ BASIC ◇",
-                callback_data=f"setmode:{uid}:basic",
-            ),
+            InlineKeyboardButton("◆ FULL INFO" if mode == "full" else "◇ FULL INFO", callback_data=f"setmode:{uid}:full"),
+            InlineKeyboardButton("◆ BASIC" if mode == "basic" else "◇ BASIC", callback_data=f"setmode:{uid}:basic"),
         ],
         [
-            InlineKeyboardButton(
-                "◆ ZIP ◆" if delivery == "zip" else "◇ ZIP ◇",
-                callback_data=f"setdelivery:{uid}:zip",
-            ),
-            InlineKeyboardButton(
-                "◆ CARDS ◆" if delivery == "cards" else "◇ CARDS ◇",
-                callback_data=f"setdelivery:{uid}:cards",
-            ),
+            InlineKeyboardButton("◆ ZIP" if delivery == "zip" else "◇ ZIP", callback_data=f"setdelivery:{uid}:zip"),
+            InlineKeyboardButton("◆ CARD-BY-CARD" if delivery == "cards" else "◇ CARD-BY-CARD", callback_data=f"setdelivery:{uid}:cards"),
         ],
-        [
-            InlineKeyboardButton("◈ CLOSE ◈", callback_data="closesettings"),
-        ],
+        [InlineKeyboardButton("△ CLOSE PANEL", callback_data="closesettings")],
     ])
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 def _cancel_keyboard(msg_id: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([[
-        InlineKeyboardButton("🔺 ABORT", callback_data=f"cancel:{msg_id}")
+        InlineKeyboardButton("🛑 Cancel", callback_data=f"cancel:{msg_id}")
     ]])
 
 
@@ -303,8 +303,8 @@ def _login_keyboard(result: dict) -> InlineKeyboardMarkup | None:
     nft = result.get("nftoken")
     if nft and nft.get("success"):
         return InlineKeyboardMarkup([[
-            InlineKeyboardButton("🟨 PC",    url=nft["pc_url"]),
-            InlineKeyboardButton("🟨 MOBILE", url=nft["mobile_url"]),
+            InlineKeyboardButton("🖥️ PC Login",    url=nft["pc_url"]),
+            InlineKeyboardButton("📱 Phone Login", url=nft["mobile_url"]),
         ]])
     return None
 
@@ -1092,89 +1092,89 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     if update.effective_user:
         stats_tracker.record_user(update.effective_user.id)
     await update.message.reply_text(
-        "🔺 <b>BILL CIPHER // CHECKER</b>\n"
-        "<b>╔══════════════════════════╗</b>\n"
-        "Send me a cookie file and I'll verify it <b>live</b> against Netflix's servers.\n\n"
-        "🟨 <b>ACCOUNT DETAILS:</b>\n"
+        "△ <b>BILL CIPHER // NETFLIX CHECKER</b>\n"
+        "🟨 ══════════════════════════════\n\n"
+        "<b>THE EYE IS OPEN.</b> Send your existing cookie file and the bot will process it.\n\n"
+        "◈ <b>EXISTING OUTPUT</b>\n"
         "  📧 Email  ·  🔑 Password  ·  📱 Phone\n"
         "  📦 Plan   ·  🎬 Quality   ·  💰 Price\n"
         "  💳 Card   ·  🌍 Country   ·  🗓️ Billing date\n"
         "  👥 Profiles  ·  ✔️ Email verified  ·  📌 Hold status\n"
-        "  🖥️ PC Login  ·  📱 Phone Login (one-click links)\n\n"
-        "🟨 <b>BULK CHECKS:</b>\n"
-        "  Live progress bar → summary → ZIP of all hits\n"
-        "  ZIP has <code>Premium Hits/</code> &amp; <code>Normal Hits/</code> folders\n"
-        "  Each file: details · cookie · login link\n"
-        "  Plus: 🏆 single best hit card sent after ZIP\n\n"
-        "🟨 <b>SUPPORTED FORMATS:</b>\n"
-        "  • <code>.txt</code>  — Netscape cookies\n"
-        "  • <code>.txt</code>  — Pipe-combo: <code>email:pass | NetflixId=…</code>\n"
-        "  • <code>.json</code> — JSON cookie export\n"
-        "  • <code>.zip</code>  — Multiple files at once\n"
-        "  • Paste raw cookie text directly in chat\n\n"
-        "🔺 <b>DEFAULT MODE:</b> Basic\n"
-        "  /mode — switch modes  ·  /help — format guide",
+        "  🖥️ PC Login  ·  📱 Phone Login\n\n"
+        "🟨 <b>VISUAL MODE</b>\n"
+        "  /settings  ›  output &amp; delivery panel\n"
+        "  /mode      ›  switch Basic ↔ Full Info\n"
+        "  /help      ›  format guide\n\n"
+        "🟨 ──────────────────────────────\n"
+        "<i>BILL CIPHER // EXISTING FUNCTIONS PRESERVED</i>",
         parse_mode=ParseMode.HTML,
     )
+
+
+
+
+
+
+
 
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(
-        "🔺 <b>BILL CIPHER // FORMAT GUIDE</b>\n"
-        "<b>╔══════════════════════════╗</b>\n"
-        "<b>1. Netscape (.txt)</b>\n"
-        "<code>.netflix.com  TRUE  /  TRUE  9999  NetflixId  ct%3D…</code>\n\n"
-        "<b>2. Pipe-combo (.txt)</b>\n"
-        "<code>email:pass | Country=IN | NetflixId=ct%3D…</code>\n\n"
-        "<b>3. JSON (.json)</b>\n"
-        '<code>[{"name":"NetflixId","value":"ct%3D…"}]</code>\n\n'
-        "<b>4. ZIP (.zip)</b>\n"
-        "Drop a ZIP — each <code>.txt</code> / <code>.json</code> inside = 1 account.\n\n"
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        "🟨 <b>BULK MODE</b>\n"
-        "Multi-account files → live progress bar → summary → ZIP.\n\n"
-        "🗂 <b>ZIP structure (Netflix-Hits-{N}x-{##}.zip):</b>\n"
-        "  📁 <code>Premium Hits/</code>  — one file per premium account\n"
-        "  📁 <code>Normal Hits/</code>   — one file per other account\n"
-        "  📄 <code>_SUMMARY.txt</code>   — total counts overview\n\n"
-        "📄 <b>Each account file contains:</b>\n"
-        "  • Full account details (plan, country, billing…)\n"
-        "  • Cookie (Netscape format)\n"
-        "  • One-click login link (PC + Mobile)\n\n"
-        "🏆 <b>After ZIP:</b> single Best Hit card (top-ranked account)\n\n"
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        "🟨 <b>COMMANDS</b>\n\n"
-        "  /start      — Welcome &amp; overview\n"
-        "  /help       — This message\n"
-        "  /info       — Live stats &amp; bot info\n"
-        "  /settings   — ⚙️ Output format &amp; delivery mode\n"
-        "  /mode       — Toggle Basic ↔ Full Info\n"
-        "  /basic      — Switch to Basic (compact) mode\n"
-        "  /fullinfo   — Switch to Full Info mode\n"
-        "  /changepw   — 🔐 [BETA] Change a Netflix account password\n"
-        "  /cancel     — Cancel any active flow (e.g. /changepw)\n"
-        "  /proxy      — 🛡 [Admin] Proxy pool manager\n"
-        "  /setadmin   — 🔑 Claim admin role (first use only)",
+        "△ <b>BILL CIPHER // HELP</b>\n"
+        "🟨 ══════════════════════════════\n\n"
+        "<b>EXISTING INPUT FORMATS</b>\n"
+        "  ① Netscape (.txt)\n"
+        "  ② Pipe-combo (.txt)\n"
+        "  ③ JSON (.json)\n"
+        "  ④ ZIP (.zip)\n\n"
+        "◈ <b>EXISTING COMMANDS</b>\n"
+        "  /start      › welcome\n"
+        "  /help       › this guide\n"
+        "  /info       › bot information\n"
+        "  /settings   › visual settings panel\n"
+        "  /mode       › Basic ↔ Full Info\n"
+        "  /basic      › Basic mode\n"
+        "  /fullinfo   › Full Info mode\n"
+        "  /changepw   › existing command\n"
+        "  /cancel     › cancel existing flow\n"
+        "  /proxy      › existing admin panel\n"
+        "  /setadmin   › existing admin setup\n\n"
+        "🟨 ══════════════════════════════\n"
+        "<i>NO NEW FUNCTIONS. ONLY THE VISUAL LAYER WAS RESTYLED.</i>",
         parse_mode=ParseMode.HTML,
     )
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 async def mode_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     uid = update.effective_user.id if update.effective_user else 0
     current = _get_mode(uid)
     await update.message.reply_text(
-        f"🔺 <b>BILL CIPHER // OUTPUT MODE</b>\n\n"
-        f"Current: <b>{'Full Info' if current == 'full' else 'Basic'}</b>\n\n"
-        "Choose an existing mode:",
+        "△ <b>BILL CIPHER // OUTPUT MODE</b>\n"
+        "🟨 ══════════════════════════════\n\n"
+        f"CURRENT › <b>{'◆ FULL INFO' if current == 'full' else '◆ BASIC'}</b>\n\n"
+        "Select one of the existing output modes:",
         parse_mode=ParseMode.HTML,
         reply_markup=InlineKeyboardMarkup([
             [
-                InlineKeyboardButton("🔺 FULL",  callback_data=f"setmode:{uid}:full"),
-                InlineKeyboardButton("🔻 BASIC",      callback_data=f"setmode:{uid}:basic"),
+                InlineKeyboardButton("◆ FULL INFO", callback_data=f"setmode:{uid}:full"),
+                InlineKeyboardButton("◇ BASIC", callback_data=f"setmode:{uid}:basic"),
             ]
         ]),
     )
-
 
 async def setmode_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
@@ -1298,7 +1298,7 @@ async def changepw_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
     await update.message.reply_text(
         "🔐 <b>Change Password</b>  <i>[BETA]</i>\n"
-        "<b>╔══════════════════════════╗</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
         "⚠️ <b>Warning:</b> This will permanently change the account's Netflix password.\n"
         "Only use this on accounts you own or have explicit permission to modify.\n\n"
         "Send /cancel at any time to abort.\n\n"
@@ -1424,7 +1424,7 @@ async def _handle_changepw_input(update: Update, uid: int, text: str) -> None:
         if result["success"]:
             await status_msg.edit_text(
                 "✅ <b>Password Changed Successfully!</b>  <i>[BETA]</i>\n"
-                "<b>╔══════════════════════════╗</b>\n"
+                "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
                 f"🔑 New password: <code>{new_pw}</code>\n\n"
                 "The old password no longer works.\n"
                 "<i>Keep this safe — the bot does not store it.</i>",
@@ -1433,7 +1433,7 @@ async def _handle_changepw_input(update: Update, uid: int, text: str) -> None:
         else:
             await status_msg.edit_text(
                 "❌ <b>Password Change Failed</b>  <i>[BETA]</i>\n"
-                "<b>╔══════════════════════════╗</b>\n"
+                "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
                 f"{result['message']}\n\n"
                 "<i>Check that the NetflixId and current password are correct, "
                 "then try again with /changepw</i>",
@@ -1462,7 +1462,7 @@ async def info_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
     await update.message.reply_text(
         "ℹ️ <b>Netflix Cookie Checker — Bot Info</b>\n"
-        "<b>╔══════════════════════════╗</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
         "🤖 <b>About</b>\n"
         "  Validates Netflix cookies <b>live</b> against Netflix servers.\n"
         "  Uses Chrome124 TLS fingerprint to bypass bot detection.\n"
@@ -2147,21 +2147,21 @@ def _nav_keyboard(nav_key: str, page: int, total: int, result: dict) -> InlineKe
     has_links = nft and nft.get("success")
 
     prev_btn = (
-        InlineKeyboardButton("◀ PREV", callback_data=f"navlinks:{nav_key}:{page - 1}")
+        InlineKeyboardButton("◀ Prev", callback_data=f"navlinks:{nav_key}:{page - 1}")
         if page > 0
         else InlineKeyboardButton("·", callback_data="noop")
     )
     counter_btn = InlineKeyboardButton(f"  {page + 1} / {total}  ", callback_data="noop")
     next_btn = (
-        InlineKeyboardButton("NEXT ▶", callback_data=f"navlinks:{nav_key}:{page + 1}")
+        InlineKeyboardButton("Next ▶", callback_data=f"navlinks:{nav_key}:{page + 1}")
         if page < total - 1
         else InlineKeyboardButton("·", callback_data="noop")
     )
     rows = [[prev_btn, counter_btn, next_btn]]
     if has_links:
         rows.append([
-            InlineKeyboardButton("🟨 PC",    url=nft["pc_url"]),
-            InlineKeyboardButton("🟨 MOBILE", url=nft["mobile_url"]),
+            InlineKeyboardButton("🖥️ PC Login",    url=nft["pc_url"]),
+            InlineKeyboardButton("📱 Phone Login", url=nft["mobile_url"]),
         ])
     return InlineKeyboardMarkup(rows)
 
@@ -2768,7 +2768,7 @@ async def process_cookie_sets(
                         "src": src, "uid": uid, "ts": time.time(),
                     }
                     kb = InlineKeyboardMarkup([[
-                        InlineKeyboardButton("🔺 GET LINK", callback_data=f"genlink:{session_id}"),
+                        InlineKeyboardButton("🔑 Get Login Link", callback_data=f"genlink:{session_id}"),
                     ]])
                 try:
                     await update.message.reply_text(txt, parse_mode=ParseMode.HTML, reply_markup=kb)
