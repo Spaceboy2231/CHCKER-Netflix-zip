@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Netflix Cookie Checker — Telegram Bot"""
+"""BILL CHYPHER CHK NF"""
 
 import os
 import io
