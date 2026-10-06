@@ -303,9 +303,9 @@ def _login_keyboard(result: dict) -> InlineKeyboardMarkup | None:
     nft = result.get("nftoken")
     if nft and nft.get("success"):
         return InlineKeyboardMarkup([[
-            InlineKeyboardButton("🖥️ Acceso PC",    url=nft["pc_url"]),
-            InlineKeyboardButton("📱 Acceso móvil", url=nft["mobile_url"]),
-            InlineKeyboardButton("📺 TV", url="https://www.netflix.com/tv9"),
+            InlineKeyboardButton("🖥️ PC",    url=nft["pc_url"]),
+            InlineKeyboardButton("📱 móvil", url=nft["mobile_url"]),
+            InlineKeyboardButton("📺 TV", url="https://www.netflix.com/tv9?nftoken="),
         ]])
     return None
 
@@ -956,8 +956,8 @@ async def send_hits_zip(update: Update, hits: list[tuple[dict, str, str]]) -> No
         # Login links
         lines += ["", f"  {'ENLACES DE INICIO DE SESIÓN':^{W-2}}", thin]
         if nft.get("success"):
-            lines.append(box_line("Acceso PC:", nft.get("pc_url", "")))
-            lines.append(box_line("Acceso móvil:", nft.get("mobile_url", "")))
+            lines.append(box_line("PC:", nft.get("pc_url", "")))
+            lines.append(box_line("móvil:", nft.get("mobile_url", "")))
             lines.append(box_line("TV:", nft.get("tv_url", "")))
             if nft.get("expires"):
                 lines.append(box_line("Expires:", nft["expires"]))
@@ -2162,8 +2162,8 @@ def _nav_keyboard(nav_key: str, page: int, total: int, result: dict) -> InlineKe
     rows = [[prev_btn, counter_btn, next_btn]]
     if has_links:
         rows.append([
-            InlineKeyboardButton("🖥️ Acceso PC",    url=nft["pc_url"]),
-            InlineKeyboardButton("📱 Acceso móvil", url=nft["mobile_url"]),
+            InlineKeyboardButton("🖥️ PC",    url=nft["pc_url"]),
+            InlineKeyboardButton("📱 móvil", url=nft["mobile_url"]),
             InlineKeyboardButton("📺 TV", url="https://www.netflix.com/tv9?nftoken="),
             
      ])
