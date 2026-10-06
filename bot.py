@@ -958,7 +958,7 @@ async def send_hits_zip(update: Update, hits: list[tuple[dict, str, str]]) -> No
         if nft.get("success"):
             lines.append(box_line("Acceso PC:", nft.get("pc_url", "")))
             lines.append(box_line("Acceso móvil:", nft.get("mobile_url", "")))
-            lines.append(box_line("Acceso TV:", nft.get("tv_url", "")))
+            lines.append(box_line("TV:", nft.get("tv_url", "")))
             if nft.get("expires"):
                 lines.append(box_line("Expires:", nft["expires"]))
         else:
@@ -2143,7 +2143,7 @@ def _nav_keyboard(nav_key: str, page: int, total: int, result: dict) -> InlineKe
     """
     Navigation keyboard for paginated login links.
     Row 1: ◀ Prev  |  N / Total  |  Next ▶
-    Row 2: 🖥️ Acceso PC  📱 Acceso móvil   📺 Acceso TV (only if NFToken available)
+    Row 2: 🖥️ Acceso PC  📱 Acceso móvil  📺 Acceso TV (only if NFToken available)
     """
     nft = result.get("nftoken")
     has_links = nft and nft.get("success")
@@ -2164,7 +2164,7 @@ def _nav_keyboard(nav_key: str, page: int, total: int, result: dict) -> InlineKe
         rows.append([
             InlineKeyboardButton("🖥️ Acceso PC",    url=nft["pc_url"]),
             InlineKeyboardButton("📱 Acceso móvil", url=nft["mobile_url"]),
-            InlineKeyboardButton("📺 TV", url="https://www.netflix.com/tv9"),
+            InlineKeyboardButton("📺 TV", url="https://www.netflix.com/tv9?nftoken="),
             
      ])
         
