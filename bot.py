@@ -305,7 +305,7 @@ def _login_keyboard(result: dict) -> InlineKeyboardMarkup | None:
         return InlineKeyboardMarkup([[
             InlineKeyboardButton("🖥️ PC",    url=nft["pc_url"]),
             InlineKeyboardButton("📱 móvil", url=nft["mobile_url"]),
-            InlineKeyboardButton("📺 TV", url="https://www.netflix.com/tv9?nftoken="),
+            InlineKeyboardButton("📺 TV", url="https://www.netflix.com/tv2?nftoken="),
         ]])
     return None
 
