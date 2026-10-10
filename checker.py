@@ -222,37 +222,33 @@ PLAN_MAP = {
 
 import json
 
-NFTOKEN_API_URL = "https://ios.prod.ftl.netflix.com/iosui/user/18.51"
+NFTOKEN_API_URL = "https://ios.prod.ftl.netflix.com/iosui/user/15.48"
 NFTOKEN_PARAMS = {
-    "appVersion": "18.51.0",
+    "appVersion": "15.48.1",
     "device_type": "NFAPPL-02-",
-    # IPHONE16%3D1 corresponde a iPhone 15 Pro con soporte nativo para iOS 18
-    "esn": "NFAPPL-02-IPHONE16%3D1-PXA-A2848-D4F5B3A6E7C8D9E0F1A2B3C4D5E6F7A8B9C0D1E2F3A4B5C6",
+    "esn": "NFAPPL-02-IPHONE8%3D1-PXA-A2111-D4F5B3A6E7C8D9E0F1A2B3C4D5E6F7A8B9C0D1E2F3A4B5C6",
     "idiom": "phone",
-    "iosVersion": "18.1.0",
+    "iosVersion": "15.8.5",
     "pathFormat": "graph",
     "responseFormat": "json",
     "path": '["account","token","default"]',
-    "config": json.dumps({"device_type": "NFAPPL-02-", "idiom": "phone", "iosVersion": "18.1.0", "appVersion": "18.51.0"}),
-    "device_type": "NFAPPL-02-",
-    "idiom": "phone",
-    "iosVersion": "18.1.0",
-    "appVersion": "18.51.0",
+    "config": json.dumps({"device_type": "NFAPPL-02-", "idiom": "phone", "iosVersion": "15.8.5", "appVersion": "15.48.1"}),
 }
 
 NFTOKEN_HEADERS = {
-    "User-Agent": "Argo/18.51.0 (iPhone; iOS 15.8.5; Scale/2.00)",
+    "User-Agent": "Argo/15.48.1 (iPhone; iOS 15.8.5; Scale/2.00)",
     "Accept": "application/json",
     "Accept-Language": "en-US,en;q=0.9",
     "x-netflix.client.type": "argo",
-    "x-netflix.request.routing": json.dumps({"path": "/nq/mobile/nqios/~18.51.0/user", "control_tag": "iosui_argo"}),
+    "x-netflix.request.routing": json.dumps({"path": "/nq/mobile/nqios/~15.48.0/user", "control_tag": "iosui_argo"}),
     "x-netflix.context": "{}",
     "x-netflix.profiles": "{}",
-    "x-netflix.app-version": "18.51.0",
+    "x-netflix.app-version": "15.48.1",
     "x-netflix.idiom": "phone",
     "x-netflix.os.version": "15.8.5",
     "x-netflix.device.model": "iPhone8,1",
 }
+
 
 
 
