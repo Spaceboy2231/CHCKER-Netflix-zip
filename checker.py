@@ -233,11 +233,11 @@ NFTOKEN_PARAMS = {
     "pathFormat": "graph",
     "responseFormat": "json",
     "path": '["account","token","default"]',
-    "config": json.dumps({
-        "device_type": "NFAPPL-02-",
-        "idiom": "phone",
-        "iosVersion": "18.1.0",
-        "appVersion": "18.51.0",
+    "config": json.dumps({"device_type": "NFAPPL-02-", "idiom": "phone", "iosVersion": "18.1.0", "appVersion": "18.51.0"}),
+    "device_type": "NFAPPL-02-",
+    "idiom": "phone",
+    "iosVersion": "18.1.0",
+    "appVersion": "18.51.0",
 }
 
 NFTOKEN_HEADERS = {
