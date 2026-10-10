@@ -515,6 +515,8 @@ def generate_nftoken(cookies: dict) -> dict:
             headers={**NFTOKEN_HEADERS, "Cookie": f"NetflixId={netflix_id}"},
             timeout=10,
         )
+        print("STATUS:", resp.status_code)
+        print("BODY:", resp.text)
         if resp.status_code != 200:
             return {"success": False, "error": f"API returned HTTP {resp.status_code}"}
         data = resp.json()
