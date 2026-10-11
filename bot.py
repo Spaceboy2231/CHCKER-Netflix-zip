@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""BILL CYPHER CHK NF — Auto-Deduplicated Vault & Instant Delivery Edition"""
+"""BILL CYPHER CHK NF — High-Speed 5G & 100% Account Match Edition"""
 
 import os
 import io
@@ -12,6 +12,7 @@ import zipfile
 import json
 import re
 import functools
+import threading
 from datetime import date
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
@@ -72,11 +73,12 @@ OWNER_URL: str = f"https://t.me/{OWNER_USER}"
 def is_admin(uid: int) -> bool:
     return bool(uid and uid == OWNER_ID)
 
-_ACCOUNT_LOCK = asyncio.Lock()
+_CHECKER_THREAD_LOCK = threading.Lock()
+_ASYNC_VAULT_LOCK = asyncio.Lock()
 
 
 # ===========================================================================
-# 2. PERSISTENCIA EN MONGODB (NO SE BORRA NADA AL ACTUALIZAR)
+# 2. PERSISTENCIA HÍBRIDA (MONGODB AUTOMÁTICO + TELEGRAM BACKUP)
 # ===========================================================================
 _MONGO_DB = None
 
@@ -112,7 +114,7 @@ def _get_mongo():
 
 
 # ===========================================================================
-# 3. SISTEMA DE CRÉDITOS (15 DIARIOS / SIN CACHÉ DESINCRONIZADA)
+# 3. SISTEMA DE CRÉDITOS (15 DIARIOS POR DEFECTO / REEMBOLSO AUTOMÁTICO)
 # ===========================================================================
 DAILY_FREE_CREDITS: int = 15
 _CREDITS_FILE = Path("credits.json")
@@ -253,7 +255,7 @@ def out_of_credits_markup() -> InlineKeyboardMarkup:
 
 
 # ===========================================================================
-# 4. BAÚL ESTRUCTURADO (CUENTAS 100% COINCIDENTES Y SIN DUPLICADOS)
+# 4. BAÚL ESTRUCTURADO (DEDUPLICACIÓN TOTAL & DATOS EXACTOS)
 # ===========================================================================
 _VAULT_FILE = Path("cookie_vault.json")
 _NETFLIX_MARKERS = ("NetflixId", "SecureNetflixId", "nfvdid", "netflix.com")
@@ -261,95 +263,117 @@ _NETFLIX_MARKERS = ("NetflixId", "SecureNetflixId", "nfvdid", "netflix.com")
 def _has_netflix_markers(text: str) -> bool:
     return any(m.lower() in text.lower() for m in _NETFLIX_MARKERS)
 
-def extract_full_netflix_id(text: str) -> str:
-    """Extrae el valor completo de la cookie NetflixId."""
-    m = re.search(r'NetflixId\s+([^\s\r\n]+)', text, re.IGNORECASE)
+def extract_core_netflix_id(cookie_str: str) -> str:
+    m = re.search(r'(ct%3D[^\s;\n"\'\r]+)', cookie_str, re.IGNORECASE)
     if m:
         return m.group(1).strip()
-    m2 = re.search(r'NetflixId=([^\s;\r\n"\']+)', text, re.IGNORECASE)
+    m2 = re.search(r'NetflixId\s+([^\s;\n]+)', cookie_str, re.IGNORECASE)
+    if not m2:
+        m2 = re.search(r'NetflixId=([^\s;\n]+)', cookie_str, re.IGNORECASE)
     if m2:
-        return m2.group(1).strip()
-    m3 = re.search(r'((?:v%3D\d+%26)?ct%3D[^\s;\r\n"\']+)', text, re.IGNORECASE)
-    if m3:
-        return m3.group(1).strip()
+        val = m2.group(1).strip()
+        if "ct%3D" in val:
+            return "ct%3D" + val.split("ct%3D", 1)[1]
+        return val
     return ""
 
-def _load_vault() -> list[dict]:
+def _load_vault() -> list[str]:
     db = _get_mongo()
     if db is not None:
         try:
-            doc = db["system_data"].find_one({"_id": "vault_accounts"})
-            if doc and "accounts" in doc:
-                return doc["accounts"]
+            doc = db["system_data"].find_one({"_id": "vault"})
+            if doc and "cookies" in doc:
+                return doc["cookies"]
         except Exception:
             pass
 
     if _VAULT_FILE.exists():
         try:
             data = json.loads(_VAULT_FILE.read_text(encoding="utf-8"))
-            parsed = []
-            for item in data:
-                if isinstance(item, dict) and item.get("netflix_id"):
-                    parsed.append(item)
-            return parsed
+            return [c for c in data if isinstance(c, str) and _has_netflix_markers(c) and not c.startswith("PK")]
         except Exception:
             return []
     return []
 
-def _save_vault(accounts: list[dict]) -> None:
+def _save_vault(cookies: list[str]) -> None:
     try:
-        _VAULT_FILE.write_text(json.dumps(accounts, ensure_ascii=False, indent=2), encoding="utf-8")
+        _VAULT_FILE.write_text(json.dumps(cookies, ensure_ascii=False, indent=2), encoding="utf-8")
     except Exception as e:
         logger.warning(f"Error guardando vault: {e}")
 
     db = _get_mongo()
     if db is not None:
         try:
-            db["system_data"].update_one({"_id": "vault_accounts"}, {"$set": {"accounts": accounts}}, upsert=True)
+            db["system_data"].update_one({"_id": "vault"}, {"$set": {"cookies": cookies}}, upsert=True)
         except Exception as e:
             logger.warning(f"Error guardando vault en MongoDB: {e}")
 
-def parse_account_card_from_text(text: str) -> dict | None:
-    """Extrae el paquete completo de la cuenta verificado por el checker."""
+def extract_cookies_from_text_block(text: str) -> list[str]:
+    text = text.strip()
     if not text or not _has_netflix_markers(text):
-        return None
+        return []
 
     if "status: no disponible" in text.lower() and "💻 pc:" not in text.lower():
-        return None
+        return []
 
-    pc_match = re.search(r'💻\s*PC:\s*(https?://\S+)', text, re.IGNORECASE)
-    mobile_match = re.search(r'📱\s*Móvil:\s*(https?://\S+)', text, re.IGNORECASE)
-    tv_match = re.search(r'📺\s*TV:\s*(https?://\S+)', text, re.IGNORECASE)
+    netscape_lines = [
+        line.strip() for line in text.splitlines()
+        if ".netflix.com" in line.lower() and any(m.lower() in line.lower() for m in _NETFLIX_MARKERS)
+    ]
+    if netscape_lines and any("netflixid" in l.lower() for l in netscape_lines):
+        return ["\n".join(netscape_lines)]
 
-    token = extract_full_netflix_id(text)
-    if not token:
-        return None
+    blocks = split_cookies_from_text(text)
+    clean_blocks = []
+    for b in blocks:
+        b_clean = b.strip()
+        lines = [
+            l.strip() for l in b_clean.splitlines()
+            if ".netflix.com" in l.lower() and any(m.lower() in l.lower() for m in _NETFLIX_MARKERS)
+        ]
+        if lines and any("netflixid" in l.lower() for l in lines):
+            clean_blocks.append("\n".join(lines))
+        elif _has_netflix_markers(b_clean):
+            clean_blocks.append(b_clean)
 
-    pc_url = pc_match.group(1).strip() if pc_match else f"https://www.netflix.com/browse?nftoken={token}"
-    mobile_url = mobile_match.group(1).strip() if mobile_match else f"https://www.netflix.com/mobile?nftoken={token}"
-    tv_url = tv_match.group(1).strip() if tv_match else f"https://www.netflix.com/tv?nftoken={token}"
+    return clean_blocks or ([text] if _has_netflix_markers(text) else [])
 
-    email_match = re.search(r'Email:\s*([^\s\n]+@[^\s\n]+)', text, re.IGNORECASE)
-    email = email_match.group(1).strip() if email_match else "Netflix Account"
+def extract_all_cookies_from_bytes(raw_bytes: bytes, filename: str = "") -> list[str]:
+    is_zip = filename.lower().endswith(".zip") or raw_bytes.startswith(b"PK\x03\x04")
+    extracted_cookies = []
 
-    plan_match = re.search(r'Plan:\s*([^\n]+)', text, re.IGNORECASE)
-    plan = plan_match.group(1).strip() if plan_match else "Premium"
+    if is_zip:
+        try:
+            with zipfile.ZipFile(io.BytesIO(raw_bytes), "r") as zf:
+                for info in zf.infolist():
+                    if info.is_dir():
+                        continue
+                    fname = info.filename
+                    base = Path(fname).name
+                    if base.startswith(("_", ".")) or base.upper() == "_SUMMARY.TXT":
+                        continue
+                    if Path(fname).suffix.lower() not in COOKIE_EXTENSIONS:
+                        continue
+                    try:
+                        file_data = zf.read(fname)
+                        if _is_binary_content(file_data):
+                            continue
+                        text = file_data.decode("utf-8", errors="replace")
 
-    country_match = re.search(r'País:\s*([^\n]+)', text, re.IGNORECASE)
-    country = country_match.group(1).strip() if country_match else "Desconocido"
+                        # Filtro estricto: descartar cuentas que no tienen enlaces
+                        if "status: no disponible" in text.lower() and "💻 pc:" not in text.lower():
+                            continue
 
-    clean_cookie = f"NetflixId={token}"
+                        extracted_cookies.extend(extract_cookies_from_text_block(text))
+                    except Exception:
+                        continue
+        except Exception as e:
+            logger.warning("Error leyendo ZIP: %s", e)
+    else:
+        text = raw_bytes.decode("utf-8", errors="replace")
+        extracted_cookies.extend(extract_cookies_from_text_block(text))
 
-    return {
-        "email": email,
-        "plan": plan,
-        "country": country,
-        "netflix_id": token,
-        "cookie": clean_cookie,
-        "pc_url": pc_url,
-        "mobile_url": mobile_url,
-        "tv_url": tv_url,
-    }
+    return extracted_cookies
 
 
 # ===========================================================================
@@ -376,7 +400,7 @@ def _get_banner_source() -> str:
 
 
 # ===========================================================================
-# 6. AISLAMIENTO TOTAL Y OPTIMIZACIÓN
+# 6. AISLAMIENTO TOTAL Y OPTIMIZACIÓN (CERO CRUCE DE SESIONES)
 # ===========================================================================
 def _clean_checker_session() -> None:
     try:
@@ -395,12 +419,14 @@ def _clean_checker_session() -> None:
     except Exception:
         pass
 
-def safe_check_cookie(*args, **kwargs) -> dict:
-    _clean_checker_session()
-    try:
-        return check_cookie(*args, **kwargs)
-    finally:
+def safe_check_cookie_isolated(*args, **kwargs) -> dict:
+    """Ejecuta la verificación en aislamiento estricto sin mezclar cookies."""
+    with _CHECKER_THREAD_LOCK:
         _clean_checker_session()
+        try:
+            return check_cookie(*args, **kwargs)
+        finally:
+            _clean_checker_session()
 
 def normalize_status(raw_status: str, result_dict: dict = None) -> str:
     st = str(raw_status or "").lower().strip()
@@ -430,10 +456,10 @@ def _record_user_id(uid: int) -> None:
         pass
 
 
-# ── Estados globales ───────────────────────────────────────────────────────
+# ── Estados globales (Concurrencia 5G) ────────────────────────────────────
 _PROXY_ADD_STATE: set[int] = set()
 _PROXY_SOURCE_STATE: set[int] = set()
-_EXECUTOR = ThreadPoolExecutor(max_workers=64)
+_EXECUTOR = ThreadPoolExecutor(max_workers=75)
 
 COOKIE_EXTENSIONS = (".txt", ".json", ".cookie", ".cookies")
 COOKIE_MIME_TYPES = {
@@ -441,7 +467,7 @@ COOKIE_MIME_TYPES = {
     "application/octet-stream", "text/csv",
 }
 
-BULK_CONCURRENCY = 40
+BULK_CONCURRENCY = 50
 
 _CANCEL_SESSIONS: set[int] = set()
 _ACTIVE_USERS: dict[int, float] = {}
@@ -548,7 +574,7 @@ def _set_delivery(user_id: int, mode: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Panel visual principal (Tipografía llamativa y moderna)
+# Panel visual principal (Tipografía Sans-Bold llamativa)
 # ---------------------------------------------------------------------------
 
 def _main_panel_text(uid: int) -> str:
@@ -570,7 +596,7 @@ def _main_panel_text(uid: int) -> str:
         f"● 🆔 <b>𝗜𝗗:</b> <code>{uid}</code>\n"
         f"● 💎 <b>𝗖𝗿𝗲́𝗱𝗶𝘁𝗼𝘀:</b> <code>{cred_info['credits']}</code>\n"
         f"● ⚙️ <b>𝗔𝗷𝘂𝘀𝘁𝗲𝘀:</b> {mode_lbl} · {dlv_lbl}\n"
-        "● 🟢 <b>𝗘𝘀𝘁𝗮𝗱𝗼:</b> Online ⚡\n"
+        "● 🟢 <b>𝗘𝘀𝘁𝗮𝗱𝗼:</b> Online ⚡ 𝟱𝗚\n"
         "━━━━━━━━━━━━━━━━━━━━━━\n"
         "⚡ <b>𝘃𝟮.𝟬</b> | <i>Envía tus cookies o genera una cuenta abajo</i> 👇"
     )
@@ -1150,7 +1176,7 @@ def split_cookies_from_text(text: str) -> list[str]:
     except Exception:
         return [text] if text.strip() else []
 
-_ZIP_ENTRY_LIMIT = 2000
+_ZIP_ENTRY_LIMIT = 5000
 
 def read_cookie_texts_from_zip(zip_path: str) -> list[tuple[str, str]]:
     results = []
@@ -1241,16 +1267,22 @@ async def send_hits_zip(update: Update, hits: list[tuple[dict, str, str]]) -> No
 
     dupes_removed = len(hits) - len(deduped)
 
-    for r, _, _ in deduped:
-        try:
-            nf_id = r.get("netflix_id")
-            if nf_id:
-                nft = await loop.run_in_executor(
-                    _EXECUTOR, generate_nftoken, {"NetflixId": nf_id}
-                )
-                r["nftoken"] = nft
-        except Exception as _e:
-            r["nftoken"] = {"success": False, "error": str(_e)}
+    # Generación de token en aislamiento para evitar cruces
+    def _safe_token_worker(result: dict) -> None:
+        with _CHECKER_THREAD_LOCK:
+            _clean_checker_session()
+            try:
+                nf_id = result.get("netflix_id")
+                if nf_id:
+                    result["nftoken"] = generate_nftoken({"NetflixId": nf_id})
+            except Exception as _e:
+                result["nftoken"] = {"success": False, "error": str(_e)}
+            finally:
+                _clean_checker_session()
+
+    await asyncio.gather(*[
+        loop.run_in_executor(_EXECUTOR, _safe_token_worker, r) for r, _, _ in deduped
+    ], return_exceptions=True)
 
     premium = [(r, s, w) for r, s, w in deduped if "premium" in (r.get("plan_name") or "").lower()]
     normal  = [(r, s, w) for r, s, w in deduped if "premium" not in (r.get("plan_name") or "").lower()]
@@ -1446,7 +1478,7 @@ async def send_hits_zip(update: Update, hits: list[tuple[dict, str, str]]) -> No
 
 
 # ---------------------------------------------------------------------------
-# Procesamiento central de verificación masiva
+# Procesamiento central 5G de verificación masiva
 # ---------------------------------------------------------------------------
 
 async def process_cookies(update: Update, status_msg, cookie_text: str, source: str = "") -> None:
@@ -1469,7 +1501,7 @@ async def process_cookies(update: Update, status_msg, cookie_text: str, source: 
             "⚡ <b>BILL CYPHER | CHECKING</b>\n"
             "━━━━━━━━━━━━━━━━━━━━━━\n"
             f"📦 <b>Lote detectado:</b> {len(sets)} cuentas\n"
-            "🔄 <b>Estado:</b> <i>Iniciando verificación masiva...</i>\n"
+            "🔄 <b>Estado:</b> <i>Iniciando verificación masiva 5G...</i>\n"
             "━━━━━━━━━━━━━━━━━━━━━━",
             parse_mode=ParseMode.HTML,
         )
@@ -1490,6 +1522,7 @@ async def process_cookie_sets(update: Update, status_msg, cookie_sets: list[tupl
     hits_list: list[tuple[dict, str, str]] = []
     hits = frees = invalids = errors = on_hold = 0
     t_start = time.monotonic()
+    last_edit_time = 0.0
     session_id = status_msg.message_id
     if uid:
         _USER_SESSION[uid] = session_id
@@ -1504,10 +1537,11 @@ async def process_cookie_sets(update: Update, status_msg, cookie_sets: list[tupl
 
         batch = cookie_sets[batch_start: batch_start + BULK_CONCURRENCY]
 
+        # En modo bulk no se genera token en cada cuenta para mantener velocidad 5G
         batch_results = await asyncio.gather(*[
             loop.run_in_executor(
                 _EXECUTOR,
-                functools.partial(safe_check_cookie, generate_token=not is_bulk, bulk_mode=is_bulk),
+                functools.partial(safe_check_cookie_isolated, generate_token=not is_bulk, bulk_mode=is_bulk),
                 cs,
             )
             for _src, cs, _raw in batch
@@ -1553,25 +1587,29 @@ async def process_cookie_sets(update: Update, status_msg, cookie_sets: list[tupl
                 except Exception:
                     pass
 
+        # Edición controlada cada 3.5 segundos para evitar límites de Telegram
         if is_bulk:
+            now_time = time.monotonic()
             done_so_far = min(batch_start + len(batch), total)
-            elapsed = time.monotonic() - t_start
-            speed = done_so_far / elapsed * 60 if elapsed > 1 and done_so_far > 0 else 0
-            try:
-                await status_msg.edit_text(
-                    "⚡ <b>BILL CYPHER | VERIFICANDO</b>\n"
-                    "━━━━━━━━━━━━━━━━━━━━━━\n"
-                    f"📊 <b>Progreso:</b> {make_progress_bar(done_so_far, total)} {done_so_far}/{total}\n"
-                    f"🚀 <b>Velocidad:</b> {speed:.1f} acc/min\n\n"
-                    f"● <b>Hits (Live):</b> {hits}  ·  <b>Muertas (Dead):</b> {invalids}\n"
-                    f"● <b>En espera:</b> {on_hold}  ·  <b>Free:</b> {frees}\n"
-                    "━━━━━━━━━━━━━━━━━━━━━━\n"
-                    "⏳ <i>Procesando cuentas en tiempo real...</i>",
-                    parse_mode=ParseMode.HTML,
-                    reply_markup=_cancel_keyboard(session_id),
-                )
-            except Exception:
-                pass
+            if (now_time - last_edit_time >= 3.5) or (done_so_far == total):
+                last_edit_time = now_time
+                elapsed = now_time - t_start
+                speed = done_so_far / elapsed * 60 if elapsed > 1 and done_so_far > 0 else 0
+                try:
+                    await status_msg.edit_text(
+                        "⚡ <b>BILL CYPHER | VERIFICANDO 𝟱𝗚</b>\n"
+                        "━━━━━━━━━━━━━━━━━━━━━━\n"
+                        f"📊 <b>Progreso:</b> {make_progress_bar(done_so_far, total)} {done_so_far}/{total}\n"
+                        f"🚀 <b>Velocidad:</b> {speed:.1f} acc/min\n\n"
+                        f"● <b>Hits (Live):</b> {hits}  ·  <b>Muertas (Dead):</b> {invalids}\n"
+                        f"● <b>En espera:</b> {on_hold}  ·  <b>Free:</b> {frees}\n"
+                        "━━━━━━━━━━━━━━━━━━━━━━\n"
+                        "⏳ <i>Procesando cuentas a máxima velocidad...</i>",
+                        parse_mode=ParseMode.HTML,
+                        reply_markup=_cancel_keyboard(session_id),
+                    )
+                except Exception:
+                    pass
 
     elapsed = time.monotonic() - t_start
     speed   = total / elapsed * 60 if elapsed > 0 else 0
@@ -1599,7 +1637,7 @@ async def process_cookie_sets(update: Update, status_msg, cookie_sets: list[tupl
         premium_count = sum(1 for r, _, _ in hits_list if "premium" in (r.get("plan_name") or "").lower())
         try:
             await status_msg.edit_text(
-                "⚡ <b>BILL CYPHER | COMPLETADO</b>\n"
+                "⚡ <b>BILL CYPHER | COMPLETADO 𝟱𝗚</b>\n"
                 "━━━━━━━━━━━━━━━━━━━━━━\n"
                 f"✅ <i>Verificación masiva completada con éxito</i>\n"
                 f"⏱️ <b>Tiempo:</b> {time_str}  ·  🚀 <b>Velocidad:</b> {speed:.1f} acc/min\n"
@@ -1628,18 +1666,22 @@ async def process_cookie_sets(update: Update, status_msg, cookie_sets: list[tupl
             delivery = _get_delivery(uid)
             if delivery == "cards":
                 from checker import generate_nftoken as _generate_nftoken
-                async def _ensure_token(result: dict) -> None:
-                    nft = result.get("nftoken")
-                    if not nft or not nft.get("success"):
-                        nf_id = result.get("netflix_id")
-                        if nf_id:
-                            try:
-                                t = await loop.run_in_executor(_EXECUTOR, _generate_nftoken, {"NetflixId": nf_id})
-                                result["nftoken"] = t
-                            except Exception:
-                                pass
+                def _card_token_worker(result: dict) -> None:
+                    with _CHECKER_THREAD_LOCK:
+                        _clean_checker_session()
+                        try:
+                            nf_id = result.get("netflix_id")
+                            if nf_id:
+                                result["nftoken"] = _generate_nftoken({"NetflixId": nf_id})
+                        except Exception:
+                            pass
+                        finally:
+                            _clean_checker_session()
 
-                await asyncio.gather(*[_ensure_token(r) for r, _, _ in hits_list], return_exceptions=True)
+                await asyncio.gather(*[
+                    loop.run_in_executor(_EXECUTOR, _card_token_worker, r) for r, _, _ in hits_list
+                ], return_exceptions=True)
+
                 card_total = len(hits_list)
                 for card_i, (c_result, c_src, _) in enumerate(hits_list, 1):
                     try:
@@ -1772,7 +1814,7 @@ async def panel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         )
 
     elif data == "panel:gencookie":
-        # 1. Comprobación y consumo de créditos
+        # 1. Comprobación de saldo de créditos
         if not consume_credit(uid):
             await query.answer("❌ Sin créditos disponibles.", show_alert=True)
             await query.message.reply_text(
@@ -1796,46 +1838,86 @@ async def panel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             return
 
         await query.answer("⚡ Extrayendo cuenta...")
+        loop = asyncio.get_running_loop()
 
-        # 2. Bloqueo atómico: asegura correspondencia total entre cuenta y botones
-        async with _ACCOUNT_LOCK:
+        chosen_cookie = None
+        chosen_res = None
+
+        # 2. Bloqueo atómico: garantiza correspondencia total y sin colisiones
+        async with _ASYNC_VAULT_LOCK:
             vault = _load_vault()
             if not vault:
                 refund_credit(uid)
                 await query.message.reply_text("📭 <b>¡Se agotaron las cookies en el baúl!</b>", parse_mode=ParseMode.HTML)
                 return
 
-            rand_idx = random.randrange(len(vault))
-            account = vault.pop(rand_idx)
+            attempts = 0
+            max_attempts = min(len(vault), 20)
 
-            # 3. Elimina definitivamente del baúl y de MongoDB cualquier duplicado de este correo/token
-            delivered_email = (account.get("email") or "").strip().lower()
-            delivered_token = account.get("netflix_id", "")
+            while attempts < max_attempts and vault:
+                rand_idx = random.randrange(len(vault))
+                candidate = vault.pop(rand_idx)
+                attempts += 1
 
-            clean_vault = []
-            for item in vault:
-                if delivered_token and item.get("netflix_id") == delivered_token:
-                    continue
-                if delivered_email and delivered_email != "netflix account" and item.get("email", "").lower() == delivered_email:
-                    continue
-                clean_vault.append(item)
+                # Comprobación aislada con generación de token 100% pura
+                candidate_res = await loop.run_in_executor(
+                    _EXECUTOR, functools.partial(safe_check_cookie_isolated, generate_token=True), candidate
+                )
 
-            _save_vault(clean_vault)
+                status = normalize_status(candidate_res.get("status"), candidate_res)
+                nft = candidate_res.get("nftoken") or {}
+                has_links = bool(nft.get("success") and (nft.get("pc_url") or nft.get("tv_url")))
 
-        # 4. Formato limpio de la cookie para copiar con 1 toque
-        clean_cookie = f"NetflixId={account['netflix_id']}"
+                if status == "hit" and has_links:
+                    chosen_cookie = candidate
+                    chosen_res = candidate_res
+                    break
+
+            # 3. Eliminar definitivamente del baúl todas las copias repetidas de este token y correo
+            if chosen_res:
+                delivered_token = extract_core_netflix_id(chosen_cookie)
+                delivered_email = (chosen_res.get("email") or "").strip().lower()
+
+                clean_vault = []
+                for c in vault:
+                    c_token = extract_core_netflix_id(c)
+                    if delivered_token and c_token == delivered_token:
+                        continue
+                    if delivered_email and delivered_email != "netflix account" and delivered_email in c.lower():
+                        continue
+                    clean_vault.append(c)
+
+                _save_vault(clean_vault)
+
+        if not chosen_cookie or not chosen_res:
+            refund_credit(uid)
+            _save_vault(vault)
+            await query.message.reply_text(
+                "⚠️ <b>No se encontraron cuentas activas con enlaces en este momento.</b>\n"
+                "<i>Tu crédito fue reembolsado automáticamente. Intenta de nuevo.</i>",
+                parse_mode=ParseMode.HTML
+            )
+            return
+
+        plan = chosen_res.get("plan_name") or "Premium"
+        country = chosen_res.get("country") or "Desconocido"
+        email = chosen_res.get("email") or "Netflix Account"
+
+        # Token puro ct%3D... para copia limpia con un toque
+        core_token = extract_core_netflix_id(chosen_cookie) or chosen_res.get("netflix_id") or ""
+        clean_cookie = f"NetflixId={core_token}" if core_token else chosen_cookie.strip()
 
         txt = (
             "🎉 <b>¡𝗧𝗨 𝗖𝗨𝗘𝗡𝗧𝗔 𝗗𝗘 𝗡𝗘𝗧𝗙𝗟𝗜𝗫 𝗘𝗦𝗧𝗔́ 𝗟𝗜𝗦𝗧𝗔!</b>\n"
             "━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"● 🎬 <b>𝗣𝗹𝗮𝗻:</b> {account.get('plan', 'Premium')}\n"
-            f"● 🌍 <b>𝗣𝗮𝗶́𝘀:</b> {_country_display(account.get('country', 'Desconocido'))}\n"
-            f"● 📧 <b>𝗘𝗺𝗮𝗶𝗹:</b> <code>{account.get('email', 'Netflix Account')}</code>\n"
+            f"● 🎬 <b>𝗣𝗹𝗮𝗻:</b> {plan}\n"
+            f"● 🌍 <b>𝗣𝗮𝗶́𝘀:</b> {_country_display(country)}\n"
+            f"● 📧 <b>𝗘𝗺𝗮𝗶𝗹:</b> <code>{email}</code>\n"
             "━━━━━━━━━━━━━━━━━━━━━━\n"
             f"🍪 <b>𝗖𝗼𝗼𝗸𝗶𝗲 (𝗧𝗼𝗰𝗮 𝗽𝗮𝗿𝗮 𝗰𝗼𝗽𝗶𝗮𝗿):</b>\n<code>{clean_cookie}</code>\n\n"
             "<i>Presiona un botón para entrar directo sin contraseña o generar otra:</i>"
         )
-        kb = _login_keyboard(account, show_regen=True)
+        kb = _login_keyboard(chosen_res, show_regen=True)
         await query.message.reply_text(txt, parse_mode=ParseMode.HTML, reply_markup=kb)
 
 async def cancel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -2057,7 +2139,7 @@ async def setcredits_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
     await update.message.reply_text(resp, parse_mode=ParseMode.HTML)
 
 async def addvault_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """[Admin] Carga cuentas al baúl excluyendo las que no tengan enlaces o estén repetidas."""
+    """[Admin] Carga cookies al baúl deduplicando automáticamente."""
     uid = update.effective_user.id if update.effective_user else 0
     if not is_admin(uid):
         await update.message.reply_text("⛔ <b>Solo el propietario puede agregar cookies al baúl.</b>", parse_mode=ParseMode.HTML)
@@ -2068,65 +2150,36 @@ async def addvault_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
     if target.document:
         doc = target.document
-        fname = (doc.file_name or "archivo").lower()
+        fname = doc.file_name or "archivo"
         try:
             tg_file = await doc.get_file()
             raw_bytes = await tg_file.download_as_bytearray()
-            extracted_accounts = []
+            extracted = extract_all_cookies_from_bytes(bytes(raw_bytes), filename=fname)
 
-            if fname.endswith(".zip") or bytes(raw_bytes).startswith(b"PK\x03\x04"):
-                with zipfile.ZipFile(io.BytesIO(raw_bytes), "r") as zf:
-                    for info in zf.infolist():
-                        if info.is_dir():
-                            continue
-                        base = Path(info.filename).name
-                        if base.startswith(("_", ".")) or base.upper() == "_SUMMARY.TXT":
-                            continue
-                        if Path(info.filename).suffix.lower() not in COOKIE_EXTENSIONS:
-                            continue
-                        try:
-                            f_data = zf.read(info.filename)
-                            text = f_data.decode("utf-8", errors="replace")
-                            acc = parse_account_card_from_text(text)
-                            if acc:
-                                extracted_accounts.append(acc)
-                        except Exception:
-                            continue
-            else:
-                text = bytes(raw_bytes).decode("utf-8", errors="replace")
-                acc = parse_account_card_from_text(text)
-                if acc:
-                    extracted_accounts.append(acc)
-
-            if not extracted_accounts:
-                await msg.reply_text("⚠️ No se encontraron cuentas activas con enlaces válidos en el archivo.", parse_mode=ParseMode.HTML)
+            if not extracted:
+                await msg.reply_text("⚠️ No se encontraron cookies de Netflix válidas en el archivo.", parse_mode=ParseMode.HTML)
                 return
 
             vault = _load_vault()
-            existing_tokens = {item["netflix_id"] for item in vault}
-            existing_emails = {item["email"].lower() for item in vault if item.get("email") and item["email"] != "Netflix Account"}
+            existing_tokens = {extract_core_netflix_id(c) for c in vault if extract_core_netflix_id(c)}
             added = 0
 
-            for acc in extracted_accounts:
-                t = acc["netflix_id"]
-                em = acc["email"].lower()
-                if t in existing_tokens:
-                    continue
-                if em != "netflix account" and em in existing_emails:
-                    continue
-
-                vault.append(acc)
-                existing_tokens.add(t)
-                if em != "netflix account":
-                    existing_emails.add(em)
-                added += 1
+            for c in extracted:
+                token = extract_core_netflix_id(c)
+                if token and token not in existing_tokens:
+                    vault.append(c.strip())
+                    existing_tokens.add(token)
+                    added += 1
+                elif not token and c.strip() not in vault:
+                    vault.append(c.strip())
+                    added += 1
 
             _save_vault(vault)
             await msg.reply_text(
                 f"✅ <b>¡Cuentas importadas al baúl con éxito!</b>\n"
                 "━━━━━━━━━━━━━━━━━━━━━━\n"
                 f"• 📦 <b>Cuentas únicas añadidas:</b> <code>{added}</code>\n"
-                f"• 🔒 <b>Duplicados o sin botones descartados:</b> <code>{len(extracted_accounts) - added}</code>\n"
+                f"• 🔒 <b>Duplicados o sin botones descartados:</b> <code>{len(extracted) - added}</code>\n"
                 f"• 🗄️ <b>Stock total verificado:</b> <code>{len(vault)}</code>",
                 parse_mode=ParseMode.HTML
             )
@@ -2135,7 +2188,6 @@ async def addvault_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             await msg.reply_text(f"⚠️ Error procesando archivo: {e}")
             return
 
-    # Si se envía texto directo
     text = ""
     if context.args:
         text = " ".join(context.args)
@@ -2146,30 +2198,38 @@ async def addvault_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
     if not text:
         await msg.reply_text(
-            "📦 <b>Cómo agregar cuentas al baúl:</b>\n\n"
-            "1. Envía el archivo <code>.zip</code> generado por el checker con pie de foto <code>/addvault</code>\n"
-            "2. O responde a un archivo de resultados con <code>/addvault</code>.",
+            "📦 <b>Cómo agregar cookies al baúl:</b>\n\n"
+            "1. Envía un archivo <code>.zip</code> generado por el checker con pie de foto <code>/addvault</code>\n"
+            "2. O escribe: <code>/addvault &lt;pega tus cookies aquí&gt;</code>\n"
+            "3. O responde a un archivo de resultados con <code>/addvault</code>.",
             parse_mode=ParseMode.HTML
         )
         return
 
-    acc = parse_account_card_from_text(text)
-    if not acc:
-        await msg.reply_text("⚠️ No se detectaron cuentas activas con enlaces válidos en el texto.", parse_mode=ParseMode.HTML)
+    extracted = extract_cookies_from_text_block(text)
+    if not extracted:
+        await msg.reply_text("⚠️ No se detectaron cookies válidas en el texto.", parse_mode=ParseMode.HTML)
         return
 
     vault = _load_vault()
-    existing_tokens = {item["netflix_id"] for item in vault}
-    if acc["netflix_id"] in existing_tokens:
-        await msg.reply_text("⚠️ Esta cuenta ya se encuentra almacenada en el baúl.", parse_mode=ParseMode.HTML)
-        return
+    existing_tokens = {extract_core_netflix_id(c) for c in vault if extract_core_netflix_id(c)}
+    added = 0
 
-    vault.append(acc)
+    for c in extracted:
+        token = extract_core_netflix_id(c)
+        if token and token not in existing_tokens:
+            vault.append(c.strip())
+            existing_tokens.add(token)
+            added += 1
+        elif not token and c.strip() not in vault:
+            vault.append(c.strip())
+            added += 1
+
     _save_vault(vault)
     await msg.reply_text(
-        f"✅ <b>¡Cuenta agregada al baúl con éxito!</b>\n"
+        f"✅ <b>¡Cookies agregadas al baúl con éxito!</b>\n"
         "━━━━━━━━━━━━━━━━━━━━━━\n"
-        f"• 📥 <b>Email:</b> <code>{acc['email']}</code>\n"
+        f"• 📥 <b>Únicas añadidas:</b> <code>{added}</code>\n"
         f"• 📦 <b>Stock total real:</b> <code>{len(vault)}</code>",
         parse_mode=ParseMode.HTML
     )
@@ -2181,6 +2241,82 @@ async def clearvault_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
         return
     _save_vault([])
     await update.message.reply_text("🗑 <b>El baúl de cookies ha sido vaciado.</b>", parse_mode=ParseMode.HTML)
+
+
+# ── Sistema de Respaldo y Restauración Autónoma ───────────────────────────
+async def backup_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """[Admin] Descarga un archivo de respaldo con el baúl y todos los créditos."""
+    uid = update.effective_user.id if update.effective_user else 0
+    if not is_admin(uid):
+        await update.message.reply_text("⛔ <b>Solo el propietario.</b>", parse_mode=ParseMode.HTML)
+        return
+
+    vault = _load_vault()
+    credits_data = _load_credits()
+
+    payload = {
+        "version": "2.0",
+        "date": date.today().isoformat(),
+        "vault": vault,
+        "credits": credits_data,
+    }
+
+    buf = io.BytesIO(json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8"))
+    buf.name = f"bill_backup_{date.today().isoformat()}.json"
+
+    await update.message.reply_document(
+        document=buf,
+        caption=(
+            "💾 <b>COPIA DE SEGURIDAD GENERADA</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"• 📦 <b>Cuentas en baúl:</b> <code>{len(vault)}</code>\n"
+            f"• 👥 <b>Usuarios con saldo:</b> <code>{len(credits_data)}</code>\n\n"
+            "<i>💡 Si reinstalas o actualizas el bot en Infrlo, solo responde a este archivo con <code>/restore</code> para restaurar todo.</i>"
+        ),
+        parse_mode=ParseMode.HTML,
+    )
+
+async def restore_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """[Admin] Restaura el baúl y los créditos respondiendo a un archivo .json."""
+    uid = update.effective_user.id if update.effective_user else 0
+    if not is_admin(uid):
+        await update.message.reply_text("⛔ <b>Solo el propietario.</b>", parse_mode=ParseMode.HTML)
+        return
+
+    msg = update.message
+    target = msg.reply_to_message if msg.reply_to_message else msg
+
+    if not target.document or not (target.document.file_name or "").endswith(".json"):
+        await msg.reply_text(
+            "⚠️ <b>Cómo restaurar:</b>\n"
+            "Responde a un archivo de copia <code>.json</code> enviado previamente con el comando <code>/restore</code>.",
+            parse_mode=ParseMode.HTML,
+        )
+        return
+
+    try:
+        tg_file = await target.document.get_file()
+        raw_bytes = await tg_file.download_as_bytearray()
+        data = json.loads(raw_bytes.decode("utf-8", errors="replace"))
+
+        restored_vault = data.get("vault", [])
+        restored_credits = data.get("credits", {})
+
+        if isinstance(restored_vault, list):
+            _save_vault(restored_vault)
+        if isinstance(restored_credits, dict):
+            _save_credits(restored_credits)
+
+        await msg.reply_text(
+            "✅ <b>¡RESTAURACIÓN COMPLETADA CON ÉXITO!</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"• 📦 <b>Cuentas restauradas:</b> <code>{len(restored_vault)}</code>\n"
+            f"• 👥 <b>Registros de créditos:</b> <code>{len(restored_credits)}</code>\n\n"
+            "<i>El bot ha quedado sincronizado y listo para usar sin pérdidas.</i>",
+            parse_mode=ParseMode.HTML,
+        )
+    except Exception as e:
+        await msg.reply_text(f"❌ Error al restaurar respaldo: {e}")
 
 
 # ---------------------------------------------------------------------------
@@ -2524,6 +2660,10 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await addvault_command(update, context)
         return
 
+    if caption.startswith("/restore") and is_admin(uid):
+        await restore_command(update, context)
+        return
+
     if not consume_credit(uid):
         await update.message.reply_text(
             OUT_OF_CREDITS_TEXT,
@@ -2537,9 +2677,9 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await update.message.reply_text("⏳ Ya tienes una comprobación activa. Espera a que termine.", parse_mode=ParseMode.HTML)
         return
 
-    if doc.file_size and doc.file_size > 20 * 1024 * 1024:
+    if doc.file_size and doc.file_size > 30 * 1024 * 1024:
         refund_credit(uid)
-        await update.message.reply_text("⚠️ El archivo supera los 20 MB permitidos.", parse_mode=ParseMode.HTML)
+        await update.message.reply_text("⚠️ El archivo supera los 30 MB permitidos.", parse_mode=ParseMode.HTML)
         return
 
     mime = doc.mime_type or ""
@@ -2587,7 +2727,7 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     try:
         if is_zip:
             await status_msg.edit_text(
-                "⚡ <b>BILL CYPHER | INICIALIZANDO</b>\n"
+                "⚡ <b>BILL CYPHER | INICIALIZANDO 𝟱𝗚</b>\n"
                 "━━━━━━━━━━━━━━━━━━━━━━\n"
                 "📦 <i>Extrayendo cuentas del archivo ZIP...</i>\n"
                 "━━━━━━━━━━━━━━━━━━━━━━",
@@ -2808,8 +2948,17 @@ async def gen_link_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     result = entry["result"]
     nf_id  = result.get("netflix_id", "")
     loop = asyncio.get_running_loop()
+
+    def _isolated_gen():
+        with _CHECKER_THREAD_LOCK:
+            _clean_checker_session()
+            try:
+                return generate_nftoken({"NetflixId": nf_id})
+            finally:
+                _clean_checker_session()
+
     try:
-        nft = await loop.run_in_executor(_EXECUTOR, generate_nftoken, {"NetflixId": nf_id})
+        nft = await loop.run_in_executor(_EXECUTOR, _isolated_gen)
         result["nftoken"] = nft
         if nft.get("success"):
             new_txt = format_result(result, entry["idx"], entry["total"], source=entry["src"], user_id=entry["uid"])
@@ -2892,6 +3041,8 @@ def main() -> None:
     app.add_handler(CommandHandler("addvault",   addvault_command))
     app.add_handler(CommandHandler("clearvault", clearvault_command))
     app.add_handler(CommandHandler("setcredits", setcredits_command))
+    app.add_handler(CommandHandler("backup",     backup_command))
+    app.add_handler(CommandHandler("restore",    restore_command))
 
     # ── Callbacks interactivos ────────────────────────────────────────────────
     app.add_handler(CallbackQueryHandler(panel_callback,         pattern=r"^panel:"))
@@ -2939,6 +3090,8 @@ def main() -> None:
             BotCommand("setcredits", "Asignar créditos a usuario [Admin]"),
             BotCommand("addvault",   "Cargar cookies al baúl [Admin]"),
             BotCommand("clearvault", "Vaciar cookies del baúl [Admin]"),
+            BotCommand("backup",     "Descargar respaldo de baúl y créditos [Admin]"),
+            BotCommand("restore",    "Restaurar respaldo desde archivo [Admin]"),
             BotCommand("proxy",      "Gestor de proxies [Admin]"),
             BotCommand("users",      "Descargar lista de usuarios [Admin]"),
             BotCommand("broadcast",  "Enviar notificación masiva [Admin]"),
