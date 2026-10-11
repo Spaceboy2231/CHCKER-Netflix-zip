@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""BILL CYPHER CHK NF — Anti-Duplicate Random Vault Edition"""
+"""BILL CYPHER CHK NF — Auto-Deduplicated Vault & Instant Delivery Edition"""
 
 import os
 import io
@@ -74,7 +74,7 @@ def is_admin(uid: int) -> bool:
 
 
 # ===========================================================================
-# 2. SISTEMA DE CRÉDITOS (3 DIARIOS POR DEFECTO)
+# 2. SISTEMA DE CRÉDITOS (3 DIARIOS POR DEFECTO / ILIMITADO OWNER)
 # ===========================================================================
 DAILY_FREE_CREDITS: int = 3
 _CREDITS_FILE = Path("credits.json")
@@ -174,38 +174,51 @@ def out_of_credits_markup() -> InlineKeyboardMarkup:
 
 
 # ===========================================================================
-# 3. BAÚL DE COOKIES (RANDOM SIN REPETIR CUENTA)
+# 3. BAÚL DE COOKIES (DEDUPLICACIÓN EXACTA Y SANITIZADO)
 # ===========================================================================
 _VAULT_FILE = Path("cookie_vault.json")
-_RECENT_EMAILS: list[str] = []
 _NETFLIX_MARKERS = ("NetflixId", "SecureNetflixId", "nfvdid", "netflix.com")
 
 def _has_netflix_markers(text: str) -> bool:
     return any(m.lower() in text.lower() for m in _NETFLIX_MARKERS)
 
+def extract_core_netflix_id(cookie_str: str) -> str:
+    """Extrae únicamente el token identificador de NetflixId para evitar cuentas repetidas."""
+    m = re.search(r'NetflixId\s+([^\s;\n]+)', cookie_str, re.IGNORECASE)
+    if not m:
+        m = re.search(r'NetflixId=([^\s;\n]+)', cookie_str, re.IGNORECASE)
+    if m:
+        return m.group(1).strip()
+    return ""
+
+def format_cookie_for_clean_copy(cookie_str: str) -> str:
+    token = extract_core_netflix_id(cookie_str)
+    if token:
+        return f"NetflixId={token}"
+    return cookie_str.strip()
+
 def _load_vault() -> list[str]:
+    """Carga el baúl y deduplica en caliente por token exacto de cuenta."""
     if _VAULT_FILE.exists():
         try:
             data = json.loads(_VAULT_FILE.read_text(encoding="utf-8"))
-            return [
-                c for c in data
-                if isinstance(c, str) and _has_netflix_markers(c) and not c.startswith("PK")
-            ]
+            unique_cookies = []
+            seen_tokens = set()
+            for c in data:
+                if isinstance(c, str) and _has_netflix_markers(c) and not c.startswith("PK"):
+                    token = extract_core_netflix_id(c)
+                    if token and token not in seen_tokens:
+                        seen_tokens.add(token)
+                        unique_cookies.append(c)
+                    elif not token and c not in unique_cookies:
+                        unique_cookies.append(c)
+            return unique_cookies
         except Exception:
             return []
     return []
 
 def _save_vault(cookies: list[str]) -> None:
     _VAULT_FILE.write_text(json.dumps(cookies, ensure_ascii=False, indent=2), encoding="utf-8")
-
-def format_cookie_for_clean_copy(cookie_str: str) -> str:
-    c_str = cookie_str.strip()
-    m = re.search(r'NetflixId\s+([^\s;\n]+)', c_str, re.IGNORECASE)
-    if not m:
-        m = re.search(r'NetflixId=([^\s;\n]+)', c_str, re.IGNORECASE)
-    if m:
-        return f"NetflixId={m.group(1).strip()}"
-    return c_str
 
 def extract_cookies_from_text_block(text: str) -> list[str]:
     text = text.strip()
@@ -282,7 +295,7 @@ def _get_banner_source() -> str:
 
 
 # ===========================================================================
-# 5. AISLAMIENTO TOTAL DE SESIONES
+# 5. AISLAMIENTO TOTAL Y OPTIMIZACIÓN DE CHECKER
 # ===========================================================================
 def _clean_checker_session() -> None:
     for name, obj in list(checker.__dict__.items()):
@@ -332,7 +345,7 @@ def _record_user_id(uid: int) -> None:
 # ── Estados globales ───────────────────────────────────────────────────────
 _PROXY_ADD_STATE: set[int] = set()
 _PROXY_SOURCE_STATE: set[int] = set()
-_EXECUTOR = ThreadPoolExecutor(max_workers=48)
+_EXECUTOR = ThreadPoolExecutor(max_workers=64)
 
 COOKIE_EXTENSIONS = (".txt", ".json", ".cookie", ".cookies")
 COOKIE_MIME_TYPES = {
@@ -340,7 +353,7 @@ COOKIE_MIME_TYPES = {
     "application/octet-stream", "text/csv",
 }
 
-BULK_CONCURRENCY = 32
+BULK_CONCURRENCY = 40
 
 _CANCEL_SESSIONS: set[int] = set()
 _ACTIVE_USERS: dict[int, float] = {}
@@ -447,7 +460,7 @@ def _set_delivery(user_id: int, mode: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Panel visual principal (Sin enlaces externos)
+# Panel visual principal (Sin enlaces externos molestos)
 # ---------------------------------------------------------------------------
 
 def _main_panel_text(uid: int) -> str:
@@ -1655,7 +1668,7 @@ async def panel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await query.message.reply_text(
             "📦 <b>Gestión del Baúl de Cookies</b>\n"
             "━━━━━━━━━━━━━━━━━━\n"
-            f"• <b>Stock disponible:</b> <code>{len(vault)}</code> cookies\n\n"
+            f"• <b>Stock disponible (único):</b> <code>{len(vault)}</code> cookies\n\n"
             "💡 <b>Para agregar cookies:</b>\n"
             "Envía un archivo <code>.zip</code> o <code>.txt</code> con pie de foto <code>/addvault</code>.\n\n"
             "💡 <b>Para vaciar stock:</b>\n"
@@ -1664,6 +1677,7 @@ async def panel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         )
 
     elif data == "panel:gencookie":
+        # 1. Comprobación de saldo de créditos
         if not consume_credit(uid):
             await query.answer("❌ Sin créditos disponibles.", show_alert=True)
             await query.message.reply_text(
@@ -1685,70 +1699,72 @@ async def panel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             )
             return
 
-        await query.answer("⚡ Obteniendo cookie...")
-
-        status_gen = await query.message.reply_text("⏳ <i>Extrayendo cuenta al azar sin repetir...</i>", parse_mode=ParseMode.HTML)
+        await query.answer("⚡ Extrayendo cuenta...")
+        status_gen = await query.message.reply_text("⚡ <i>Obteniendo tu cookie y generando accesos directos...</i>", parse_mode=ParseMode.HTML)
         loop = asyncio.get_running_loop()
 
-        # Selección aleatoria y descarte de cuentas repetidas recientemente
         chosen_cookie = None
-        res = None
+        chosen_res = None
         attempts = 0
-        max_attempts = min(len(vault), 12)
+        max_attempts = min(len(vault), 15)
 
+        # 2. Selección estricta: EXCLUYE cuentas repetidas o sin enlaces válidos
         while attempts < max_attempts and vault:
             rand_idx = random.randrange(len(vault))
-            candidate_cookie = vault.pop(rand_idx)
+            candidate = vault.pop(rand_idx)
+            attempts += 1
+
             candidate_res = await loop.run_in_executor(
-                _EXECUTOR, functools.partial(safe_check_cookie, generate_token=True), candidate_cookie
+                _EXECUTOR, functools.partial(safe_check_cookie, generate_token=True), candidate
             )
-            cand_email = candidate_res.get("email") or ""
             
-            if cand_email and cand_email in _RECENT_EMAILS and len(vault) > 1:
-                # Regresar al final para probar otra cuenta
-                vault.append(candidate_cookie)
-                attempts += 1
+            status = normalize_status(candidate_res.get("status"), candidate_res)
+            nft = candidate_res.get("nftoken") or {}
+            has_login_links = bool(nft.get("success") and nft.get("pc_url"))
+
+            # Excluye cuentas caídas o aquellas que no generan los enlaces
+            if status == "hit" and has_login_links:
+                chosen_cookie = candidate
+                chosen_res = candidate_res
+                break
+            else:
+                # Cookie inservible o sin botones: queda excluida definitivamente del baúl
                 continue
 
-            chosen_cookie = candidate_cookie
-            res = candidate_res
-            break
-
-        if not chosen_cookie:
-            rand_idx = random.randrange(len(vault))
-            chosen_cookie = vault.pop(rand_idx)
-            res = await loop.run_in_executor(
-                _EXECUTOR, functools.partial(safe_check_cookie, generate_token=True), chosen_cookie
+        # Si no encontró una cuenta viva con enlaces tras los intentos
+        if not chosen_cookie or not chosen_res:
+            _save_vault(vault)
+            await status_gen.edit_text(
+                "⚠️ <b>No se encontraron cuentas activas con enlaces en este momento.</b>\n"
+                "<i>Las cuentas sin botones fueron depuradas del baúl. Intenta de nuevo o espera reposición.</i>",
+                parse_mode=ParseMode.HTML
             )
+            return
 
+        # Guarda el baúl con la cuenta extraída ya consumida y eliminada
         _save_vault(vault)
 
-        plan = res.get("plan_name") or "Netflix"
-        country = res.get("country") or "Desconocido"
-        email = res.get("email") or "Netflix Account"
+        plan = chosen_res.get("plan_name") or "Netflix"
+        country = chosen_res.get("country") or "Desconocido"
+        email = chosen_res.get("email") or "Netflix Account"
 
-        if email and email != "Netflix Account":
-            _RECENT_EMAILS.append(email)
-            if len(_RECENT_EMAILS) > 30:
-                _RECENT_EMAILS.pop(0)
-
-        nf_id = res.get("netflix_id")
+        nf_id = chosen_res.get("netflix_id")
         if nf_id:
             full_cookie_str = f"NetflixId={nf_id}"
         else:
             full_cookie_str = format_cookie_for_clean_copy(chosen_cookie)
 
         txt = (
-            "🎉 <b>¡COOKIE DE NETFLIX GENERADA!</b>\n"
+            "🎁 <b>¡HAS OBTENIDO TU CUENTA DE NETFLIX!</b>\n"
             "━━━━━━━━━━━━━━━━━━\n"
-            f"• <b>Plan:</b> {plan}\n"
-            f"• <b>País:</b> {_country_display(country)}\n"
-            f"• <b>Email:</b> <code>{email}</code>\n"
+            f"● <b>Plan:</b> {plan}\n"
+            f"● <b>País:</b> {_country_display(country)}\n"
+            f"● <b>Email:</b> <code>{email}</code>\n"
             "━━━━━━━━━━━━━━━━━━\n"
             f"🍪 <b>Cookie:</b>\n<code>{full_cookie_str}</code>\n\n"
             "<i>Presiona los botones para entrar directo sin contraseña o generar otra:</i>"
         )
-        kb = _login_keyboard(res, show_regen=True)
+        kb = _login_keyboard(chosen_res, show_regen=True)
         await status_gen.edit_text(txt, parse_mode=ParseMode.HTML, reply_markup=kb)
 
 async def cancel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1963,6 +1979,7 @@ async def setcredits_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
     await update.message.reply_text(resp, parse_mode=ParseMode.HTML)
 
 async def addvault_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """[Admin] Carga cookies al baúl deduplicando automáticamente por cuenta."""
     uid = update.effective_user.id if update.effective_user else 0
     if not is_admin(uid):
         await update.message.reply_text("⛔ <b>Solo el propietario puede agregar cookies al baúl.</b>", parse_mode=ParseMode.HTML)
@@ -1984,21 +2001,26 @@ async def addvault_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
                 return
 
             vault = _load_vault()
-            existing_set = set(vault)
+            existing_tokens = {extract_core_netflix_id(c) for c in vault if extract_core_netflix_id(c)}
             added = 0
+
             for c in extracted:
-                c_clean = c.strip()
-                if c_clean and c_clean not in existing_set:
-                    vault.append(c_clean)
-                    existing_set.add(c_clean)
+                token = extract_core_netflix_id(c)
+                if token and token not in existing_tokens:
+                    vault.append(c.strip())
+                    existing_tokens.add(token)
+                    added += 1
+                elif not token and c.strip() not in vault:
+                    vault.append(c.strip())
                     added += 1
 
             _save_vault(vault)
             await msg.reply_text(
-                f"✅ <b>¡Cookies añadidas al baúl desde el archivo!</b>\n"
+                f"✅ <b>¡Cookies importadas con éxito!</b>\n"
                 "━━━━━━━━━━━━━━━━━━\n"
-                f"• 📥 <b>Añadidas:</b> <code>{added}</code>\n"
-                f"• 📦 <b>Total disponible en stock:</b> <code>{len(vault)}</code>",
+                f"• 📦 <b>Cuentas únicas añadidas:</b> <code>{added}</code>\n"
+                f"• 🔒 <b>Duplicados descartados:</b> <code>{len(extracted) - added}</code>\n"
+                f"• 🗄️ <b>Stock total real:</b> <code>{len(vault)}</code>",
                 parse_mode=ParseMode.HTML
             )
             return
@@ -2030,21 +2052,25 @@ async def addvault_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         return
 
     vault = _load_vault()
-    existing_set = set(vault)
+    existing_tokens = {extract_core_netflix_id(c) for c in vault if extract_core_netflix_id(c)}
     added = 0
+
     for c in extracted:
-        c_clean = c.strip()
-        if c_clean and c_clean not in existing_set:
-            vault.append(c_clean)
-            existing_set.add(c_clean)
+        token = extract_core_netflix_id(c)
+        if token and token not in existing_tokens:
+            vault.append(c.strip())
+            existing_tokens.add(token)
+            added += 1
+        elif not token and c.strip() not in vault:
+            vault.append(c.strip())
             added += 1
 
     _save_vault(vault)
     await msg.reply_text(
         f"✅ <b>¡Cookies agregadas al baúl con éxito!</b>\n"
         "━━━━━━━━━━━━━━━━━━\n"
-        f"• 📥 <b>Añadidas:</b> <code>{added}</code>\n"
-        f"• 📦 <b>Total disponible en stock:</b> <code>{len(vault)}</code>",
+        f"• 📥 <b>Únicas añadidas:</b> <code>{added}</code>\n"
+        f"• 📦 <b>Stock total real:</b> <code>{len(vault)}</code>",
         parse_mode=ParseMode.HTML
     )
 
