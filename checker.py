@@ -837,16 +837,24 @@ def _extract_payment_info(html: str) -> dict:
 
 
 def _extract_profiles_list(html: str) -> tuple[list[str], int]:
+    """
+    Extract profile names and total profile count from the page.
+    Returns (names_list, total_count).
+    total_count comes from the profiles __ref array (accurate even when
+    only the active profile's name is visible on the membership page).
+    """
     html_decoded = _decode_js_hex(html)
     names = []
     seen = set()
 
+    # Extract any visible profile names
     for m in re.finditer(r'"profileName"\s*:\s*"([^"]{1,60})"', html_decoded):
         name = m.group(1).strip()
-        if name and name not in seen:
+        if name and name not in seen and name != "1" and not name.isdigit():
             seen.add(name)
             names.append(name)
 
+    # Count from the profiles __ref array (most reliable count)
     total_count = len(names)
     m = re.search(r'"profiles"\s*:\s*(\[)', html_decoded)
     if m:
