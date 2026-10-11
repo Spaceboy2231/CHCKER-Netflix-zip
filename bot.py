@@ -56,8 +56,7 @@ BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 # ===========================================================================
 # 1. CONFIGURACIÓN DEL PROPIETARIO / ADMIN
 # ===========================================================================
-# Si conoces tu ID numérico de Telegram, puedes colocarlo aquí directamente.
-# Si lo dejas en 0, usa el comando /setadmin o /setadmin force en el bot.
+# Si conoces tu ID numérico puedes colocarlo aquí, o usar /setadmin force en el bot.
 OWNER_ID: int = 0
 
 _ADMIN_ID_FILE = Path("admin_id.txt")
@@ -91,17 +90,22 @@ def is_admin(uid: int) -> bool:
 
 
 # ===========================================================================
-# 2. CONFIGURACIÓN VISUAL, MULTIMEDIA Y EMOJIS ANIMADOS
+# 2. CONFIGURACIÓN VISUAL, MULTIMEDIA Y TUS EMOJIS ANIMADOS
 # ===========================================================================
 BANNER_MEDIA = "banner.mp4"
 CHANNEL_URL  = "https://t.me/TuCanal"
 GROUP_URL    = "https://t.me/TuGrupo"
 
 _EMOJI_FILE = Path("emojis.json")
+
+# IDs únicos extraídos directamente de tu lista
 ANIMATED_EMOJIS = {
-    "bill": "",       # Fallback: 🎬
-    "fire": "",       # Fallback: 🔥
-    "check": "",      # Fallback: 🟩
+    "bill": "4904565554943099861",       # Logo / Cabecera Bill Cypher
+    "separator": "5467919827995733062",  # Separador
+    "bullet": "5123344136665039833",     # Viñetas / Puntos
+    "fire": "5427009714745517609",       # Fuego / Versión
+    "check": "5116414868357907335",      # Estado / Online
+    "extra": "5282731554135615450",      # Ícono adicional
 }
 
 if _EMOJI_FILE.exists():
@@ -111,6 +115,7 @@ if _EMOJI_FILE.exists():
         pass
 
 def tg_icon(name: str, fallback: str) -> str:
+    """Devuelve la etiqueta de emoji animado si está configurada, o el emoji estándar."""
     eid = ANIMATED_EMOJIS.get(name, "")
     if eid:
         return f'<tg-emoji emoji-id="{eid}">{fallback}</tg-emoji>'
@@ -118,14 +123,10 @@ def tg_icon(name: str, fallback: str) -> str:
 
 
 # ===========================================================================
-# 3. AISLAMIENTO DE SESIONES (SOLUCIÓN A COOKIES REPETIDAS)
+# 3. AISLAMIENTO DE SESIÓN (SOLUCIÓN A COOKIES REPETIDAS)
 # ===========================================================================
 def _clean_checker_session() -> None:
-    """
-    Limpia a fondo cualquier cookie jar o sesión persistente en checker.py.
-    Evita que tokens como SecureNetflixId o NetflixId de una cuenta anterior
-    contaminen la comprobación de un nuevo archivo.
-    """
+    """Limpia cualquier cookie jar o sesión residual para que no mezcle cuentas."""
     for attr in ("session", "s", "client", "http", "http_session", "_session"):
         if hasattr(checker, attr):
             sess = getattr(checker, attr, None)
@@ -139,7 +140,7 @@ def _clean_checker_session() -> None:
                     sess.headers.pop("Cookie", None)
 
 def safe_check_cookie(*args, **kwargs) -> dict:
-    """Wrapper que garantiza sesiones aisladas y sin memoria residual."""
+    """Ejecuta el chequeo garantizando aislamiento total entre archivos."""
     _clean_checker_session()
     try:
         return check_cookie(*args, **kwargs)
@@ -147,7 +148,7 @@ def safe_check_cookie(*args, **kwargs) -> dict:
         _clean_checker_session()
 
 
-# ── Registro persistente de usuarios ───────────────────────────────────────
+# ── Registro persistente de usuarios para Notificaciones (/broadcast) ──────
 _USERS_FILE = Path("users.txt")
 
 def _record_user_id(uid: int) -> None:
@@ -164,7 +165,7 @@ def _record_user_id(uid: int) -> None:
         pass
 
 
-# ── Estados globales ───────────────────────────────────────────────────────
+# ── Estados y pools globales ───────────────────────────────────────────────
 _PROXY_ADD_STATE: set[int] = set()
 _PROXY_SOURCE_STATE: set[int] = set()
 _EXECUTOR = ThreadPoolExecutor(max_workers=48)
@@ -291,8 +292,10 @@ def _set_delivery(user_id: int, mode: str) -> None:
 # ---------------------------------------------------------------------------
 
 def _main_panel_text(uid: int) -> str:
-    icon_bill = tg_icon("bill", "🎬")
-    icon_fire = tg_icon("fire", "🔥")
+    icon_bill   = tg_icon("bill", "🎬")
+    icon_fire   = tg_icon("fire", "🔥")
+    icon_bullet = tg_icon("bullet", "●")
+    icon_check  = tg_icon("check", "🟩")
 
     mode_lbl = "Full" if _get_mode(uid) == "full" else "Básico"
     dlv_lbl  = "Cards 💬" if _get_delivery(uid) == "cards" else "ZIP 📦"
@@ -301,12 +304,12 @@ def _main_panel_text(uid: int) -> str:
     return (
         f"{icon_bill} <b>BILL CYPHER CHK NF</b>\n"
         "━━━━━━━━━━━━━━━━━━\n"
-        f"● <b>Tu Rol:</b> {role_lbl}\n"
-        f"● <b>Tu ID:</b> <code>{uid}</code>\n"
-        f"● <b>Ajustes:</b> {mode_lbl} · {dlv_lbl}\n"
-        "● <b>Soporte:</b> Netscape · JSON · ZIP\n"
+        f"{icon_bullet} <b>Tu Rol:</b> {role_lbl}\n"
+        f"{icon_bullet} <b>Tu ID:</b> <code>{uid}</code>\n"
+        f"{icon_bullet} <b>Ajustes:</b> {mode_lbl} · {dlv_lbl}\n"
+        f"{icon_bullet} <b>Estado:</b> Online {icon_check}\n"
         "━━━━━━━━━━━━━━━━━━\n"
-        f"{icon_fire} <b>v2.0</b> | <i>Envía tu archivo o texto abajo</i> 👇"
+        f"{icon_fire} <b>v2.0</b> | <i>Envía tu archivo o cookies abajo</i> 👇"
     )
 
 def _main_panel_markup(uid: int) -> InlineKeyboardMarkup:
@@ -352,20 +355,42 @@ async def _send_banner_panel(update: Update, text: str, markup: InlineKeyboardMa
         try:
             with open(banner_path, "rb") as f:
                 if ext in (".mp4", ".mov"):
-                    await target.reply_video(video=f, caption=text, parse_mode=ParseMode.HTML, reply_markup=markup)
+                    await target.reply_video(
+                        video=f,
+                        caption=text,
+                        parse_mode=ParseMode.HTML,
+                        reply_markup=markup,
+                        supports_streaming=True,
+                    )
                     return
                 elif ext in (".gif",):
-                    await target.reply_animation(animation=f, caption=text, parse_mode=ParseMode.HTML, reply_markup=markup)
+                    await target.reply_animation(
+                        animation=f,
+                        caption=text,
+                        parse_mode=ParseMode.HTML,
+                        reply_markup=markup,
+                    )
                     return
                 elif ext in (".jpg", ".jpeg", ".png", ".webp"):
-                    await target.reply_photo(photo=f, caption=text, parse_mode=ParseMode.HTML, reply_markup=markup)
+                    await target.reply_photo(
+                        photo=f,
+                        caption=text,
+                        parse_mode=ParseMode.HTML,
+                        reply_markup=markup,
+                    )
                     return
         except Exception as e:
             logger.warning("Error enviando multimedia: %s", e)
 
     elif BANNER_MEDIA.startswith("http://") or BANNER_MEDIA.startswith("https://"):
         try:
-            await target.reply_animation(animation=BANNER_MEDIA, caption=text, parse_mode=ParseMode.HTML, reply_markup=markup)
+            await target.reply_video(
+                video=BANNER_MEDIA,
+                caption=text,
+                parse_mode=ParseMode.HTML,
+                reply_markup=markup,
+                supports_streaming=True,
+            )
             return
         except Exception:
             pass
@@ -1353,16 +1378,14 @@ async def emojis_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         lines.append(f"• <b>{key.capitalize()}:</b> {status}")
     lines += [
         "━━━━━━━━━━━━━━━━━━",
-        "💡 <b>Para configurar o cambiar un emoji:</b>",
-        "Usa el comando: <code>/setemoji &lt;nombre&gt; &lt;ID&gt;</code>",
-        "Ejemplo: <code>/setemoji bill 5368324170671202286</code>",
-        "",
-        "<i>(Puedes extraer los IDs reenviando cualquier mensaje animado a @GetEmojiIdBot)</i>",
+        "💡 <b>Comandos disponibles:</b>",
+        "• Asignar uno solo: <code>/setemoji &lt;nombre&gt; &lt;ID&gt;</code>",
+        "• Carga masiva: escribe <code>/setemojis</code> y pega la lista completa debajo.",
     ]
     await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.HTML)
 
 async def setemoji_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Permite al admin configurar el ID numérico de un emoji animado."""
+    """Permite al admin configurar el ID numérico de un emoji animado individual."""
     uid = update.effective_user.id if update.effective_user else 0
     if not is_admin(uid):
         await update.message.reply_text("⛔ <b>Solo administradores.</b>", parse_mode=ParseMode.HTML)
@@ -1372,8 +1395,8 @@ async def setemoji_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         await update.message.reply_text(
             "⚠️ <b>Uso correcto:</b>\n"
             "<code>/setemoji &lt;nombre&gt; &lt;ID&gt;</code>\n\n"
-            "Nombres disponibles: <code>bill</code>, <code>fire</code>, <code>check</code>\n"
-            "Ejemplo: <code>/setemoji fire 5465465416548976541</code>",
+            "Nombres disponibles: <code>bill</code>, <code>separator</code>, <code>bullet</code>, <code>fire</code>, <code>check</code>, <code>extra</code>\n"
+            "Ejemplo: <code>/setemoji bill 4904565554943099861</code>",
             parse_mode=ParseMode.HTML,
         )
         return
@@ -1392,6 +1415,51 @@ async def setemoji_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         f"ID asignado: <code>{emoji_id}</code>",
         parse_mode=ParseMode.HTML,
     )
+
+async def setemojis_batch_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """[Admin] Procesa y guarda la lista completa de IDs pegada desde Telegram."""
+    uid = update.effective_user.id if update.effective_user else 0
+    if not is_admin(uid):
+        await update.message.reply_text("⛔ <b>Solo administradores.</b>", parse_mode=ParseMode.HTML)
+        return
+
+    text = update.message.text
+    raw_ids = re.findall(r'(\d{15,22})', text)
+    if not raw_ids:
+        await update.message.reply_text(
+            "⚠️ <b>No encontré IDs válidos en el mensaje.</b>\n\n"
+            "Envía <code>/setemojis</code> y pega la lista debajo.",
+            parse_mode=ParseMode.HTML,
+        )
+        return
+
+    unique_ids = []
+    for eid in raw_ids:
+        if eid not in unique_ids:
+            unique_ids.append(eid)
+
+    keys = ["bill", "separator", "bullet", "fire", "check", "extra"]
+    for i, key in enumerate(keys):
+        if i < len(unique_ids):
+            ANIMATED_EMOJIS[key] = unique_ids[i]
+
+    try:
+        _EMOJI_FILE.write_text(json.dumps(ANIMATED_EMOJIS, indent=2), encoding="utf-8")
+    except Exception:
+        pass
+
+    lines = [
+        f"✅ <b>¡{len(unique_ids)} emojis únicos importados con éxito!</b>",
+        "━━━━━━━━━━━━━━━━━━",
+    ]
+    for k in keys:
+        if k in ANIMATED_EMOJIS:
+            lines.append(f"• <b>{k.capitalize()}:</b> <code>{ANIMATED_EMOJIS[k]}</code>")
+    lines += [
+        "━━━━━━━━━━━━━━━━━━",
+        "<i>IDs guardados en emojis.json y activados en vivo.</i>"
+    ]
+    await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.HTML)
 
 
 # ---------------------------------------------------------------------------
@@ -1625,7 +1693,7 @@ async def setadmin_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     if _ADMIN_ID is not None and not force and uid != _ADMIN_ID and not (OWNER_ID and uid == OWNER_ID):
         await update.message.reply_text(
             f"⛔ <b>El administrador ya está establecido.</b>\n\n"
-            f"Si eres el dueño del bot, usa <code>/setadmin force</code> para asignarte como admin con tu ID (<code>{uid}</code>).",
+            f"Para forzar tu asignación como dueño, usa <code>/setadmin force</code>.",
             parse_mode=ParseMode.HTML,
         )
         return
@@ -1637,7 +1705,7 @@ async def setadmin_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         "━━━━━━━━━━━━━━━━━━\n"
         f"• <b>Tu ID:</b> <code>{uid}</code>\n"
         f"• <b>Estado:</b> Administrador Activo ✅\n\n"
-        "Ahora tienes acceso a /proxy, /users, /broadcast y /setemoji.",
+        "Tienes acceso a /proxy, /users, /broadcast, /emojis y /setemojis.",
         parse_mode=ParseMode.HTML,
     )
 
@@ -2163,6 +2231,7 @@ async def process_cookie_sets(update: Update, status_msg, cookie_sets: list[tupl
                 except Exception:
                     pass
 
+    # Reintentos de cuentas con error
     if is_bulk and error_retry:
         retry_results = await asyncio.gather(*[
             loop.run_in_executor(
@@ -2341,20 +2410,21 @@ def main() -> None:
 
     # ── Comandos disponibles ──────────────────────────────────────────────────
     app.add_handler(CommandHandler(["start", "cmds", "panel"], start_command))
-    app.add_handler(CommandHandler("help",     help_command))
-    app.add_handler(CommandHandler("info",     info_command))
-    app.add_handler(CommandHandler("mode",     mode_command))
-    app.add_handler(CommandHandler("fullinfo", fullinfo_command))
-    app.add_handler(CommandHandler("basic",    basic_command))
-    app.add_handler(CommandHandler("settings", settings_command))
-    app.add_handler(CommandHandler("changepw", changepw_command))
-    app.add_handler(CommandHandler("cancel",   cancel_command))
-    app.add_handler(CommandHandler("proxy",    proxy_command))
-    app.add_handler(CommandHandler("setadmin", setadmin_command))
+    app.add_handler(CommandHandler("help",      help_command))
+    app.add_handler(CommandHandler("info",      info_command))
+    app.add_handler(CommandHandler("mode",      mode_command))
+    app.add_handler(CommandHandler("fullinfo",  fullinfo_command))
+    app.add_handler(CommandHandler("basic",     basic_command))
+    app.add_handler(CommandHandler("settings",  settings_command))
+    app.add_handler(CommandHandler("changepw",  changepw_command))
+    app.add_handler(CommandHandler("cancel",    cancel_command))
+    app.add_handler(CommandHandler("proxy",     proxy_command))
+    app.add_handler(CommandHandler("setadmin",  setadmin_command))
     app.add_handler(CommandHandler(["broadcast", "notif"], broadcast_command))
-    app.add_handler(CommandHandler("users",    users_command))
-    app.add_handler(CommandHandler("emojis",   emojis_command))
-    app.add_handler(CommandHandler("setemoji", setemoji_command))
+    app.add_handler(CommandHandler("users",     users_command))
+    app.add_handler(CommandHandler("emojis",    emojis_command))
+    app.add_handler(CommandHandler("setemoji",  setemoji_command))
+    app.add_handler(CommandHandler("setemojis", setemojis_batch_command))
 
     # ── Callbacks de botones interactivos ─────────────────────────────────────
     app.add_handler(CallbackQueryHandler(panel_callback,         pattern=r"^panel:"))
