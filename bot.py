@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""BILL CYPHER CHK NF — Auto-Unzip Vault & Live Counter Edition"""
+"""BILL CYPHER CHK NF — Auto-Deduplicated Vault & Instant Delivery Edition"""
 
 import os
 import io
@@ -59,108 +59,302 @@ for _noisy in ("httpx", "telegram", "apscheduler", "httpcore"):
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.WARNING)
 
-BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN") or os.environ.get("BOT_TOKEN") or ""
+PORT = int(os.environ.get("PORT", 5000))
 
 # ===========================================================================
-# 1. PROPIETARIO FIJO Y EXCLUSIVO
+# 1. PROPIETARIO Y CONTACTO DIRECTO
 # ===========================================================================
 OWNER_ID: int = 5320997298
+OWNER_USER: str = "didierJC"
+OWNER_URL: str = f"https://t.me/{OWNER_USER}"
 
 def is_admin(uid: int) -> bool:
     return bool(uid and uid == OWNER_ID)
 
 
 # ===========================================================================
-# 2. SISTEMA DE BAÚL DE COOKIES (AUTO-UNZIP & SANITIZADO)
+# 2. PERSISTENCIA EN MONGODB (ANTI-BORRADO TRAS REDEPLOY)
+# ===========================================================================
+_MONGO_CLIENT = None
+_MONGO_DB = None
+
+def _get_mongo():
+    global _MONGO_CLIENT, _MONGO_DB
+    if _MONGO_DB is not None:
+        return _MONGO_DB
+    uri = os.environ.get("MONGO_URI") or os.environ.get("MONGODB_URI") or ""
+    if uri:
+        try:
+            from pymongo import MongoClient
+            _MONGO_CLIENT = MongoClient(uri, serverSelectionTimeoutMS=3000)
+            _MONGO_DB = _MONGO_CLIENT.get_default_database()
+            return _MONGO_DB
+        except Exception as e:
+            logger.warning(f"No se pudo conectar a MongoDB: {e}")
+    return None
+
+
+# ===========================================================================
+# 3. SISTEMA DE CRÉDITOS (15 DIARIOS POR DEFECTO / ILIMITADO OWNER)
+# ===========================================================================
+DAILY_FREE_CREDITS: int = 15
+_CREDITS_FILE = Path("credits.json")
+_CREDITS_CACHE: dict = {}
+
+def _load_credits() -> dict:
+    global _CREDITS_CACHE
+    db = _get_mongo()
+    if db is not None:
+        try:
+            doc = db["system_data"].find_one({"_id": "credits"})
+            if doc and "data" in doc:
+                _CREDITS_CACHE = doc["data"]
+                return _CREDITS_CACHE
+        except Exception:
+            pass
+
+    if not _CREDITS_CACHE and _CREDITS_FILE.exists():
+        try:
+            _CREDITS_CACHE = json.loads(_CREDITS_FILE.read_text(encoding="utf-8"))
+        except Exception:
+            _CREDITS_CACHE = {}
+    return _CREDITS_CACHE
+
+def _save_credits(data: dict) -> None:
+    global _CREDITS_CACHE
+    _CREDITS_CACHE = data
+    try:
+        _CREDITS_FILE.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception as e:
+        logger.warning(f"Error guardando credits.json: {e}")
+
+    db = _get_mongo()
+    if db is not None:
+        try:
+            db["system_data"].update_one({"_id": "credits"}, {"$set": {"data": data}}, upsert=True)
+        except Exception as e:
+            logger.warning(f"Error guardando créditos en MongoDB: {e}")
+
+def get_user_credits_info(uid: int) -> dict:
+    if is_admin(uid):
+        return {"type": "owner", "credits": "Ilimitado 👑", "can_use": True}
+
+    data = _load_credits()
+    user_data = data.get(str(uid), {})
+    today_str = date.today().isoformat()
+
+    if user_data.get("is_premium"):
+        creds = user_data.get("credits", "unlimited")
+        if creds == "unlimited":
+            return {"type": "premium", "credits": "Ilimitado ⭐", "can_use": True}
+        try:
+            c_val = int(creds)
+        except ValueError:
+            c_val = 0
+        return {"type": "premium", "credits": f"{c_val} restantes ⭐", "can_use": c_val > 0, "balance": c_val}
+
+    last_date = user_data.get("last_date", "")
+    used_today = user_data.get("used_today", 0)
+    if last_date != today_str:
+        used_today = 0
+        user_data["last_date"] = today_str
+        user_data["used_today"] = 0
+        data[str(uid)] = user_data
+        _save_credits(data)
+
+    remaining = max(0, DAILY_FREE_CREDITS - used_today)
+    return {"type": "normal", "credits": f"{remaining}/{DAILY_FREE_CREDITS} hoy", "can_use": remaining > 0, "balance": remaining}
+
+def consume_credit(uid: int) -> bool:
+    if is_admin(uid):
+        return True
+
+    data = _load_credits()
+    user_data = data.setdefault(str(uid), {"is_premium": False})
+    today_str = date.today().isoformat()
+
+    if user_data.get("is_premium"):
+        creds = user_data.get("credits", "unlimited")
+        if creds == "unlimited":
+            return True
+        try:
+            c_val = int(creds)
+        except ValueError:
+            c_val = 0
+        if c_val <= 0:
+            return False
+        user_data["credits"] = c_val - 1
+        data[str(uid)] = user_data
+        _save_credits(data)
+        return True
+    else:
+        last_date = user_data.get("last_date", "")
+        used_today = user_data.get("used_today", 0)
+        if last_date != today_str:
+            used_today = 0
+            user_data["last_date"] = today_str
+
+        if used_today >= DAILY_FREE_CREDITS:
+            return False
+
+        user_data["used_today"] = used_today + 1
+        user_data["last_date"] = today_str
+        data[str(uid)] = user_data
+        _save_credits(data)
+        return True
+
+def refund_credit(uid: int) -> None:
+    if is_admin(uid):
+        return
+    data = _load_credits()
+    user_data = data.get(str(uid))
+    if not user_data:
+        return
+
+    if user_data.get("is_premium"):
+        creds = user_data.get("credits")
+        if creds != "unlimited":
+            try:
+                user_data["credits"] = int(creds) + 1
+            except ValueError:
+                pass
+    else:
+        used_today = user_data.get("used_today", 1)
+        user_data["used_today"] = max(0, used_today - 1)
+
+    data[str(uid)] = user_data
+    _save_credits(data)
+
+OUT_OF_CREDITS_TEXT = (
+    "⚠️ <b>¡Créditos diarios agotados!</b>\n"
+    "━━━━━━━━━━━━━━━━━━\n"
+    f"Has alcanzado el límite de <b>{DAILY_FREE_CREDITS} activaciones gratuitas por hoy</b>.\n\n"
+    "💎 <i>Para activar acceso Premium o créditos ilimitados, contacta al propietario:</i>\n"
+    "━━━━━━━━━━━━━━━━━━"
+)
+
+def out_of_credits_markup() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("⭐ Adquirir Premium (@didierJC) ↗️", url=OWNER_URL)],
+        [InlineKeyboardButton("🔙 Volver al Panel", callback_data="panel:back")],
+    ])
+
+
+# ===========================================================================
+# 4. BAÚL ESTRUCTURADO (ANTI-DUPLICADOS & DATOS EXACTOS)
 # ===========================================================================
 _VAULT_FILE = Path("cookie_vault.json")
+_VAULT_CACHE: list[dict] = []
 _NETFLIX_MARKERS = ("NetflixId", "SecureNetflixId", "nfvdid", "netflix.com")
 
 def _has_netflix_markers(text: str) -> bool:
     return any(m.lower() in text.lower() for m in _NETFLIX_MARKERS)
 
-def _load_vault() -> list[str]:
-    """Carga el baúl y filtra automáticamente cualquier residuo binario."""
-    if _VAULT_FILE.exists():
+def extract_core_netflix_id(cookie_str: str) -> str:
+    m = re.search(r'NetflixId\s+([^\s;\n]+)', cookie_str, re.IGNORECASE)
+    if not m:
+        m = re.search(r'NetflixId=([^\s;\n]+)', cookie_str, re.IGNORECASE)
+    if m:
+        return m.group(1).strip()
+    return ""
+
+def _load_vault() -> list[dict]:
+    global _VAULT_CACHE
+    db = _get_mongo()
+    if db is not None:
         try:
-            data = json.loads(_VAULT_FILE.read_text(encoding="utf-8"))
-            return [
-                c for c in data
-                if isinstance(c, str) and _has_netflix_markers(c) and not c.startswith("PK")
-            ]
+            doc = db["system_data"].find_one({"_id": "vault"})
+            if doc and "accounts" in doc:
+                _VAULT_CACHE = doc["accounts"]
+                return _VAULT_CACHE
         except Exception:
-            return []
-    return []
+            pass
 
-def _save_vault(cookies: list[str]) -> None:
-    _VAULT_FILE.write_text(json.dumps(cookies, ensure_ascii=False, indent=2), encoding="utf-8")
-
-def extract_cookies_from_text_block(text: str) -> list[str]:
-    """Extrae las líneas Netscape o tokens limpios de un archivo o tarjeta."""
-    text = text.strip()
-    if not text or not _has_netflix_markers(text):
-        return []
-
-    # Si es una tarjeta generada por el bot con bloque de cookies
-    netscape_lines = [
-        line.strip() for line in text.splitlines()
-        if ".netflix.com" in line.lower() and any(m.lower() in line.lower() for m in _NETFLIX_MARKERS)
-    ]
-    if netscape_lines and any("netflixid" in l.lower() for l in netscape_lines):
-        return ["\n".join(netscape_lines)]
-
-    # Si es JSON o texto combo plano
-    blocks = split_cookies_from_text(text)
-    clean_blocks = []
-    for b in blocks:
-        b_clean = b.strip()
-        lines = [
-            l.strip() for l in b_clean.splitlines()
-            if ".netflix.com" in l.lower() and any(m.lower() in l.lower() for m in _NETFLIX_MARKERS)
-        ]
-        if lines and any("netflixid" in l.lower() for l in lines):
-            clean_blocks.append("\n".join(lines))
-        elif _has_netflix_markers(b_clean):
-            clean_blocks.append(b_clean)
-
-    return clean_blocks or ([text] if _has_netflix_markers(text) else [])
-
-def extract_all_cookies_from_bytes(raw_bytes: bytes, filename: str = "") -> list[str]:
-    """Descomprime y extrae todas las cookies de un ZIP o lee un archivo de texto."""
-    is_zip = filename.lower().endswith(".zip") or raw_bytes.startswith(b"PK\x03\x04")
-    extracted_cookies = []
-
-    if is_zip:
+    if not _VAULT_CACHE and _VAULT_FILE.exists():
         try:
-            with zipfile.ZipFile(io.BytesIO(raw_bytes), "r") as zf:
-                for info in zf.infolist():
-                    if info.is_dir():
-                        continue
-                    fname = info.filename
-                    base = Path(fname).name
-                    if base.startswith(("_", ".")) or base.upper() == "_SUMMARY.TXT":
-                        continue
-                    if Path(fname).suffix.lower() not in COOKIE_EXTENSIONS:
-                        continue
-                    try:
-                        file_data = zf.read(fname)
-                        if _is_binary_content(file_data):
-                            continue
-                        text = file_data.decode("utf-8", errors="replace")
-                        extracted_cookies.extend(extract_cookies_from_text_block(text))
-                    except Exception:
-                        continue
-        except Exception as e:
-            logger.warning("Error leyendo ZIP para baúl: %s", e)
-    else:
-        text = raw_bytes.decode("utf-8", errors="replace")
-        extracted_cookies.extend(extract_cookies_from_text_block(text))
+            raw_data = json.loads(_VAULT_FILE.read_text(encoding="utf-8"))
+            parsed_accounts = []
+            for item in raw_data:
+                if isinstance(item, dict) and item.get("netflix_id"):
+                    parsed_accounts.append(item)
+                elif isinstance(item, str) and _has_netflix_markers(item):
+                    token = extract_core_netflix_id(item)
+                    if token:
+                        parsed_accounts.append({
+                            "email": "Cuenta Netflix",
+                            "plan": "Netflix",
+                            "country": "Desconocido",
+                            "netflix_id": token,
+                            "cookie": f"NetflixId={token}",
+                            "pc_url": f"https://www.netflix.com/browse?nftoken={token}",
+                            "mobile_url": f"https://www.netflix.com/mobile?nftoken={token}",
+                            "tv_url": f"https://www.netflix.com/tv?nftoken={token}",
+                        })
+            _VAULT_CACHE = parsed_accounts
+        except Exception:
+            _VAULT_CACHE = []
+    return _VAULT_CACHE
 
-    return extracted_cookies
+def _save_vault(accounts: list[dict]) -> None:
+    global _VAULT_CACHE
+    _VAULT_CACHE = accounts
+    try:
+        _VAULT_FILE.write_text(json.dumps(accounts, ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception as e:
+        logger.warning(f"Error guardando vault: {e}")
+
+    db = _get_mongo()
+    if db is not None:
+        try:
+            db["system_data"].update_one({"_id": "vault"}, {"$set": {"accounts": accounts}}, upsert=True)
+        except Exception as e:
+            logger.warning(f"Error guardando vault en MongoDB: {e}")
+
+def parse_account_card_from_text(text: str) -> dict | None:
+    """Extrae todos los campos exactos de un archivo de resultado generado por el bot."""
+    if not text or not _has_netflix_markers(text):
+        return None
+
+    # Excluye cuentas que no tienen enlaces funcionales
+    if "status: no disponible" in text.lower() and "💻 pc:" not in text.lower():
+        return None
+
+    pc_match = re.search(r'💻\s*PC:\s*(https?://\S+)', text, re.IGNORECASE)
+    mobile_match = re.search(r'📱\s*Móvil:\s*(https?://\S+)', text, re.IGNORECASE)
+    tv_match = re.search(r'📺\s*TV:\s*(https?://\S+)', text, re.IGNORECASE)
+
+    token = extract_core_netflix_id(text)
+    if not token:
+        return None
+
+    pc_url = pc_match.group(1).strip() if pc_match else f"https://www.netflix.com/browse?nftoken={token}"
+    mobile_url = mobile_match.group(1).strip() if mobile_match else f"https://www.netflix.com/mobile?nftoken={token}"
+    tv_url = tv_match.group(1).strip() if tv_match else f"https://www.netflix.com/tv?nftoken={token}"
+
+    email_match = re.search(r'Email:\s*([^\s\n]+@[^\s\n]+)', text, re.IGNORECASE)
+    email = email_match.group(1).strip() if email_match else "Netflix Account"
+
+    plan_match = re.search(r'Plan:\s*([^\n]+)', text, re.IGNORECASE)
+    plan = plan_match.group(1).strip() if plan_match else "Premium"
+
+    country_match = re.search(r'País:\s*([^\n]+)', text, re.IGNORECASE)
+    country = country_match.group(1).strip() if country_match else "Desconocido"
+
+    return {
+        "email": email,
+        "plan": plan,
+        "country": country,
+        "netflix_id": token,
+        "cookie": f"NetflixId={token}",
+        "pc_url": pc_url,
+        "mobile_url": mobile_url,
+        "tv_url": tv_url,
+    }
 
 
 # ===========================================================================
-# 3. BANNER MULTIMEDIA
+# 5. BANNER MULTIMEDIA
 # ===========================================================================
 _BANNER_FILE = Path("banner_id.txt")
 BANNER_MEDIA = "banner.mp4"
@@ -174,20 +368,17 @@ def _get_banner_source() -> str:
 
 
 # ===========================================================================
-# 4. AISLAMIENTO Y NORMALIZACIÓN DE ESTADOS
+# 6. AISLAMIENTO TOTAL Y OPTIMIZACIÓN
 # ===========================================================================
 def _clean_checker_session() -> None:
-    for attr in ("session", "s", "client", "http", "http_session", "_session"):
-        if hasattr(checker, attr):
-            sess = getattr(checker, attr, None)
-            if sess is not None:
-                if hasattr(sess, "cookies") and hasattr(sess.cookies, "clear"):
-                    try:
-                        sess.cookies.clear()
-                    except Exception:
-                        pass
-                if hasattr(sess, "headers") and isinstance(sess.headers, dict):
-                    sess.headers.pop("Cookie", None)
+    for name, obj in list(checker.__dict__.items()):
+        if hasattr(obj, "cookies"):
+            try:
+                obj.cookies.clear()
+            except Exception:
+                pass
+        if hasattr(obj, "headers") and isinstance(obj.headers, dict):
+            obj.headers.pop("Cookie", None)
 
 def safe_check_cookie(*args, **kwargs) -> dict:
     _clean_checker_session()
@@ -197,7 +388,6 @@ def safe_check_cookie(*args, **kwargs) -> dict:
         _clean_checker_session()
 
 def normalize_status(raw_status: str, result_dict: dict = None) -> str:
-    """Normaliza cualquier respuesta para que las cuentas caídas se sumen a Dead."""
     st = str(raw_status or "").lower().strip()
     if st in ("hit", "live", "valid", "active", "success"):
         return "hit"
@@ -208,7 +398,7 @@ def normalize_status(raw_status: str, result_dict: dict = None) -> str:
     return "invalid"
 
 
-# ── Registro persistente de usuarios ───────────────────────────────────────
+# ── Registro de usuarios ──────────────────────────────────────────────────
 _USERS_FILE = Path("users.txt")
 
 def _record_user_id(uid: int) -> None:
@@ -228,7 +418,7 @@ def _record_user_id(uid: int) -> None:
 # ── Estados globales ───────────────────────────────────────────────────────
 _PROXY_ADD_STATE: set[int] = set()
 _PROXY_SOURCE_STATE: set[int] = set()
-_EXECUTOR = ThreadPoolExecutor(max_workers=48)
+_EXECUTOR = ThreadPoolExecutor(max_workers=64)
 
 COOKIE_EXTENSIONS = (".txt", ".json", ".cookie", ".cookies")
 COOKIE_MIME_TYPES = {
@@ -236,7 +426,7 @@ COOKIE_MIME_TYPES = {
     "application/octet-stream", "text/csv",
 }
 
-BULK_CONCURRENCY = 32
+BULK_CONCURRENCY = 40
 
 _CANCEL_SESSIONS: set[int] = set()
 _ACTIVE_USERS: dict[int, float] = {}
@@ -343,19 +533,27 @@ def _set_delivery(user_id: int, mode: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Panel visual principal
+# Panel visual principal (Sin enlaces externos de grupo/canal)
 # ---------------------------------------------------------------------------
 
 def _main_panel_text(uid: int) -> str:
     mode_lbl = "Full" if _get_mode(uid) == "full" else "Básico"
     dlv_lbl  = "Cards 💬" if _get_delivery(uid) == "cards" else "ZIP 📦"
-    role_lbl = "👑 Propietario" if is_admin(uid) else "👤 Usuario"
+
+    cred_info = get_user_credits_info(uid)
+    if cred_info["type"] == "owner":
+        role_lbl = "👑 Propietario"
+    elif cred_info["type"] == "premium":
+        role_lbl = "⭐ Premium"
+    else:
+        role_lbl = "👤 Usuario"
 
     return (
         "👁️ <b>BILL CYPHER CHK NF</b>\n"
         "━━━━━━━━━━━━━━━━━━\n"
         f"● <b>Tu Rol:</b> {role_lbl}\n"
         f"● <b>Tu ID:</b> <code>{uid}</code>\n"
+        f"● <b>Créditos:</b> <code>{cred_info['credits']}</code>\n"
         f"● <b>Ajustes:</b> {mode_lbl} · {dlv_lbl}\n"
         "● <b>Estado:</b> Online 🟩\n"
         "━━━━━━━━━━━━━━━━━━\n"
@@ -555,14 +753,23 @@ def _cancel_keyboard(msg_id: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([[InlineKeyboardButton("🛑 Cancelar", callback_data=f"cancel:{msg_id}")]])
 
 def _login_keyboard(result: dict, show_regen: bool = False) -> InlineKeyboardMarkup | None:
-    nft = result.get("nftoken")
+    nft = result.get("nftoken") or {}
+    pc = nft.get("pc_url") or result.get("pc_url")
+    mobile = nft.get("mobile_url") or result.get("mobile_url")
+    tv = nft.get("tv_url") or result.get("tv_url")
+
     rows = []
-    if nft and nft.get("success"):
-        rows.append([
-            InlineKeyboardButton("🖥️ PC",    url=nft["pc_url"]),
-            InlineKeyboardButton("📱 Móvil", url=nft["mobile_url"]),
-            InlineKeyboardButton("📺 TV",   url=nft["tv_url"]),
-        ])
+    if pc or mobile or tv:
+        btn_row = []
+        if pc:
+            btn_row.append(InlineKeyboardButton("🖥️ PC", url=pc))
+        if mobile:
+            btn_row.append(InlineKeyboardButton("📱 Móvil", url=mobile))
+        if tv:
+            btn_row.append(InlineKeyboardButton("📺 TV", url=tv))
+        if btn_row:
+            rows.append(btn_row)
+
     if show_regen:
         rows.append([
             InlineKeyboardButton("🔄 REGEN COOKIE", callback_data="panel:gencookie"),
@@ -625,7 +832,7 @@ def _yes_no(val) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Formateadores de tarjetas
+# Formateadores de tarjetas de cuentas
 # ---------------------------------------------------------------------------
 
 def _plan_title(plan_name: str, status: str) -> str:
@@ -1543,17 +1750,28 @@ async def panel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await query.message.reply_text(
             "📦 <b>Gestión del Baúl de Cookies</b>\n"
             "━━━━━━━━━━━━━━━━━━\n"
-            f"• <b>Stock disponible:</b> <code>{len(vault)}</code> cookies\n\n"
-            "💡 <b>Para agregar cookies:</b>\n"
-            "Envía un archivo <code>.zip</code> o <code>.txt</code> con pie de foto <code>/addvault</code>.\n\n"
+            f"• <b>Stock disponible (único):</b> <code>{len(vault)}</code> cuentas listas\n\n"
+            "💡 <b>Para agregar cuentas:</b>\n"
+            "Envía el archivo <code>.zip</code> generado por el checker con pie de foto <code>/addvault</code>.\n\n"
             "💡 <b>Para vaciar stock:</b>\n"
             "Escribe <code>/clearvault</code>",
             parse_mode=ParseMode.HTML,
         )
 
     elif data == "panel:gencookie":
+        # 1. Comprobación y consumo de créditos
+        if not consume_credit(uid):
+            await query.answer("❌ Sin créditos disponibles.", show_alert=True)
+            await query.message.reply_text(
+                OUT_OF_CREDITS_TEXT,
+                parse_mode=ParseMode.HTML,
+                reply_markup=out_of_credits_markup()
+            )
+            return
+
         vault = _load_vault()
         if not vault:
+            refund_credit(uid)
             await query.answer("❌ Cookies agotadas", show_alert=True)
             await query.message.reply_text(
                 "📭 <b>¡Se agotaron las cookies!</b>\n"
@@ -1564,32 +1782,41 @@ async def panel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             )
             return
 
-        await query.answer("⚡ Obteniendo cookie...")
-        cookie_item = vault.pop(0)
-        _save_vault(vault)
+        await query.answer("⚡ Obteniendo tu cuenta...")
 
-        status_gen = await query.message.reply_text("⏳ <i>Generando acceso directo desde el baúl...</i>", parse_mode=ParseMode.HTML)
-        loop = asyncio.get_running_loop()
-        res = await loop.run_in_executor(_EXECUTOR, functools.partial(safe_check_cookie, generate_token=True), cookie_item)
+        # 2. Selección al azar de una cuenta verificada
+        rand_idx = random.randrange(len(vault))
+        account = vault.pop(rand_idx)
 
-        plan = res.get("plan_name") or "Netflix"
-        country = res.get("country") or "Desconocido"
-        email = res.get("email") or "Netflix Account"
+        # 3. Elimina definitivamente todas las copias de esta misma cuenta del baúl
+        delivered_email = (account.get("email") or "").strip().lower()
+        delivered_token = account.get("netflix_id", "")
 
-        cookie_snippet = cookie_item[:120] + "..." if len(cookie_item) > 120 else cookie_item
+        clean_vault = []
+        for item in vault:
+            if delivered_token and item.get("netflix_id") == delivered_token:
+                continue
+            if delivered_email and delivered_email != "netflix account" and item.get("email", "").lower() == delivered_email:
+                continue
+            clean_vault.append(item)
+
+        _save_vault(clean_vault)
+
+        # 4. Formato limpio de la cookie para copiar con 1 toque
+        clean_cookie = f"NetflixId={account['netflix_id']}"
 
         txt = (
-            "🎉 <b>¡COOKIE DE NETFLIX GENERADA!</b>\n"
+            "🎉 <b>¡OBTIENES TU CUENTA DE NETFLIX!</b>\n"
             "━━━━━━━━━━━━━━━━━━\n"
-            f"• <b>Plan:</b> {plan}\n"
-            f"• <b>País:</b> {_country_display(country)}\n"
-            f"• <b>Email:</b> <code>{email}</code>\n"
+            f"● <b>Plan:</b> {account.get('plan', 'Premium')}\n"
+            f"● <b>País:</b> {_country_display(account.get('country', 'Desconocido'))}\n"
+            f"● <b>Email:</b> <code>{account.get('email', 'Netflix Account')}</code>\n"
             "━━━━━━━━━━━━━━━━━━\n"
-            f"🍪 <b>Cookie:</b>\n<code>{cookie_snippet}</code>\n\n"
+            f"🍪 <b>Cookie:</b>\n<code>{clean_cookie}</code>\n\n"
             "<i>Presiona los botones para entrar directo sin contraseña o generar otra:</i>"
         )
-        kb = _login_keyboard(res, show_regen=True)
-        await status_gen.edit_text(txt, parse_mode=ParseMode.HTML, reply_markup=kb)
+        kb = _login_keyboard(account, show_regen=True)
+        await query.message.reply_text(txt, parse_mode=ParseMode.HTML, reply_markup=kb)
 
 async def cancel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
@@ -1756,8 +1983,54 @@ async def setbanner_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         parse_mode=ParseMode.HTML,
     )
 
+async def setcredits_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    uid = update.effective_user.id if update.effective_user else 0
+    if not is_admin(uid):
+        await update.message.reply_text("⛔ <b>Solo el propietario.</b>", parse_mode=ParseMode.HTML)
+        return
+
+    if len(context.args) < 2:
+        await update.message.reply_text(
+            "⚠️ <b>Uso de gestión de créditos:</b>\n\n"
+            "<code>/setcredits &lt;ID_usuario&gt; &lt;cantidad | unlimited | reset&gt;</code>\n\n"
+            "<b>Ejemplos:</b>\n"
+            "• <code>/setcredits 123456789 20</code> (Otorga 20 créditos Premium)\n"
+            "• <code>/setcredits 123456789 unlimited</code> (Créditos ilimitados)\n"
+            f"• <code>/setcredits 123456789 reset</code> (Regresa a usuario normal con {DAILY_FREE_CREDITS} diarios)",
+            parse_mode=ParseMode.HTML
+        )
+        return
+
+    target_id = context.args[0].strip()
+    amount_str = context.args[1].strip().lower()
+
+    data = _load_credits()
+    user_data = data.setdefault(target_id, {})
+
+    if amount_str in ("unlimited", "ilimitado", "inf"):
+        user_data["is_premium"] = True
+        user_data["credits"] = "unlimited"
+        resp = f"⭐ <b>Usuario <code>{target_id}</code> actualizado:</b> Créditos ILIMITADOS asignados."
+    elif amount_str in ("reset", "normal", "0"):
+        user_data["is_premium"] = False
+        user_data["credits"] = 0
+        user_data["used_today"] = 0
+        resp = f"👤 <b>Usuario <code>{target_id}</code> restablecido:</b> Cuenta Normal ({DAILY_FREE_CREDITS} créditos diarios)."
+    elif amount_str.isdigit():
+        val = int(amount_str)
+        user_data["is_premium"] = True
+        user_data["credits"] = val
+        resp = f"⭐ <b>Usuario <code>{target_id}</code> actualizado:</b> <code>{val}</code> créditos Premium asignados."
+    else:
+        await update.message.reply_text("❌ Valor inválido. Usa un número entero, <code>unlimited</code> o <code>reset</code>.")
+        return
+
+    data[target_id] = user_data
+    _save_credits(data)
+    await update.message.reply_text(resp, parse_mode=ParseMode.HTML)
+
 async def addvault_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """[Admin] Carga cookies al baúl desde texto o respondiendo a un archivo/mensaje."""
+    """[Admin] Carga cuentas al baúl excluyendo las que no tengan enlaces o estén repetidas."""
     uid = update.effective_user.id if update.effective_user else 0
     if not is_admin(uid):
         await update.message.reply_text("⛔ <b>Solo el propietario puede agregar cookies al baúl.</b>", parse_mode=ParseMode.HTML)
@@ -1766,35 +2039,68 @@ async def addvault_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     msg = update.message
     target = msg.reply_to_message if msg.reply_to_message else msg
 
-    # Si se respondió a un documento o el mensaje actual tiene documento
     if target.document:
         doc = target.document
-        fname = doc.file_name or "archivo"
+        fname = (doc.file_name or "archivo").lower()
         try:
             tg_file = await doc.get_file()
             raw_bytes = await tg_file.download_as_bytearray()
-            extracted = extract_all_cookies_from_bytes(bytes(raw_bytes), filename=fname)
+            extracted_accounts = []
 
-            if not extracted:
-                await msg.reply_text("⚠️ No se encontraron cookies de Netflix válidas en el archivo.", parse_mode=ParseMode.HTML)
+            if fname.endswith(".zip") or bytes(raw_bytes).startswith(b"PK\x03\x04"):
+                with zipfile.ZipFile(io.BytesIO(raw_bytes), "r") as zf:
+                    for info in zf.infolist():
+                        if info.is_dir():
+                            continue
+                        base = Path(info.filename).name
+                        if base.startswith(("_", ".")) or base.upper() == "_SUMMARY.TXT":
+                            continue
+                        if Path(info.filename).suffix.lower() not in COOKIE_EXTENSIONS:
+                            continue
+                        try:
+                            f_data = zf.read(info.filename)
+                            text = f_data.decode("utf-8", errors="replace")
+                            acc = parse_account_card_from_text(text)
+                            if acc:
+                                extracted_accounts.append(acc)
+                        except Exception:
+                            continue
+            else:
+                text = bytes(raw_bytes).decode("utf-8", errors="replace")
+                acc = parse_account_card_from_text(text)
+                if acc:
+                    extracted_accounts.append(acc)
+
+            if not extracted_accounts:
+                await msg.reply_text("⚠️ No se encontraron cuentas activas con enlaces válidos en el archivo.", parse_mode=ParseMode.HTML)
                 return
 
             vault = _load_vault()
-            existing_set = set(vault)
+            existing_tokens = {item["netflix_id"] for item in vault}
+            existing_emails = {item["email"].lower() for item in vault if item.get("email") and item["email"] != "Netflix Account"}
             added = 0
-            for c in extracted:
-                c_clean = c.strip()
-                if c_clean and c_clean not in existing_set:
-                    vault.append(c_clean)
-                    existing_set.add(c_clean)
-                    added += 1
+
+            for acc in extracted_accounts:
+                t = acc["netflix_id"]
+                em = acc["email"].lower()
+                if t in existing_tokens:
+                    continue
+                if em != "netflix account" and em in existing_emails:
+                    continue
+
+                vault.append(acc)
+                existing_tokens.add(t)
+                if em != "netflix account":
+                    existing_emails.add(em)
+                added += 1
 
             _save_vault(vault)
             await msg.reply_text(
-                f"✅ <b>¡Cookies añadidas al baúl desde el archivo!</b>\n"
+                f"✅ <b>¡Cuentas importadas al baúl con éxito!</b>\n"
                 "━━━━━━━━━━━━━━━━━━\n"
-                f"• 📥 <b>Añadidas:</b> <code>{added}</code>\n"
-                f"• 📦 <b>Total disponible en stock:</b> <code>{len(vault)}</code>",
+                f"• 📦 <b>Cuentas únicas añadidas:</b> <code>{added}</code>\n"
+                f"• 🔒 <b>Duplicados o sin botones descartados:</b> <code>{len(extracted_accounts) - added}</code>\n"
+                f"• 🗄️ <b>Stock total verificado:</b> <code>{len(vault)}</code>",
                 parse_mode=ParseMode.HTML
             )
             return
@@ -1802,7 +2108,7 @@ async def addvault_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             await msg.reply_text(f"⚠️ Error procesando archivo: {e}")
             return
 
-    # Si se envió texto plano o argumento
+    # Si se envía texto directo
     text = ""
     if context.args:
         text = " ".join(context.args)
@@ -1813,40 +2119,35 @@ async def addvault_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
     if not text:
         await msg.reply_text(
-            "📦 <b>Cómo agregar cookies al baúl:</b>\n\n"
-            "1. Envía un archivo <code>.zip</code> o <code>.txt</code> con pie de foto <code>/addvault</code>\n"
-            "2. O escribe: <code>/addvault &lt;pega tus cookies aquí&gt;</code>\n"
-            "3. O responde a un archivo/mensaje con <code>/addvault</code>.",
+            "📦 <b>Cómo agregar cuentas al baúl:</b>\n\n"
+            "1. Envía el archivo <code>.zip</code> generado por el checker con pie de foto <code>/addvault</code>\n"
+            "2. O responde a un archivo de resultados con <code>/addvault</code>.",
             parse_mode=ParseMode.HTML
         )
         return
 
-    extracted = extract_cookies_from_text_block(text)
-    if not extracted:
-        await msg.reply_text("⚠️ No se detectaron cookies válidas en el texto.", parse_mode=ParseMode.HTML)
+    acc = parse_account_card_from_text(text)
+    if not acc:
+        await msg.reply_text("⚠️ No se detectaron cuentas activas con enlaces válidos en el texto.", parse_mode=ParseMode.HTML)
         return
 
     vault = _load_vault()
-    existing_set = set(vault)
-    added = 0
-    for c in extracted:
-        c_clean = c.strip()
-        if c_clean and c_clean not in existing_set:
-            vault.append(c_clean)
-            existing_set.add(c_clean)
-            added += 1
+    existing_tokens = {item["netflix_id"] for item in vault}
+    if acc["netflix_id"] in existing_tokens:
+        await msg.reply_text("⚠️ Esta cuenta ya se encuentra almacenada en el baúl.", parse_mode=ParseMode.HTML)
+        return
 
+    vault.append(acc)
     _save_vault(vault)
     await msg.reply_text(
-        f"✅ <b>¡Cookies agregadas al baúl con éxito!</b>\n"
+        f"✅ <b>¡Cuenta agregada al baúl con éxito!</b>\n"
         "━━━━━━━━━━━━━━━━━━\n"
-        f"• 📥 <b>Añadidas:</b> <code>{added}</code>\n"
-        f"• 📦 <b>Total disponible en stock:</b> <code>{len(vault)}</code>",
+        f"• 📥 <b>Email:</b> <code>{acc['email']}</code>\n"
+        f"• 📦 <b>Stock total real:</b> <code>{len(vault)}</code>",
         parse_mode=ParseMode.HTML
     )
 
 async def clearvault_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """[Admin] Vacía el stock del baúl."""
     uid = update.effective_user.id if update.effective_user else 0
     if not is_admin(uid):
         await update.message.reply_text("⛔ <b>Solo el propietario.</b>", parse_mode=ParseMode.HTML)
@@ -2192,16 +2493,25 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await setbanner_command(update, context)
         return
 
-    # Si el propietario envía un archivo con /addvault para el baúl
     if caption.startswith("/addvault") and is_admin(uid):
         await addvault_command(update, context)
         return
 
+    if not consume_credit(uid):
+        await update.message.reply_text(
+            OUT_OF_CREDITS_TEXT,
+            parse_mode=ParseMode.HTML,
+            reply_markup=out_of_credits_markup()
+        )
+        return
+
     if uid in _ACTIVE_USERS:
+        refund_credit(uid)
         await update.message.reply_text("⏳ Ya tienes una comprobación activa. Espera a que termine.", parse_mode=ParseMode.HTML)
         return
 
     if doc.file_size and doc.file_size > 20 * 1024 * 1024:
+        refund_credit(uid)
         await update.message.reply_text("⚠️ El archivo supera los 20 MB permitidos.", parse_mode=ParseMode.HTML)
         return
 
@@ -2211,6 +2521,7 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     is_cookie = any(fname.endswith(ext) for ext in COOKIE_EXTENSIONS) or mime in COOKIE_MIME_TYPES
 
     if not is_zip and not is_cookie:
+        refund_credit(uid)
         await update.message.reply_text("❌ Formato no compatible. Envía un <code>.txt</code>, <code>.json</code> o <code>.zip</code>.", parse_mode=ParseMode.HTML)
         return
 
@@ -2238,6 +2549,7 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             await asyncio.sleep(1)
 
     if tmp_path is None:
+        refund_credit(uid)
         await status_msg.edit_text("⚠️ Error al descargar el archivo.")
         if uid:
             _ACTIVE_USERS.pop(uid, None)
@@ -2257,6 +2569,7 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             try:
                 entries = read_cookie_texts_from_zip(tmp_path)
             except Exception as _e:
+                refund_credit(uid)
                 await status_msg.edit_text(f"❌ Error al abrir ZIP: {_e}", parse_mode=ParseMode.HTML)
                 return
             finally:
@@ -2266,6 +2579,7 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                     pass
 
             if not entries:
+                refund_credit(uid)
                 await status_msg.edit_text("⚠️ No se encontraron archivos de cookies dentro del ZIP.", parse_mode=ParseMode.HTML)
                 return
 
@@ -2284,18 +2598,21 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 pass
 
             if _is_binary_content(raw_bytes):
+                refund_credit(uid)
                 await status_msg.edit_text("❌ El archivo parece una imagen o binario, no cookies de texto.", parse_mode=ParseMode.HTML)
                 return
 
             cookie_text = raw_bytes.decode("utf-8", errors="replace")
             ok, err_msg = _validate_cookie_text(cookie_text)
             if not ok:
+                refund_credit(uid)
                 await status_msg.edit_text(err_msg, parse_mode=ParseMode.HTML)
                 return
 
             await process_cookies(update, status_msg, cookie_text, source=original_name)
 
     except Exception as e:
+        refund_credit(uid)
         logger.exception("Error procesando documento")
         await status_msg.edit_text(f"⚠️ Error al procesar: {e}", parse_mode=ParseMode.HTML)
     finally:
@@ -2342,7 +2659,16 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         await update.message.reply_text(err_msg, parse_mode=ParseMode.HTML)
         return
 
+    if not consume_credit(uid):
+        await update.message.reply_text(
+            OUT_OF_CREDITS_TEXT,
+            parse_mode=ParseMode.HTML,
+            reply_markup=out_of_credits_markup()
+        )
+        return
+
     if uid in _ACTIVE_USERS:
+        refund_credit(uid)
         await update.message.reply_text("⏳ Ya tienes una comprobación activa.", parse_mode=ParseMode.HTML)
         return
 
@@ -2359,6 +2685,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     try:
         await process_cookies(update, status_msg, text, source="texto pegado")
     except Exception as e:
+        refund_credit(uid)
         logger.exception("Error en texto pegado")
         await status_msg.edit_text(f"⚠️ Error: {e}", parse_mode=ParseMode.HTML)
     finally:
@@ -2504,8 +2831,11 @@ def main() -> None:
     if not BOT_TOKEN:
         raise ValueError("TELEGRAM_BOT_TOKEN is not set.")
 
-    start_dashboard(port=5000)
-    print("✅ Status dashboard running on port 5000")
+    try:
+        start_dashboard(port=PORT)
+        print(f"✅ Status dashboard running on port {PORT}")
+    except Exception as e:
+        logger.warning(f"Dashboard couldn't bind to port {PORT}: {e}")
 
     app = (
         Application.builder()
@@ -2534,6 +2864,7 @@ def main() -> None:
     app.add_handler(CommandHandler("setbanner",  setbanner_command))
     app.add_handler(CommandHandler("addvault",   addvault_command))
     app.add_handler(CommandHandler("clearvault", clearvault_command))
+    app.add_handler(CommandHandler("setcredits", setcredits_command))
 
     # ── Callbacks interactivos ────────────────────────────────────────────────
     app.add_handler(CallbackQueryHandler(panel_callback,         pattern=r"^panel:"))
@@ -2576,8 +2907,9 @@ def main() -> None:
         ]
         await application.bot.set_my_commands(user_commands, scope=BotCommandScopeDefault())
 
-        # Comandos exclusivos para tu cuenta (ID: 5320997298)
+        # Comandos exclusivos para el chat del propietario (ID: 5320997298)
         admin_commands = user_commands + [
+            BotCommand("setcredits", "Asignar créditos a usuario [Admin]"),
             BotCommand("addvault",   "Cargar cookies al baúl [Admin]"),
             BotCommand("clearvault", "Vaciar cookies del baúl [Admin]"),
             BotCommand("proxy",      "Gestor de proxies [Admin]"),
