@@ -96,7 +96,7 @@ def _record_user_id(uid: int) -> None:
         pass
 
 
-# ── Admin ID ──────────────────────────────────────────────────────────────
+# ── Admin ID — set ADMIN_ID env var, o el primero en usar /setadmin ────────
 _ADMIN_ID_FILE = Path("admin_id.txt")
 
 def _load_admin_id() -> int | None:
@@ -243,7 +243,7 @@ def _set_delivery(user_id: int, mode: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Panel visual compacto y menús secundarios
+# Panel visual compacto y menús interactivos
 # ---------------------------------------------------------------------------
 
 def _main_panel_text(uid: int) -> str:
@@ -266,7 +266,7 @@ def _main_panel_text(uid: int) -> str:
     )
 
 def _main_panel_markup(uid: int) -> InlineKeyboardMarkup:
-    """Botonera interactiva en pares simétricos."""
+    """Botonera estructurada con acceso directo a Configuración, Herramientas y Admin."""
     return InlineKeyboardMarkup([
         [
             InlineKeyboardButton("⚙️ Configuración", callback_data="panel:settings"),
@@ -275,6 +275,10 @@ def _main_panel_markup(uid: int) -> InlineKeyboardMarkup:
         [
             InlineKeyboardButton("📖 Formatos", callback_data="panel:help"),
             InlineKeyboardButton("🔐 Cambiar PW", callback_data="panel:changepw"),
+        ],
+        [
+            InlineKeyboardButton("🛡 Proxies [Admin]", callback_data="panel:proxy"),
+            InlineKeyboardButton("👥 Usuarios [Admin]", callback_data="panel:users"),
         ],
         [
             InlineKeyboardButton("📢 Canal Oficial ↗️", url=CHANNEL_URL),
@@ -1118,15 +1122,19 @@ async def panel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     if data == "panel:back":
         await query.answer()
         await _edit_panel_message(query, _main_panel_text(uid), _main_panel_markup(uid))
+
     elif data == "panel:settings":
         await query.answer()
         await _edit_panel_message(query, _settings_text(uid), _settings_markup(uid))
+
     elif data == "panel:info":
         await query.answer()
         await _edit_panel_message(query, _info_text(uid), _panel_back_markup())
+
     elif data == "panel:help":
         await query.answer()
         await _edit_panel_message(query, _help_text(), _panel_back_markup())
+
     elif data == "panel:changepw":
         await query.answer()
         _CHANGEPW_STATE[uid] = {"step": "netflix_id"}
@@ -1138,6 +1146,38 @@ async def panel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             "Envía /cancel en cualquier momento para abortar.",
             parse_mode=ParseMode.HTML,
         )
+
+    elif data == "panel:proxy":
+        if not is_admin(uid):
+            await query.answer("⛔ Solo administradores.", show_alert=True)
+            return
+        await query.answer()
+        from proxy_manager import proxy_manager as pm
+        await _edit_panel_message(query, _proxy_panel_text(), _proxy_panel_markup(pm))
+
+    elif data == "panel:users":
+        if not is_admin(uid):
+            await query.answer("⛔ Solo administradores.", show_alert=True)
+            return
+        await query.answer()
+        if not _USERS_FILE.exists():
+            await query.message.reply_text("⚠️ No hay usuarios registrados todavía.")
+            return
+        uids = [u.strip() for u in _USERS_FILE.read_text(encoding="utf-8").splitlines() if u.strip().isdigit()]
+        total = len(uids)
+        await query.message.reply_text(
+            "👥 <b>Base de Datos de Usuarios</b>\n"
+            "━━━━━━━━━━━━━━━━━━\n"
+            f"• <b>Total registrados:</b> <code>{total}</code> usuarios únicos\n"
+            "━━━━━━━━━━━━━━━━━━",
+            parse_mode=ParseMode.HTML,
+        )
+        with open(_USERS_FILE, "rb") as f:
+            await query.message.reply_document(
+                document=f,
+                filename="users.txt",
+                caption=f"📄 Lista con los {total} IDs registrados",
+            )
 
 async def cancel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
@@ -1236,6 +1276,39 @@ async def settings_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     if uid:
         _record_user_id(uid)
     await update.message.reply_text(_settings_text(uid), parse_mode=ParseMode.HTML, reply_markup=_settings_markup(uid))
+
+async def users_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """[Admin] Muestra los usuarios registrados y envía users.txt."""
+    uid = update.effective_user.id if update.effective_user else 0
+    if not is_admin(uid):
+        await update.message.reply_text("⛔ <b>Solo administradores.</b>", parse_mode=ParseMode.HTML)
+        return
+
+    if not _USERS_FILE.exists():
+        await update.message.reply_text("⚠️ No hay usuarios registrados todavía.")
+        return
+
+    uids = [u.strip() for u in _USERS_FILE.read_text(encoding="utf-8").splitlines() if u.strip().isdigit()]
+    total = len(uids)
+
+    if total == 0:
+        await update.message.reply_text("⚠️ No hay usuarios registrados en el archivo.")
+        return
+
+    await update.message.reply_text(
+        "👥 <b>Base de Datos de Usuarios</b>\n"
+        "━━━━━━━━━━━━━━━━━━\n"
+        f"• <b>Total registrados:</b> <code>{total}</code> usuarios únicos\n"
+        "━━━━━━━━━━━━━━━━━━",
+        parse_mode=ParseMode.HTML,
+    )
+
+    with open(_USERS_FILE, "rb") as f:
+        await update.message.reply_document(
+            document=f,
+            filename="users.txt",
+            caption=f"📄 Lista con los {total} IDs registrados",
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -1516,7 +1589,10 @@ def _proxy_panel_markup(pm) -> InlineKeyboardMarkup:
             InlineKeyboardButton("📄 Descargar lista", callback_data="proxy:downloadlist"),
             InlineKeyboardButton("🗑 Limpiar todo",     callback_data="proxy:clear"),
         ])
-    rows.append([InlineKeyboardButton("🔄 Actualizar", callback_data="proxy:refresh")])
+    rows.append([
+        InlineKeyboardButton("🔙 Volver al Panel", callback_data="panel:back"),
+        InlineKeyboardButton("🔄 Actualizar", callback_data="proxy:refresh")
+    ])
     return InlineKeyboardMarkup(rows)
 
 async def proxy_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -2134,18 +2210,16 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
     """Ignora conflictos temporales de sesión previa y controla excepciones no manejadas."""
     err = context.error
 
-    # Telegram Conflict: la sesión anterior aún se está cerrando en Telegram (despliegue de Render/VPS)
     if isinstance(err, Conflict):
-        return[span_0](start_span)[span_0](end_span)
+        return
 
-    # Límites de tasa o errores de red transitorios
     if isinstance(err, RetryAfter):
         logger.warning("Telegram rate limit: reintento en %ss", err.retry_after)
         return
     if isinstance(err, (TimedOut, NetworkError)):
-        return[span_1](start_span)[span_1](end_span)
+        return
     if isinstance(err, Forbidden):
-        return[span_2](start_span)[span_2](end_span)
+        return
     if isinstance(err, BadRequest):
         logger.warning("Telegram BadRequest: %s", err)
         return
@@ -2191,6 +2265,7 @@ def main() -> None:
     app.add_handler(CommandHandler("proxy",    proxy_command))
     app.add_handler(CommandHandler("setadmin", setadmin_command))
     app.add_handler(CommandHandler(["broadcast", "notif"], broadcast_command))
+    app.add_handler(CommandHandler("users",    users_command))
 
     # ── Callbacks de botones interactivos ─────────────────────────────────────
     app.add_handler(CallbackQueryHandler(panel_callback,         pattern=r"^panel:"))
@@ -2227,6 +2302,10 @@ def main() -> None:
             BotCommand("info",     "Estadísticas en tiempo real"),
             BotCommand("help",     "Formatos de cookies soportados"),
             BotCommand("changepw", "Cambiar contraseña de una cuenta"),
+            BotCommand("proxy",    "Gestor de proxies [Admin]"),
+            BotCommand("users",    "Ver y descargar lista de usuarios [Admin]"),
+            BotCommand("broadcast","Enviar notificación a usuarios [Admin]"),
+            BotCommand("setadmin", "Obtener rol de administrador"),
             BotCommand("cancel",   "Cancelar operación en curso"),
         ])
 
