@@ -387,7 +387,7 @@ def extract_all_accounts_from_bytes(raw_bytes: bytes, filename: str = "") -> lis
                     except Exception:
                         continue
         except Exception as e:
-            logger.warning(f"Error leyendo ZIP: {e}")
+            logger.warning(f"Error leyendo ZIP: %s", e)
     else:
         text = raw_bytes.decode("utf-8", errors="replace")
         acc = parse_account_card_from_text(text)
@@ -2138,7 +2138,7 @@ async def addvault_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
                 return
 
             vault = _load_vault()
-            existing_tokens = {item["token"] for item in vault if item.get("token")}
+            existing_tokens = {extract_core_netflix_id(item.get("token") or item.get("cookie", "")) if isinstance(item, dict) else extract_core_netflix_id(str(item)) for item in vault}
             added = 0
 
             for acc in extracted:
@@ -2187,7 +2187,7 @@ async def addvault_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         return
 
     vault = _load_vault()
-    existing_tokens = {item["token"] for item in vault if item.get("token")}
+    existing_tokens = {extract_core_netflix_id(item.get("token") or item.get("cookie", "")) if isinstance(item, dict) else extract_core_netflix_id(str(item)) for item in vault}
     if acc["token"] in existing_tokens:
         await msg.reply_text("⚠️ Esta cuenta ya se encuentra almacenada en el baúl.", parse_mode=ParseMode.HTML)
         return
@@ -2213,6 +2213,7 @@ async def clearvault_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
     await _cloud_auto_save(context.application)
 
 async def maintenance_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """[Admin] Activa o desactiva el modo mantenimiento."""
     uid = update.effective_user.id if update.effective_user else 0
     if not is_admin(uid):
         await update.message.reply_text("⛔ <b>Solo el propietario.</b>", parse_mode=ParseMode.HTML)
@@ -2964,19 +2965,20 @@ def main() -> None:
 
         # Auto-restauración silenciosa en arranque usando el mensaje fijado en Telegram
         try:
-            if not _VAULT_FILE.exists() or len(_load_vault()) == 0:
-                chat = await application.bot.get_chat(OWNER_ID)
-                if chat.pinned_message and chat.pinned_message.document:
-                    f = await chat.pinned_message.document.get_file()
-                    b = await f.download_as_bytearray()
-                    d = json.loads(b.decode("utf-8", errors="replace"))
-                    if "vault" in d:
-                        _save_vault(d["vault"])
-                    if "credits" in d:
-                        _save_credits(d["credits"])
-                    if "users" in d and isinstance(d["users"], list):
-                        _USERS_FILE.write_text("\n".join(d["users"]) + "\n", encoding="utf-8")
-                    logger.info("Base de datos restaurada automáticamente desde la nube de Telegram.")
+            chat = await application.bot.get_chat(OWNER_ID)
+            if chat.pinned_message and chat.pinned_message.document:
+                f = await chat.pinned_message.document.get_file()
+                b = await f.download_as_bytearray()
+                d = json.loads(b.decode("utf-8", errors="replace"))
+                cloud_vault = d.get("vault", [])
+                local_vault = _load_vault()
+                if len(cloud_vault) > len(local_vault):
+                    _save_vault(cloud_vault)
+                if d.get("credits"):
+                    _save_credits(d["credits"])
+                if d.get("users") and isinstance(d["users"], list):
+                    _USERS_FILE.write_text("\n".join(d["users"]) + "\n", encoding="utf-8")
+                logger.info("Base de datos restaurada automáticamente desde la nube de Telegram.")
         except Exception as e:
             logger.debug(f"Auto-restore on init: {e}")
 
