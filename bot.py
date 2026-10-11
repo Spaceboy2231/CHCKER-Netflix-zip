@@ -35,6 +35,7 @@ from telegram.error import (
     BadRequest,
 )
 
+import checker
 from checker import check_cookie
 import stats as stats_tracker
 from dashboard import start_dashboard
@@ -53,36 +54,103 @@ logger.setLevel(logging.WARNING)
 BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 
 # ===========================================================================
-# CONFIGURACIÓN VISUAL & MULTIMEDIA
+# 1. CONFIGURACIÓN DEL PROPIETARIO / ADMIN
 # ===========================================================================
+# Si conoces tu ID numérico de Telegram, puedes colocarlo aquí directamente.
+# Si lo dejas en 0, usa el comando /setadmin o /setadmin force en el bot.
+OWNER_ID: int = 0
 
-# Archivo multimedia en la carpeta del bot (mp4, gif, jpg, png o URL directa)
+_ADMIN_ID_FILE = Path("admin_id.txt")
+
+def _load_admin_id() -> int | None:
+    if OWNER_ID:
+        return OWNER_ID
+    _env = os.environ.get("ADMIN_ID", "").strip()
+    if _env.isdigit():
+        return int(_env)
+    if _ADMIN_ID_FILE.exists():
+        try:
+            val = _ADMIN_ID_FILE.read_text().strip()
+            if val.isdigit():
+                return int(val)
+        except Exception:
+            pass
+    return None
+
+def _save_admin_id(uid: int) -> None:
+    _ADMIN_ID_FILE.write_text(str(uid))
+
+_ADMIN_ID: int | None = _load_admin_id()
+
+def is_admin(uid: int) -> bool:
+    if not uid:
+        return False
+    if OWNER_ID and uid == OWNER_ID:
+        return True
+    return _ADMIN_ID is not None and uid == _ADMIN_ID
+
+
+# ===========================================================================
+# 2. CONFIGURACIÓN VISUAL, MULTIMEDIA Y EMOJIS ANIMADOS
+# ===========================================================================
 BANNER_MEDIA = "banner.mp4"
+CHANNEL_URL  = "https://t.me/TuCanal"
+GROUP_URL    = "https://t.me/TuGrupo"
 
-# Enlaces de soporte y comunidad
-CHANNEL_URL = "https://t.me/TuCanal"
-GROUP_URL   = "https://t.me/TuGrupo"
-
-# IDs de Emojis Animados de Telegram Premium (dejar en "" para usar estándar)
+_EMOJI_FILE = Path("emojis.json")
 ANIMATED_EMOJIS = {
-    "bill": "",       # Ícono cabecera (fallback: 🎬)
-    "fire": "",       # Fuego de versión (fallback: 🔥)
-    "check": "",      # Estado online (fallback: 🟩)
+    "bill": "",       # Fallback: 🎬
+    "fire": "",       # Fallback: 🔥
+    "check": "",      # Fallback: 🟩
 }
 
+if _EMOJI_FILE.exists():
+    try:
+        ANIMATED_EMOJIS.update(json.loads(_EMOJI_FILE.read_text(encoding="utf-8")))
+    except Exception:
+        pass
+
 def tg_icon(name: str, fallback: str) -> str:
-    """Devuelve la etiqueta de emoji animado si está configurada, o el emoji estándar."""
     eid = ANIMATED_EMOJIS.get(name, "")
     if eid:
         return f'<tg-emoji emoji-id="{eid}">{fallback}</tg-emoji>'
     return fallback
 
 
-# ── Registro persistente de usuarios para Notificaciones (/broadcast) ──────
+# ===========================================================================
+# 3. AISLAMIENTO DE SESIONES (SOLUCIÓN A COOKIES REPETIDAS)
+# ===========================================================================
+def _clean_checker_session() -> None:
+    """
+    Limpia a fondo cualquier cookie jar o sesión persistente en checker.py.
+    Evita que tokens como SecureNetflixId o NetflixId de una cuenta anterior
+    contaminen la comprobación de un nuevo archivo.
+    """
+    for attr in ("session", "s", "client", "http", "http_session", "_session"):
+        if hasattr(checker, attr):
+            sess = getattr(checker, attr, None)
+            if sess is not None:
+                if hasattr(sess, "cookies") and hasattr(sess.cookies, "clear"):
+                    try:
+                        sess.cookies.clear()
+                    except Exception:
+                        pass
+                if hasattr(sess, "headers") and isinstance(sess.headers, dict):
+                    sess.headers.pop("Cookie", None)
+
+def safe_check_cookie(*args, **kwargs) -> dict:
+    """Wrapper que garantiza sesiones aisladas y sin memoria residual."""
+    _clean_checker_session()
+    try:
+        return check_cookie(*args, **kwargs)
+    finally:
+        _clean_checker_session()
+
+
+# ── Registro persistente de usuarios ───────────────────────────────────────
 _USERS_FILE = Path("users.txt")
 
 def _record_user_id(uid: int) -> None:
-    """Registra los IDs de los usuarios para el envío de notificaciones globales."""
     try:
         if not uid:
             return
@@ -96,33 +164,9 @@ def _record_user_id(uid: int) -> None:
         pass
 
 
-# ── Admin ID — set ADMIN_ID env var, o el primero en usar /setadmin ────────
-_ADMIN_ID_FILE = Path("admin_id.txt")
-
-def _load_admin_id() -> int | None:
-    _env = os.environ.get("ADMIN_ID", "").strip()
-    if _env.isdigit():
-        return int(_env)
-    if _ADMIN_ID_FILE.exists():
-        try:
-            return int(_ADMIN_ID_FILE.read_text().strip())
-        except Exception:
-            pass
-    return None
-
-def _save_admin_id(uid: int) -> None:
-    _ADMIN_ID_FILE.write_text(str(uid))
-
-_ADMIN_ID: int | None = _load_admin_id()
-
-def is_admin(uid: int) -> bool:
-    return _ADMIN_ID is not None and uid == _ADMIN_ID
-
-
-# ── Estados y pools globales ───────────────────────────────────────────────
+# ── Estados globales ───────────────────────────────────────────────────────
 _PROXY_ADD_STATE: set[int] = set()
 _PROXY_SOURCE_STATE: set[int] = set()
-
 _EXECUTOR = ThreadPoolExecutor(max_workers=48)
 
 COOKIE_EXTENSIONS = (".txt", ".json", ".cookie", ".cookies")
@@ -247,18 +291,18 @@ def _set_delivery(user_id: int, mode: str) -> None:
 # ---------------------------------------------------------------------------
 
 def _main_panel_text(uid: int) -> str:
-    """Panel principal compacto diseñado para no desplazar videos o GIFs."""
     icon_bill = tg_icon("bill", "🎬")
     icon_fire = tg_icon("fire", "🔥")
 
     mode_lbl = "Full" if _get_mode(uid) == "full" else "Básico"
     dlv_lbl  = "Cards 💬" if _get_delivery(uid) == "cards" else "ZIP 📦"
+    role_lbl = "👑 Propietario / Admin" if is_admin(uid) else "👤 Usuario"
 
     return (
         f"{icon_bill} <b>BILL CYPHER CHK NF</b>\n"
         "━━━━━━━━━━━━━━━━━━\n"
-        "👁️ <i>Checker de Netflix en tiempo real</i>\n\n"
-        "● <b>Estado:</b> Online 🟩\n"
+        f"● <b>Tu Rol:</b> {role_lbl}\n"
+        f"● <b>Tu ID:</b> <code>{uid}</code>\n"
         f"● <b>Ajustes:</b> {mode_lbl} · {dlv_lbl}\n"
         "● <b>Soporte:</b> Netscape · JSON · ZIP\n"
         "━━━━━━━━━━━━━━━━━━\n"
@@ -266,8 +310,16 @@ def _main_panel_text(uid: int) -> str:
     )
 
 def _main_panel_markup(uid: int) -> InlineKeyboardMarkup:
-    """Botonera estructurada con acceso directo a Configuración, Herramientas y Admin."""
-    return InlineKeyboardMarkup([
+    admin_buttons = []
+    if is_admin(uid):
+        admin_buttons = [
+            [
+                InlineKeyboardButton("🛡 Proxies [Admin]", callback_data="panel:proxy"),
+                InlineKeyboardButton("👥 Usuarios [Admin]", callback_data="panel:users"),
+            ]
+        ]
+
+    rows = [
         [
             InlineKeyboardButton("⚙️ Configuración", callback_data="panel:settings"),
             InlineKeyboardButton("📊 Estadísticas", callback_data="panel:info"),
@@ -276,15 +328,13 @@ def _main_panel_markup(uid: int) -> InlineKeyboardMarkup:
             InlineKeyboardButton("📖 Formatos", callback_data="panel:help"),
             InlineKeyboardButton("🔐 Cambiar PW", callback_data="panel:changepw"),
         ],
-        [
-            InlineKeyboardButton("🛡 Proxies [Admin]", callback_data="panel:proxy"),
-            InlineKeyboardButton("👥 Usuarios [Admin]", callback_data="panel:users"),
-        ],
+        *admin_buttons,
         [
             InlineKeyboardButton("📢 Canal Oficial ↗️", url=CHANNEL_URL),
             InlineKeyboardButton("👥 Grupo / Soporte ↗️", url=GROUP_URL),
         ],
-    ])
+    ]
+    return InlineKeyboardMarkup(rows)
 
 def _panel_back_markup() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
@@ -292,7 +342,6 @@ def _panel_back_markup() -> InlineKeyboardMarkup:
     ])
 
 async def _send_banner_panel(update: Update, text: str, markup: InlineKeyboardMarkup) -> None:
-    """Envía el panel con video/GIF/foto de galería local o URL."""
     target = update.message or (update.callback_query.message if update.callback_query else None)
     if not target:
         return
@@ -312,7 +361,7 @@ async def _send_banner_panel(update: Update, text: str, markup: InlineKeyboardMa
                     await target.reply_photo(photo=f, caption=text, parse_mode=ParseMode.HTML, reply_markup=markup)
                     return
         except Exception as e:
-            logger.warning("Error enviando multimedia local: %s", e)
+            logger.warning("Error enviando multimedia: %s", e)
 
     elif BANNER_MEDIA.startswith("http://") or BANNER_MEDIA.startswith("https://"):
         try:
@@ -345,11 +394,7 @@ def _settings_text(uid: int) -> str:
         "⚙️ <b>Configuración del Bot</b>\n"
         "━━━━━━━━━━━━━━━━━━\n\n"
         f"📊 <b>Formato de salida:</b> {mode_lbl}\n"
-        f"  <i>Detalle con el que se muestra cada tarjeta</i>\n\n"
-        f"📤 <b>Modo de entrega:</b> {dlv_lbl}\n"
-        f"  <i>Cómo recibes los resultados masivos</i>\n\n"
-        "  📦 <b>Modo ZIP</b> — Cuentas empaquetadas con cookies y logins\n"
-        "  💬 <b>Card-by-Card</b> — Cada cuenta en un mensaje individual\n\n"
+        f"📤 <b>Modo de entrega:</b> {dlv_lbl}\n\n"
         "Toca un botón para cambiar tus preferencias:"
     )
 
@@ -358,24 +403,12 @@ def _settings_markup(uid: int) -> InlineKeyboardMarkup:
     delivery = _get_delivery(uid)
     return InlineKeyboardMarkup([
         [
-            InlineKeyboardButton(
-                "✅ Información completa" if mode == "full" else "📋 Información completa",
-                callback_data=f"setmode:{uid}:full",
-            ),
-            InlineKeyboardButton(
-                "✅ Básico" if mode == "basic" else "📄 Básico",
-                callback_data=f"setmode:{uid}:basic",
-            ),
+            InlineKeyboardButton("✅ Información completa" if mode == "full" else "📋 Información completa", callback_data=f"setmode:{uid}:full"),
+            InlineKeyboardButton("✅ Básico" if mode == "basic" else "📄 Básico", callback_data=f"setmode:{uid}:basic"),
         ],
         [
-            InlineKeyboardButton(
-                "✅ Modo ZIP" if delivery == "zip" else "📦 Modo ZIP",
-                callback_data=f"setdelivery:{uid}:zip",
-            ),
-            InlineKeyboardButton(
-                "✅ Card-by-Card" if delivery == "cards" else "💬 Card-by-Card",
-                callback_data=f"setdelivery:{uid}:cards",
-            ),
+            InlineKeyboardButton("✅ Modo ZIP" if delivery == "zip" else "📦 Modo ZIP", callback_data=f"setdelivery:{uid}:zip"),
+            InlineKeyboardButton("✅ Card-by-Card" if delivery == "cards" else "💬 Card-by-Card", callback_data=f"setdelivery:{uid}:cards"),
         ],
         [
             InlineKeyboardButton("🔙 Volver al Panel", callback_data="panel:back"),
@@ -430,9 +463,7 @@ def _help_text() -> str:
     )
 
 def _cancel_keyboard(msg_id: int) -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup([[
-        InlineKeyboardButton("🛑 Cancelar", callback_data=f"cancel:{msg_id}")
-    ]])
+    return InlineKeyboardMarkup([[InlineKeyboardButton("🛑 Cancelar", callback_data=f"cancel:{msg_id}")]])
 
 def _login_keyboard(result: dict) -> InlineKeyboardMarkup | None:
     nft = result.get("nftoken")
@@ -485,7 +516,6 @@ def _country_display(country: str) -> str:
     return f"{country} {flag}".strip() if flag else country
 
 def make_progress_bar(done: int, total: int, width: int = 14) -> str:
-    """Barra de progreso con bloques limpios y compactos."""
     if total == 0:
         return f"[{'▱' * width}] 0%"
     filled = int(width * done / total)
@@ -909,7 +939,6 @@ async def send_hits_zip(update: Update, hits: list[tuple[dict, str, str]]) -> No
     normal  = [(r, s, w) for r, s, w in deduped if "premium" not in (r.get("plan_name") or "").lower()]
 
     def _safe_encode(text: str) -> bytes:
-        """Sanitiza surrogates huérfanos y caracteres corruptos para evitar que zipfile falle."""
         return str(text).encode("utf-8", errors="replace")
 
     def _account_file(i: int, total: int, result: dict, source: str) -> str:
@@ -1104,12 +1133,10 @@ async def send_hits_zip(update: Update, hits: list[tuple[dict, str, str]]) -> No
 # ---------------------------------------------------------------------------
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if update.effective_user:
-        uid = update.effective_user.id
+    uid = update.effective_user.id if update.effective_user else 0
+    if uid:
         stats_tracker.record_user(uid)
         _record_user_id(uid)
-    else:
-        uid = 0
     text = _main_panel_text(uid)
     markup = _main_panel_markup(uid)
     await _send_banner_panel(update, text, markup)
@@ -1312,11 +1339,66 @@ async def users_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 
 # ---------------------------------------------------------------------------
+# Comandos de Emojis Animados
+# ---------------------------------------------------------------------------
+
+async def emojis_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Muestra el estado de los emojis animados configurados."""
+    lines = [
+        "✨ <b>Configuración de Emojis Animados</b>",
+        "━━━━━━━━━━━━━━━━━━",
+    ]
+    for key, eid in ANIMATED_EMOJIS.items():
+        status = f"<code>{eid}</code>" if eid else "<i>Estándar (sin ID)</i>"
+        lines.append(f"• <b>{key.capitalize()}:</b> {status}")
+    lines += [
+        "━━━━━━━━━━━━━━━━━━",
+        "💡 <b>Para configurar o cambiar un emoji:</b>",
+        "Usa el comando: <code>/setemoji &lt;nombre&gt; &lt;ID&gt;</code>",
+        "Ejemplo: <code>/setemoji bill 5368324170671202286</code>",
+        "",
+        "<i>(Puedes extraer los IDs reenviando cualquier mensaje animado a @GetEmojiIdBot)</i>",
+    ]
+    await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.HTML)
+
+async def setemoji_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Permite al admin configurar el ID numérico de un emoji animado."""
+    uid = update.effective_user.id if update.effective_user else 0
+    if not is_admin(uid):
+        await update.message.reply_text("⛔ <b>Solo administradores.</b>", parse_mode=ParseMode.HTML)
+        return
+
+    if len(context.args) < 2:
+        await update.message.reply_text(
+            "⚠️ <b>Uso correcto:</b>\n"
+            "<code>/setemoji &lt;nombre&gt; &lt;ID&gt;</code>\n\n"
+            "Nombres disponibles: <code>bill</code>, <code>fire</code>, <code>check</code>\n"
+            "Ejemplo: <code>/setemoji fire 5465465416548976541</code>",
+            parse_mode=ParseMode.HTML,
+        )
+        return
+
+    name = context.args[0].lower().strip()
+    emoji_id = context.args[1].strip()
+
+    ANIMATED_EMOJIS[name] = emoji_id
+    try:
+        _EMOJI_FILE.write_text(json.dumps(ANIMATED_EMOJIS, indent=2), encoding="utf-8")
+    except Exception:
+        pass
+
+    await update.message.reply_text(
+        f"✅ <b>Emoji '{name}' actualizado con éxito:</b>\n"
+        f"ID asignado: <code>{emoji_id}</code>",
+        parse_mode=ParseMode.HTML,
+    )
+
+
+# ---------------------------------------------------------------------------
 # Comando de Difusión / Notificación masiva para usuarios
 # ---------------------------------------------------------------------------
 
 async def broadcast_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Envía un mensaje de difusión a todos los usuarios registrados."""
     uid = update.effective_user.id if update.effective_user else 0
     if not is_admin(uid):
         await update.message.reply_text("⛔ <b>Solo administradores.</b>", parse_mode=ParseMode.HTML)
@@ -1538,15 +1620,26 @@ async def setadmin_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     if uid is None:
         return
     _record_user_id(uid)
-    if _ADMIN_ID is not None:
-        if uid == _ADMIN_ID:
-            await update.message.reply_text("✅ Ya eres el administrador.")
-        else:
-            await update.message.reply_text("⛔ El administrador ya ha sido establecido.")
+
+    force = context.args and context.args[0].lower() in ("force", "reset")
+    if _ADMIN_ID is not None and not force and uid != _ADMIN_ID and not (OWNER_ID and uid == OWNER_ID):
+        await update.message.reply_text(
+            f"⛔ <b>El administrador ya está establecido.</b>\n\n"
+            f"Si eres el dueño del bot, usa <code>/setadmin force</code> para asignarte como admin con tu ID (<code>{uid}</code>).",
+            parse_mode=ParseMode.HTML,
+        )
         return
+
     _ADMIN_ID = uid
     _save_admin_id(uid)
-    await update.message.reply_text("✅ <b>Ahora eres el administrador del bot.</b>", parse_mode=ParseMode.HTML)
+    await update.message.reply_text(
+        f"👑 <b>¡Reconocido como Propietario & Admin!</b>\n"
+        "━━━━━━━━━━━━━━━━━━\n"
+        f"• <b>Tu ID:</b> <code>{uid}</code>\n"
+        f"• <b>Estado:</b> Administrador Activo ✅\n\n"
+        "Ahora tienes acceso a /proxy, /users, /broadcast y /setemoji.",
+        parse_mode=ParseMode.HTML,
+    )
 
 def _proxy_panel_text() -> str:
     from proxy_manager import proxy_manager as pm
@@ -1591,7 +1684,7 @@ def _proxy_panel_markup(pm) -> InlineKeyboardMarkup:
         ])
     rows.append([
         InlineKeyboardButton("🔙 Volver al Panel", callback_data="panel:back"),
-        InlineKeyboardButton("🔄 Actualizar", callback_data="proxy:refresh")
+        InlineKeyboardButton("🔄 Actualizar", callback_data="proxy:refresh"),
     ])
     return InlineKeyboardMarkup(rows)
 
@@ -2019,7 +2112,7 @@ async def process_cookie_sets(update: Update, status_msg, cookie_sets: list[tupl
         batch_results = await asyncio.gather(*[
             loop.run_in_executor(
                 _EXECUTOR,
-                functools.partial(check_cookie, generate_token=not is_bulk, bulk_mode=is_bulk),
+                functools.partial(safe_check_cookie, generate_token=not is_bulk, bulk_mode=is_bulk),
                 cs,
             )
             for _src, cs, _raw in batch
@@ -2070,12 +2163,11 @@ async def process_cookie_sets(update: Update, status_msg, cookie_sets: list[tupl
                 except Exception:
                     pass
 
-    # Reintentos de cuentas que arrojaron error
     if is_bulk and error_retry:
         retry_results = await asyncio.gather(*[
             loop.run_in_executor(
                 _EXECUTOR,
-                functools.partial(check_cookie, generate_token=False, bulk_mode=True),
+                functools.partial(safe_check_cookie, generate_token=False, bulk_mode=True),
                 cs,
             )
             for _src, cs, _raw in error_retry
@@ -2203,22 +2295,17 @@ async def process_cookie_sets(update: Update, status_msg, cookie_sets: list[tupl
 
 
 # ---------------------------------------------------------------------------
-# Manejador global de errores (Con silenciador de conflicto activo)
+# Manejador global de errores (Silenciador de conflicto activo)
 # ---------------------------------------------------------------------------
 
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Ignora conflictos temporales de sesión previa y controla excepciones no manejadas."""
     err = context.error
-
     if isinstance(err, Conflict):
         return
-
     if isinstance(err, RetryAfter):
         logger.warning("Telegram rate limit: reintento en %ss", err.retry_after)
         return
-    if isinstance(err, (TimedOut, NetworkError)):
-        return
-    if isinstance(err, Forbidden):
+    if isinstance(err, (TimedOut, NetworkError, Forbidden)):
         return
     if isinstance(err, BadRequest):
         logger.warning("Telegram BadRequest: %s", err)
@@ -2266,6 +2353,8 @@ def main() -> None:
     app.add_handler(CommandHandler("setadmin", setadmin_command))
     app.add_handler(CommandHandler(["broadcast", "notif"], broadcast_command))
     app.add_handler(CommandHandler("users",    users_command))
+    app.add_handler(CommandHandler("emojis",   emojis_command))
+    app.add_handler(CommandHandler("setemoji", setemoji_command))
 
     # ── Callbacks de botones interactivos ─────────────────────────────────────
     app.add_handler(CallbackQueryHandler(panel_callback,         pattern=r"^panel:"))
@@ -2302,6 +2391,7 @@ def main() -> None:
             BotCommand("info",     "Estadísticas en tiempo real"),
             BotCommand("help",     "Formatos de cookies soportados"),
             BotCommand("changepw", "Cambiar contraseña de una cuenta"),
+            BotCommand("emojis",   "Ver configuración de emojis animados"),
             BotCommand("proxy",    "Gestor de proxies [Admin]"),
             BotCommand("users",    "Ver y descargar lista de usuarios [Admin]"),
             BotCommand("broadcast","Enviar notificación a usuarios [Admin]"),
