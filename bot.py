@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""BILL CYPHER CHK NF — Definitve Clean Edition"""
+"""BILL CYPHER CHK NF — Restored Stable Edition"""
 
 import os
 import io
@@ -59,10 +59,11 @@ for _noisy in ("httpx", "telegram", "apscheduler", "httpcore"):
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.WARNING)
 
-BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN") or os.environ.get("BOT_TOKEN") or ""
+PORT = int(os.environ.get("PORT", 5000))
 
 # ===========================================================================
-# 1. PROPIETARIO Y CONTACTO
+# 1. PROPIETARIO Y CONTACTO DIRECTO
 # ===========================================================================
 OWNER_ID: int = 5320997298
 OWNER_USER: str = "didierJC"
@@ -73,9 +74,9 @@ def is_admin(uid: int) -> bool:
 
 
 # ===========================================================================
-# 2. SISTEMA DE CRÉDITOS Y MEMBRESÍAS (10 DIARIOS POR DEFECTO)
+# 2. SISTEMA DE CRÉDITOS (3 DIARIOS PARA USUARIOS / ILIMITADO OWNER)
 # ===========================================================================
-DAILY_FREE_CREDITS: int = 10
+DAILY_FREE_CREDITS: int = 3
 _CREDITS_FILE = Path("credits.json")
 
 def _load_credits() -> dict:
@@ -173,7 +174,7 @@ def out_of_credits_markup() -> InlineKeyboardMarkup:
 
 
 # ===========================================================================
-# 3. BAÚL DE COOKIES (RANDOM SHUFFLE & FILTRO DE DUPLICADOS)
+# 3. BAÚL DE COOKIES (AUTO-UNZIP & FORMATO COMPLETO)
 # ===========================================================================
 _VAULT_FILE = Path("cookie_vault.json")
 _RECENTLY_DELIVERED: list[str] = []
@@ -446,7 +447,7 @@ def _set_delivery(user_id: int, mode: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Panel visual principal (Sin enlaces externos de grupo/canal)
+# Panel visual principal (Sin enlaces externos)
 # ---------------------------------------------------------------------------
 
 def _main_panel_text(uid: int) -> str:
@@ -1686,7 +1687,6 @@ async def panel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
         await query.answer("⚡ Obteniendo cookie...")
 
-        # Selección aleatoria evitando repetición de cuenta reciente
         chosen_idx = None
         for _ in range(10):
             cand_idx = random.randrange(len(vault))
@@ -1717,7 +1717,6 @@ async def panel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         else:
             full_cookie_str = format_cookie_for_clean_copy(cookie_item)
 
-        # Registrar para evitar que se repita en la siguiente entrega
         if full_cookie_str:
             _RECENTLY_DELIVERED.append(full_cookie_str)
         if email and email != "Netflix Account":
@@ -2708,8 +2707,11 @@ def main() -> None:
     if not BOT_TOKEN:
         raise ValueError("TELEGRAM_BOT_TOKEN is not set.")
 
-    start_dashboard(port=5000)
-    print("✅ Status dashboard running on port 5000")
+    try:
+        start_dashboard(port=PORT)
+        print(f"✅ Status dashboard running on port {PORT}")
+    except Exception as e:
+        logger.warning(f"Dashboard couldn't bind to port {PORT}: {e}")
 
     app = (
         Application.builder()
