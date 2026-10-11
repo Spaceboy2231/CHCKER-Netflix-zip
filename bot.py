@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""BILL CYPHER CHK NF — Restored Stable Edition"""
+"""BILL CYPHER CHK NF — Anti-Duplicate Random Vault Edition"""
 
 import os
 import io
@@ -74,7 +74,7 @@ def is_admin(uid: int) -> bool:
 
 
 # ===========================================================================
-# 2. SISTEMA DE CRÉDITOS (3 DIARIOS PARA USUARIOS / ILIMITADO OWNER)
+# 2. SISTEMA DE CRÉDITOS (3 DIARIOS POR DEFECTO)
 # ===========================================================================
 DAILY_FREE_CREDITS: int = 3
 _CREDITS_FILE = Path("credits.json")
@@ -174,10 +174,10 @@ def out_of_credits_markup() -> InlineKeyboardMarkup:
 
 
 # ===========================================================================
-# 3. BAÚL DE COOKIES (AUTO-UNZIP & FORMATO COMPLETO)
+# 3. BAÚL DE COOKIES (RANDOM SIN REPETIR CUENTA)
 # ===========================================================================
 _VAULT_FILE = Path("cookie_vault.json")
-_RECENTLY_DELIVERED: list[str] = []
+_RECENT_EMAILS: list[str] = []
 _NETFLIX_MARKERS = ("NetflixId", "SecureNetflixId", "nfvdid", "netflix.com")
 
 def _has_netflix_markers(text: str) -> bool:
@@ -282,7 +282,7 @@ def _get_banner_source() -> str:
 
 
 # ===========================================================================
-# 5. AISLAMIENTO Y NORMALIZACIÓN DE ESTADOS
+# 5. AISLAMIENTO TOTAL DE SESIONES
 # ===========================================================================
 def _clean_checker_session() -> None:
     for name, obj in list(checker.__dict__.items()):
@@ -1687,42 +1687,56 @@ async def panel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
         await query.answer("⚡ Obteniendo cookie...")
 
-        chosen_idx = None
-        for _ in range(10):
-            cand_idx = random.randrange(len(vault))
-            c_cand = vault[cand_idx]
-            cand_id = format_cookie_for_clean_copy(c_cand)
-            if cand_id in _RECENTLY_DELIVERED and len(vault) > 1:
+        status_gen = await query.message.reply_text("⏳ <i>Extrayendo cuenta al azar sin repetir...</i>", parse_mode=ParseMode.HTML)
+        loop = asyncio.get_running_loop()
+
+        # Selección aleatoria y descarte de cuentas repetidas recientemente
+        chosen_cookie = None
+        res = None
+        attempts = 0
+        max_attempts = min(len(vault), 12)
+
+        while attempts < max_attempts and vault:
+            rand_idx = random.randrange(len(vault))
+            candidate_cookie = vault.pop(rand_idx)
+            candidate_res = await loop.run_in_executor(
+                _EXECUTOR, functools.partial(safe_check_cookie, generate_token=True), candidate_cookie
+            )
+            cand_email = candidate_res.get("email") or ""
+            
+            if cand_email and cand_email in _RECENT_EMAILS and len(vault) > 1:
+                # Regresar al final para probar otra cuenta
+                vault.append(candidate_cookie)
+                attempts += 1
                 continue
-            chosen_idx = cand_idx
+
+            chosen_cookie = candidate_cookie
+            res = candidate_res
             break
 
-        if chosen_idx is None:
-            chosen_idx = random.randrange(len(vault))
+        if not chosen_cookie:
+            rand_idx = random.randrange(len(vault))
+            chosen_cookie = vault.pop(rand_idx)
+            res = await loop.run_in_executor(
+                _EXECUTOR, functools.partial(safe_check_cookie, generate_token=True), chosen_cookie
+            )
 
-        cookie_item = vault.pop(chosen_idx)
         _save_vault(vault)
-
-        status_gen = await query.message.reply_text("⏳ <i>Generando acceso directo desde el baúl...</i>", parse_mode=ParseMode.HTML)
-        loop = asyncio.get_running_loop()
-        res = await loop.run_in_executor(_EXECUTOR, functools.partial(safe_check_cookie, generate_token=True), cookie_item)
 
         plan = res.get("plan_name") or "Netflix"
         country = res.get("country") or "Desconocido"
         email = res.get("email") or "Netflix Account"
 
+        if email and email != "Netflix Account":
+            _RECENT_EMAILS.append(email)
+            if len(_RECENT_EMAILS) > 30:
+                _RECENT_EMAILS.pop(0)
+
         nf_id = res.get("netflix_id")
         if nf_id:
             full_cookie_str = f"NetflixId={nf_id}"
         else:
-            full_cookie_str = format_cookie_for_clean_copy(cookie_item)
-
-        if full_cookie_str:
-            _RECENTLY_DELIVERED.append(full_cookie_str)
-        if email and email != "Netflix Account":
-            _RECENTLY_DELIVERED.append(email)
-        if len(_RECENTLY_DELIVERED) > 40:
-            _RECENTLY_DELIVERED.pop(0)
+            full_cookie_str = format_cookie_for_clean_copy(chosen_cookie)
 
         txt = (
             "🎉 <b>¡COOKIE DE NETFLIX GENERADA!</b>\n"
