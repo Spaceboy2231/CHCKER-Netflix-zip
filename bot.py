@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""BILL CYPHER CHK NF — Credits & Vault System Edition"""
+"""BILL CYPHER CHK NF — Full Cookie & Random Vault Edition"""
 
 import os
 import io
@@ -73,8 +73,9 @@ def is_admin(uid: int) -> bool:
 
 
 # ===========================================================================
-# 2. SISTEMA DE CRÉDITOS Y MEMBRESÍAS
+# 2. SISTEMA DE CRÉDITOS Y MEMBRESÍAS (10 DIARIOS POR DEFECTO)
 # ===========================================================================
+DAILY_FREE_CREDITS: int = 10
 _CREDITS_FILE = Path("credits.json")
 
 def _load_credits() -> dict:
@@ -97,7 +98,7 @@ def get_user_credits_info(uid: int) -> dict:
     user_data = data.get(str(uid), {})
     today_str = date.today().isoformat()
 
-    # Usuario Premium
+    # Usuario Premium configurado por el propietario
     if user_data.get("is_premium"):
         creds = user_data.get("credits", "unlimited")
         if creds == "unlimited":
@@ -108,7 +109,7 @@ def get_user_credits_info(uid: int) -> dict:
             c_val = 0
         return {"type": "premium", "credits": f"{c_val} restantes ⭐", "can_use": c_val > 0, "balance": c_val}
 
-    # Usuario Normal (3 créditos diarios)
+    # Usuario Normal (10 créditos diarios)
     last_date = user_data.get("last_date", "")
     used_today = user_data.get("used_today", 0)
     if last_date != today_str:
@@ -118,11 +119,11 @@ def get_user_credits_info(uid: int) -> dict:
         data[str(uid)] = user_data
         _save_credits(data)
 
-    remaining = max(0, 3 - used_today)
-    return {"type": "normal", "credits": f"{remaining}/3 hoy", "can_use": remaining > 0, "balance": remaining}
+    remaining = max(0, DAILY_FREE_CREDITS - used_today)
+    return {"type": "normal", "credits": f"{remaining}/{DAILY_FREE_CREDITS} hoy", "can_use": remaining > 0, "balance": remaining}
 
 def consume_credit(uid: int) -> bool:
-    """Descuenta 1 crédito al usuario. Devuelve True si la operación fue permitida."""
+    """Descuenta 1 crédito por cada acción de checker o generación."""
     if is_admin(uid):
         return True
 
@@ -151,7 +152,7 @@ def consume_credit(uid: int) -> bool:
             used_today = 0
             user_data["last_date"] = today_str
 
-        if used_today >= 3:
+        if used_today >= DAILY_FREE_CREDITS:
             return False
 
         user_data["used_today"] = used_today + 1
@@ -163,8 +164,8 @@ def consume_credit(uid: int) -> bool:
 OUT_OF_CREDITS_TEXT = (
     "⚠️ <b>¡Créditos diarios agotados!</b>\n"
     "━━━━━━━━━━━━━━━━━━\n"
-    "Has alcanzado el límite de <b>3 activaciones diarias gratuitas</b>.\n\n"
-    "💎 <i>Para obtener créditos ilimitados o activar tu plan Premium, contacta directamente al propietario:</i>\n"
+    f"Has alcanzado el límite de <b>{DAILY_FREE_CREDITS} activaciones diarias gratuitas</b>.\n\n"
+    "💎 <i>Para adquirir más créditos o acceso ilimitado, contacta al propietario:</i>\n"
     "━━━━━━━━━━━━━━━━━━"
 )
 
@@ -176,7 +177,7 @@ def out_of_credits_markup() -> InlineKeyboardMarkup:
 
 
 # ===========================================================================
-# 3. SISTEMA DE BAÚL DE COOKIES (AUTO-UNZIP & SANITIZADO)
+# 3. SISTEMA DE BAÚL DE COOKIES (AUTO-UNZIP & FORMATO COMPLETO)
 # ===========================================================================
 _VAULT_FILE = Path("cookie_vault.json")
 _NETFLIX_MARKERS = ("NetflixId", "SecureNetflixId", "nfvdid", "netflix.com")
@@ -185,7 +186,7 @@ def _has_netflix_markers(text: str) -> bool:
     return any(m.lower() in text.lower() for m in _NETFLIX_MARKERS)
 
 def _load_vault() -> list[str]:
-    """Carga el baúl y filtra automáticamente cualquier residuo binario."""
+    """Carga el baúl y descarta residuos binarios de descompresiones defectuosas."""
     if _VAULT_FILE.exists():
         try:
             data = json.loads(_VAULT_FILE.read_text(encoding="utf-8"))
@@ -199,6 +200,16 @@ def _load_vault() -> list[str]:
 
 def _save_vault(cookies: list[str]) -> None:
     _VAULT_FILE.write_text(json.dumps(cookies, ensure_ascii=False, indent=2), encoding="utf-8")
+
+def format_cookie_for_clean_copy(cookie_str: str) -> str:
+    """Extrae la cookie completa en formato 'NetflixId=...' para copia directa."""
+    c_str = cookie_str.strip()
+    m = re.search(r'NetflixId\s+([^\s;\n]+)', c_str, re.IGNORECASE)
+    if not m:
+        m = re.search(r'NetflixId=([^\s;\n]+)', c_str, re.IGNORECASE)
+    if m:
+        return f"NetflixId={m.group(1).strip()}"
+    return c_str
 
 def extract_cookies_from_text_block(text: str) -> list[str]:
     text = text.strip()
@@ -252,7 +263,7 @@ def extract_all_cookies_from_bytes(raw_bytes: bytes, filename: str = "") -> list
                     except Exception:
                         continue
         except Exception as e:
-            logger.warning("Error leyendo ZIP para baúl: %s", e)
+            logger.warning("Error leyendo ZIP: %s", e)
     else:
         text = raw_bytes.decode("utf-8", errors="replace")
         extracted_cookies.extend(extract_cookies_from_text_block(text))
@@ -1660,7 +1671,7 @@ async def panel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         )
 
     elif data == "panel:gencookie":
-        # Verificación y descuento de créditos
+        # Verificación y descuento de 1 crédito
         if not consume_credit(uid):
             await query.answer("❌ Sin créditos disponibles.", show_alert=True)
             await query.message.reply_text(
@@ -1683,7 +1694,9 @@ async def panel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             return
 
         await query.answer("⚡ Obteniendo cookie...")
-        cookie_item = vault.pop(0)
+        # Selección al azar (random) de entre todas las cookies en stock
+        rand_idx = random.randrange(len(vault))
+        cookie_item = vault.pop(rand_idx)
         _save_vault(vault)
 
         status_gen = await query.message.reply_text("⏳ <i>Generando acceso directo desde el baúl...</i>", parse_mode=ParseMode.HTML)
@@ -1694,7 +1707,12 @@ async def panel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         country = res.get("country") or "Desconocido"
         email = res.get("email") or "Netflix Account"
 
-        cookie_snippet = cookie_item[:120] + "..." if len(cookie_item) > 120 else cookie_item
+        # Extraer token completo sin recortar
+        nf_id = res.get("netflix_id")
+        if nf_id:
+            full_cookie_str = f"NetflixId={nf_id}"
+        else:
+            full_cookie_str = format_cookie_for_clean_copy(cookie_item)
 
         txt = (
             "🎉 <b>¡COOKIE DE NETFLIX GENERADA!</b>\n"
@@ -1703,7 +1721,7 @@ async def panel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             f"• <b>País:</b> {_country_display(country)}\n"
             f"• <b>Email:</b> <code>{email}</code>\n"
             "━━━━━━━━━━━━━━━━━━\n"
-            f"🍪 <b>Cookie:</b>\n<code>{cookie_snippet}</code>\n\n"
+            f"🍪 <b>Cookie:</b>\n<code>{full_cookie_str}</code>\n\n"
             "<i>Presiona los botones para entrar directo sin contraseña o generar otra:</i>"
         )
         kb = _login_keyboard(res, show_regen=True)
@@ -1888,7 +1906,7 @@ async def setcredits_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
             "<b>Ejemplos:</b>\n"
             "• <code>/setcredits 123456789 20</code> (Otorga 20 créditos Premium)\n"
             "• <code>/setcredits 123456789 unlimited</code> (Créditos ilimitados)\n"
-            "• <code>/setcredits 123456789 reset</code> (Regresa a usuario normal con 3 diarios)",
+            "• <code>/setcredits 123456789 reset</code> (Regresa a usuario normal con 10 diarios)",
             parse_mode=ParseMode.HTML
         )
         return
@@ -1907,7 +1925,7 @@ async def setcredits_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
         user_data["is_premium"] = False
         user_data["credits"] = 0
         user_data["used_today"] = 0
-        resp = f"👤 <b>Usuario <code>{target_id}</code> restablecido:</b> Cuenta Normal (3 créditos diarios)."
+        resp = f"👤 <b>Usuario <code>{target_id}</code> restablecido:</b> Cuenta Normal (10 créditos diarios)."
     elif amount_str.isdigit():
         val = int(amount_str)
         user_data["is_premium"] = True
@@ -2354,11 +2372,12 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await setbanner_command(update, context)
         return
 
+    # Si el propietario envía un archivo con /addvault para el baúl
     if caption.startswith("/addvault") and is_admin(uid):
         await addvault_command(update, context)
         return
 
-    # Verificación de créditos antes de permitir el escaneo
+    # Verificación de créditos antes de permitir el escaneo por archivo
     if not consume_credit(uid):
         await update.message.reply_text(
             OUT_OF_CREDITS_TEXT,
