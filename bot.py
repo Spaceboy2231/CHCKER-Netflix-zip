@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""BILL CYPHER CHK NF — Vault & Live Counter Edition"""
+"""BILL CYPHER CHK NF — Auto-Unzip Vault & Live Counter Edition"""
 
 import os
 import io
@@ -71,20 +71,92 @@ def is_admin(uid: int) -> bool:
 
 
 # ===========================================================================
-# 2. SISTEMA DE BAÚL DE COOKIES (STOCK / GEN COOKIE PÚBLICO)
+# 2. SISTEMA DE BAÚL DE COOKIES (AUTO-UNZIP & SANITIZADO)
 # ===========================================================================
 _VAULT_FILE = Path("cookie_vault.json")
+_NETFLIX_MARKERS = ("NetflixId", "SecureNetflixId", "nfvdid", "netflix.com")
+
+def _has_netflix_markers(text: str) -> bool:
+    return any(m.lower() in text.lower() for m in _NETFLIX_MARKERS)
 
 def _load_vault() -> list[str]:
+    """Carga el baúl y filtra automáticamente cualquier residuo binario."""
     if _VAULT_FILE.exists():
         try:
-            return json.loads(_VAULT_FILE.read_text(encoding="utf-8"))
+            data = json.loads(_VAULT_FILE.read_text(encoding="utf-8"))
+            return [
+                c for c in data
+                if isinstance(c, str) and _has_netflix_markers(c) and not c.startswith("PK")
+            ]
         except Exception:
             return []
     return []
 
 def _save_vault(cookies: list[str]) -> None:
     _VAULT_FILE.write_text(json.dumps(cookies, ensure_ascii=False, indent=2), encoding="utf-8")
+
+def extract_cookies_from_text_block(text: str) -> list[str]:
+    """Extrae las líneas Netscape o tokens limpios de un archivo o tarjeta."""
+    text = text.strip()
+    if not text or not _has_netflix_markers(text):
+        return []
+
+    # Si es una tarjeta generada por el bot con bloque de cookies
+    netscape_lines = [
+        line.strip() for line in text.splitlines()
+        if ".netflix.com" in line.lower() and any(m.lower() in line.lower() for m in _NETFLIX_MARKERS)
+    ]
+    if netscape_lines and any("netflixid" in l.lower() for l in netscape_lines):
+        return ["\n".join(netscape_lines)]
+
+    # Si es JSON o texto combo plano
+    blocks = split_cookies_from_text(text)
+    clean_blocks = []
+    for b in blocks:
+        b_clean = b.strip()
+        lines = [
+            l.strip() for l in b_clean.splitlines()
+            if ".netflix.com" in l.lower() and any(m.lower() in l.lower() for m in _NETFLIX_MARKERS)
+        ]
+        if lines and any("netflixid" in l.lower() for l in lines):
+            clean_blocks.append("\n".join(lines))
+        elif _has_netflix_markers(b_clean):
+            clean_blocks.append(b_clean)
+
+    return clean_blocks or ([text] if _has_netflix_markers(text) else [])
+
+def extract_all_cookies_from_bytes(raw_bytes: bytes, filename: str = "") -> list[str]:
+    """Descomprime y extrae todas las cookies de un ZIP o lee un archivo de texto."""
+    is_zip = filename.lower().endswith(".zip") or raw_bytes.startswith(b"PK\x03\x04")
+    extracted_cookies = []
+
+    if is_zip:
+        try:
+            with zipfile.ZipFile(io.BytesIO(raw_bytes), "r") as zf:
+                for info in zf.infolist():
+                    if info.is_dir():
+                        continue
+                    fname = info.filename
+                    base = Path(fname).name
+                    if base.startswith(("_", ".")) or base.upper() == "_SUMMARY.TXT":
+                        continue
+                    if Path(fname).suffix.lower() not in COOKIE_EXTENSIONS:
+                        continue
+                    try:
+                        file_data = zf.read(fname)
+                        if _is_binary_content(file_data):
+                            continue
+                        text = file_data.decode("utf-8", errors="replace")
+                        extracted_cookies.extend(extract_cookies_from_text_block(text))
+                    except Exception:
+                        continue
+        except Exception as e:
+            logger.warning("Error leyendo ZIP para baúl: %s", e)
+    else:
+        text = raw_bytes.decode("utf-8", errors="replace")
+        extracted_cookies.extend(extract_cookies_from_text_block(text))
+
+    return extracted_cookies
 
 
 # ===========================================================================
@@ -212,11 +284,6 @@ _BINARY_MAGIC: list[bytes] = [
     b'PK\x03\x04', b'\x1f\x8b', b'MZ', b'\x7fELF',
     b'BM', b'ID3', b'\x00\x00\x00',
 ]
-
-_NETFLIX_MARKERS = ("NetflixId", "SecureNetflixId", "nfvdid", "netflix.com")
-
-def _has_netflix_markers(text: str) -> bool:
-    return any(m in text for m in _NETFLIX_MARKERS)
 
 def _wrong_service_name(text: str) -> str | None:
     tl = text.lower()
@@ -820,7 +887,7 @@ def format_result(result: dict, index: int = 1, total: int = 1, source: str = ""
 
 
 # ---------------------------------------------------------------------------
-# Separador de cookies y lector ZIP
+# Separador de cookies y lector ZIP para Checker masivo
 # ---------------------------------------------------------------------------
 
 _HIT_BLOCK_COOKIE_RE = re.compile(r'[•\-*]?\s*[Cc]ookies?\s*[:\|]+\s*\S{20,}')
@@ -1478,7 +1545,7 @@ async def panel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             "━━━━━━━━━━━━━━━━━━\n"
             f"• <b>Stock disponible:</b> <code>{len(vault)}</code> cookies\n\n"
             "💡 <b>Para agregar cookies:</b>\n"
-            "Envía un archivo <code>.txt</code> con pie de foto <code>/addvault</code> o escribe <code>/addvault &lt;cookies&gt;</code>.\n\n"
+            "Envía un archivo <code>.zip</code> o <code>.txt</code> con pie de foto <code>/addvault</code>.\n\n"
             "💡 <b>Para vaciar stock:</b>\n"
             "Escribe <code>/clearvault</code>",
             parse_mode=ParseMode.HTML,
@@ -1690,31 +1757,71 @@ async def setbanner_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     )
 
 async def addvault_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """[Admin] Carga cookies al baúl desde texto o respondiendo a un archivo/mensaje."""
     uid = update.effective_user.id if update.effective_user else 0
     if not is_admin(uid):
         await update.message.reply_text("⛔ <b>Solo el propietario puede agregar cookies al baúl.</b>", parse_mode=ParseMode.HTML)
         return
 
     msg = update.message
+    target = msg.reply_to_message if msg.reply_to_message else msg
+
+    # Si se respondió a un documento o el mensaje actual tiene documento
+    if target.document:
+        doc = target.document
+        fname = doc.file_name or "archivo"
+        try:
+            tg_file = await doc.get_file()
+            raw_bytes = await tg_file.download_as_bytearray()
+            extracted = extract_all_cookies_from_bytes(bytes(raw_bytes), filename=fname)
+
+            if not extracted:
+                await msg.reply_text("⚠️ No se encontraron cookies de Netflix válidas en el archivo.", parse_mode=ParseMode.HTML)
+                return
+
+            vault = _load_vault()
+            existing_set = set(vault)
+            added = 0
+            for c in extracted:
+                c_clean = c.strip()
+                if c_clean and c_clean not in existing_set:
+                    vault.append(c_clean)
+                    existing_set.add(c_clean)
+                    added += 1
+
+            _save_vault(vault)
+            await msg.reply_text(
+                f"✅ <b>¡Cookies añadidas al baúl desde el archivo!</b>\n"
+                "━━━━━━━━━━━━━━━━━━\n"
+                f"• 📥 <b>Añadidas:</b> <code>{added}</code>\n"
+                f"• 📦 <b>Total disponible en stock:</b> <code>{len(vault)}</code>",
+                parse_mode=ParseMode.HTML
+            )
+            return
+        except Exception as e:
+            await msg.reply_text(f"⚠️ Error procesando archivo: {e}")
+            return
+
+    # Si se envió texto plano o argumento
     text = ""
     if context.args:
         text = " ".join(context.args)
-    elif msg.reply_to_message and msg.reply_to_message.text:
-        text = msg.reply_to_message.text
-    elif msg.reply_to_message and msg.reply_to_message.caption:
-        text = msg.reply_to_message.caption
+    elif target.text:
+        text = target.text
+    elif target.caption:
+        text = target.caption
 
     if not text:
         await msg.reply_text(
             "📦 <b>Cómo agregar cookies al baúl:</b>\n\n"
-            "1. Envía un archivo <code>.txt</code> con cookies y escribe de pie de foto <code>/addvault</code>\n"
+            "1. Envía un archivo <code>.zip</code> o <code>.txt</code> con pie de foto <code>/addvault</code>\n"
             "2. O escribe: <code>/addvault &lt;pega tus cookies aquí&gt;</code>\n"
-            "3. O responde a un mensaje con <code>/addvault</code>.",
+            "3. O responde a un archivo/mensaje con <code>/addvault</code>.",
             parse_mode=ParseMode.HTML
         )
         return
 
-    extracted = split_cookies_from_text(text)
+    extracted = extract_cookies_from_text_block(text)
     if not extracted:
         await msg.reply_text("⚠️ No se detectaron cookies válidas en el texto.", parse_mode=ParseMode.HTML)
         return
@@ -1739,6 +1846,7 @@ async def addvault_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     )
 
 async def clearvault_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """[Admin] Vacía el stock del baúl."""
     uid = update.effective_user.id if update.effective_user else 0
     if not is_admin(uid):
         await update.message.reply_text("⛔ <b>Solo el propietario.</b>", parse_mode=ParseMode.HTML)
@@ -2084,36 +2192,9 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await setbanner_command(update, context)
         return
 
+    # Si el propietario envía un archivo con /addvault para el baúl
     if caption.startswith("/addvault") and is_admin(uid):
-        try:
-            tg_file = await doc.get_file()
-            raw_data = await tg_file.download_as_bytearray()
-            text = raw_data.decode("utf-8", errors="replace")
-            extracted = split_cookies_from_text(text)
-            if not extracted:
-                await update.message.reply_text("⚠️ No se detectaron cookies válidas en el archivo.", parse_mode=ParseMode.HTML)
-                return
-
-            vault = _load_vault()
-            existing_set = set(vault)
-            added = 0
-            for c in extracted:
-                c_clean = c.strip()
-                if c_clean and c_clean not in existing_set:
-                    vault.append(c_clean)
-                    existing_set.add(c_clean)
-                    added += 1
-
-            _save_vault(vault)
-            await update.message.reply_text(
-                f"✅ <b>¡Cookies añadidas al baúl desde el archivo!</b>\n"
-                "━━━━━━━━━━━━━━━━━━\n"
-                f"• 📥 <b>Añadidas:</b> <code>{added}</code>\n"
-                f"• 📦 <b>Total disponible en stock:</b> <code>{len(vault)}</code>",
-                parse_mode=ParseMode.HTML
-            )
-        except Exception as e:
-            await update.message.reply_text(f"⚠️ Error procesando archivo para baúl: {e}")
+        await addvault_command(update, context)
         return
 
     if uid in _ACTIVE_USERS:
