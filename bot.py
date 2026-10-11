@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """
-BILL CYPHER CHK NF — Edition 5G Turbo
-• Cero cruce de perfiles (100% Exact Match)
-• Enlaces oficiales de TV (/tv8) y Móvil sin 404
-• Persistencia automática en la nube de Telegram (Anti-Wipe)
-• Tipografía Sans-Bold Italic
+BILL CYPHER CHK NF — Edition 5G Turbo Definitive
+• Entrega instantánea sin fallos (100% Exact Match)
+• Enlaces oficiales de TV (/tv8) sin error NSES-404
+• Modo Mantenimiento con alerta masiva automática
+• Auto-restauración en arranque desde la nube de Telegram (Anti-Wipe)
+• Tipografía estilizada Sans-Serif Bold Italic
 """
 
 import os
@@ -101,7 +102,35 @@ def to_sans_bold_italic(text: str) -> str:
 
 
 # ===========================================================================
-# 3. SISTEMA DE CRÉDITOS (15 DIARIOS POR DEFECTO / REEMBOLSO AUTOMÁTICO)
+# 3. MODO MANTENIMIENTO
+# ===========================================================================
+_MAINT_FILE = Path("maintenance.json")
+
+def is_maintenance() -> bool:
+    if _MAINT_FILE.exists():
+        try:
+            d = json.loads(_MAINT_FILE.read_text(encoding="utf-8"))
+            return bool(d.get("enabled", False))
+        except Exception:
+            return False
+    return False
+
+def set_maintenance(enabled: bool) -> None:
+    try:
+        _MAINT_FILE.write_text(json.dumps({"enabled": enabled}), encoding="utf-8")
+    except Exception as e:
+        logger.warning(f"Error guardando maintenance: {e}")
+
+MAINTENANCE_TEXT = (
+    "🛠️ <b>" + to_sans_bold_italic("BOT EN MANTENIMIENTO") + "</b>\n"
+    "━━━━━━━━━━━━━━━━━━━━━━\n"
+    "El bot se encuentra actualmente en mantenimiento para actualizar stock y aplicar mejoras.\n\n"
+    "⏳ <i>Por favor, espera a que el propietario finalice las actualizaciones para volver a usarlo.</i>"
+)
+
+
+# ===========================================================================
+# 4. SISTEMA DE CRÉDITOS (15 DIARIOS / REEMBOLSO AUTOMÁTICO)
 # ===========================================================================
 DAILY_FREE_CREDITS: int = 15
 _CREDITS_FILE = Path("credits.json")
@@ -226,7 +255,7 @@ def out_of_credits_markup() -> InlineKeyboardMarkup:
 
 
 # ===========================================================================
-# 4. BAÚL ESTRUCTURADO (DEDUPLICACIÓN TOTAL & DATOS EXACTOS)
+# 5. BAÚL ROBUSTO (COMPATIBLE CON DICT Y STRINGS SIN CRASHEOS)
 # ===========================================================================
 _VAULT_FILE = Path("cookie_vault.json")
 _NETFLIX_MARKERS = ("NetflixId", "SecureNetflixId", "nfvdid", "netflix.com")
@@ -235,12 +264,12 @@ def _has_netflix_markers(text: str) -> bool:
     return any(m.lower() in text.lower() for m in _NETFLIX_MARKERS)
 
 def extract_core_netflix_id(cookie_str: str) -> str:
-    m = re.search(r'(ct%3D[^\s;\n"\'\r]+)', cookie_str, re.IGNORECASE)
+    m = re.search(r'(ct%3D[^\s;\n"\'\r]+)', str(cookie_str), re.IGNORECASE)
     if m:
         return m.group(1).strip()
-    m2 = re.search(r'NetflixId\s+([^\s;\n]+)', cookie_str, re.IGNORECASE)
+    m2 = re.search(r'NetflixId\s+([^\s;\n]+)', str(cookie_str), re.IGNORECASE)
     if not m2:
-        m2 = re.search(r'NetflixId=([^\s;\n]+)', cookie_str, re.IGNORECASE)
+        m2 = re.search(r'NetflixId=([^\s;\n]+)', str(cookie_str), re.IGNORECASE)
     if m2:
         val = m2.group(1).strip()
         if "ct%3D" in val:
@@ -248,29 +277,16 @@ def extract_core_netflix_id(cookie_str: str) -> str:
         return val
     return ""
 
-def _load_vault() -> list[dict]:
+def _load_vault() -> list:
     if _VAULT_FILE.exists():
         try:
             data = json.loads(_VAULT_FILE.read_text(encoding="utf-8"))
-            parsed = []
-            for item in data:
-                if isinstance(item, dict) and item.get("cookie"):
-                    parsed.append(item)
-                elif isinstance(item, str) and _has_netflix_markers(item):
-                    tok = extract_core_netflix_id(item)
-                    parsed.append({
-                        "email": "Cuenta Netflix",
-                        "plan": "Premium",
-                        "country": "Desconocido",
-                        "cookie": f"NetflixId={tok}" if tok else item.strip(),
-                        "token": tok,
-                    })
-            return parsed
+            return data if isinstance(data, list) else []
         except Exception:
             return []
     return []
 
-def _save_vault(items: list[dict]) -> None:
+def _save_vault(items: list) -> None:
     try:
         _VAULT_FILE.write_text(json.dumps(items, ensure_ascii=False, indent=2), encoding="utf-8")
     except Exception as e:
@@ -341,12 +357,12 @@ def extract_all_accounts_from_bytes(raw_bytes: bytes, filename: str = "") -> lis
 
 
 # ===========================================================================
-# 5. GENERACIÓN ROBUSTA DE ENLACES (PANTALLA DE ACTIVACIÓN TV /TV8)
+# 6. ENLACES DIRECTOS OFICIALES (PANTALLA DE ACTIVACIÓN TV /tv8)
 # ===========================================================================
 def build_official_login_keyboard(raw_token: str) -> InlineKeyboardMarkup:
     """
     Construye los botones exactos:
-    • TV: Abre https://www.netflix.com/tv8?nftoken=... para activar el código de 8 dígitos.
+    • TV: Abre https://www.netflix.com/tv8?nftoken=... para activar con código de 8 dígitos.
     • Móvil: Abre https://www.netflix.com/YourAccount?nftoken=... en Safari sin forzar la app.
     • PC: Abre https://www.netflix.com/browse?nftoken=... para acceso completo.
     """
@@ -370,7 +386,7 @@ def build_official_login_keyboard(raw_token: str) -> InlineKeyboardMarkup:
 
 
 # ===========================================================================
-# 6. BANNER MULTIMEDIA
+# 7. BANNER MULTIMEDIA
 # ===========================================================================
 _BANNER_FILE = Path("banner_id.txt")
 BANNER_MEDIA = "banner.mp4"
@@ -384,7 +400,7 @@ def _get_banner_source() -> str:
 
 
 # ===========================================================================
-# 7. AISLAMIENTO DE SESIÓN PARA CHECKER
+# 8. CHECKER Y FORMATO DE ESTADOS
 # ===========================================================================
 def safe_check_cookie_clean(cookie_str: str, **kwargs) -> dict:
     try:
@@ -560,6 +576,8 @@ def _main_panel_text(uid: int) -> str:
     else:
         role_lbl = "👤 Usuario"
 
+    state_lbl = "🔴 En Mantenimiento 🛠️" if is_maintenance() else "Online ⚡ 5G"
+
     return (
         "👁️‍🗨️ <b>" + to_sans_bold_italic("BILL CYPHER CHK NF") + "</b>\n"
         "━━━━━━━━━━━━━━━━━━━━━━\n"
@@ -567,7 +585,7 @@ def _main_panel_text(uid: int) -> str:
         f"● 🆔 <b>" + to_sans_bold_italic("ID:") + f"</b> <code>{uid}</code>\n"
         f"● 💎 <b>" + to_sans_bold_italic("Creditos:") + f"</b> <code>{cred_info['credits']}</code>\n"
         f"● ⚙️ <b>" + to_sans_bold_italic("Ajustes:") + f"</b> {mode_lbl} · {dlv_lbl}\n"
-        f"● 🟢 <b>" + to_sans_bold_italic("Estado:") + f"</b> Online ⚡ 5G\n"
+        f"● 🟢 <b>" + to_sans_bold_italic("Estado:") + f"</b> {state_lbl}\n"
         "━━━━━━━━━━━━━━━━━━━━━━\n"
         "⚡ <b>" + to_sans_bold_italic("v2.0") + "</b> | <i>Envía tus cookies o genera una cuenta abajo</i> 👇"
     )
@@ -576,6 +594,7 @@ def _main_panel_markup(uid: int) -> InlineKeyboardMarkup:
     admin_buttons = []
     if is_admin(uid):
         vault_count = len(_load_vault())
+        maint_status = "🔴 ON" if is_maintenance() else "🟢 OFF"
         admin_buttons = [
             [
                 InlineKeyboardButton("🛡️ Proxies [Admin]", callback_data="panel:proxy"),
@@ -583,6 +602,10 @@ def _main_panel_markup(uid: int) -> InlineKeyboardMarkup:
             ],
             [
                 InlineKeyboardButton(f"📦 Baúl Stock ({vault_count}) [Admin]", callback_data="panel:vault"),
+                InlineKeyboardButton(f"🛠️ Mantenimiento: {maint_status}", callback_data="panel:toggle_maint"),
+            ],
+            [
+                InlineKeyboardButton("🔄 Sincronizar Baúl (Nube)", callback_data="panel:synccloud"),
             ]
         ]
 
@@ -766,8 +789,39 @@ def _cancel_keyboard(msg_id: int) -> InlineKeyboardMarkup:
 
 
 # ---------------------------------------------------------------------------
-# Formateadores de tarjetas de resultados
+# Formateadores de resultados
 # ---------------------------------------------------------------------------
+
+def _flag(country: str) -> str:
+    country = (country or "").strip()
+    for ch in country:
+        if 0x1F1E6 <= ord(ch) <= 0x1F1FF:
+            return ""
+    code = country.upper()
+    if len(code) == 2 and code.isalpha():
+        return chr(0x1F1E6 + ord(code[0]) - ord("A")) + chr(0x1F1E6 + ord(code[1]) - ord("A"))
+    NAME_MAP = {
+        "india": "IN", "poland": "PL", "portugal": "PT",
+        "united states": "US", "usa": "US", "uk": "GB",
+        "united kingdom": "GB", "germany": "DE", "france": "FR",
+        "italy": "IT", "spain": "ES", "brazil": "BR", "mexico": "MX",
+        "canada": "CA", "australia": "AU", "netherlands": "NL",
+        "turkey": "TR", "russia": "RU", "japan": "JP",
+        "south korea": "KR", "indonesia": "ID", "thailand": "TH",
+        "vietnam": "VN", "pakistan": "PK", "bangladesh": "BD",
+        "argentina": "AR", "colombia": "CO", "chile": "CL",
+        "romania": "RO", "ukraine": "UA", "sweden": "SE",
+        "norway": "NO", "denmark": "DK", "finland": "FI",
+        "czech": "CZ", "hungary": "HU", "slovakia": "SK",
+        "croatia": "HR", "serbia": "RS", "bulgaria": "BG",
+        "greece": "GR", "israel": "IL", "saudi arabia": "SA",
+        "uae": "AE", "egypt": "EG", "nigeria": "NG",
+        "south africa": "ZA", "kenya": "KE",
+    }
+    code2 = NAME_MAP.get(country.lower())
+    if code2:
+        return chr(0x1F1E6 + ord(code2[0]) - ord("A")) + chr(0x1F1E6 + ord(code2[1]) - ord("A"))
+    return ""
 
 def _country_display(country: str) -> str:
     flag = _flag(country)
@@ -1484,7 +1538,7 @@ async def process_cookie_sets(update: Update, status_msg, cookie_sets: list[tupl
                 except Exception:
                     pass
 
-        # Throttle a 3.5 segundos para no ser bloqueado por Telegram
+        # Throttle de edición a 3.5 segundos para no ser bloqueado por Telegram
         if is_bulk:
             now_time = time.monotonic()
             done_so_far = min(batch_start + len(batch), total)
@@ -1608,6 +1662,11 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     if uid:
         stats_tracker.record_user(uid)
         _record_user_id(uid)
+
+    if is_maintenance() and not is_admin(uid):
+        await update.message.reply_text(MAINTENANCE_TEXT, parse_mode=ParseMode.HTML)
+        return
+
     text = _main_panel_text(uid)
     markup = _main_panel_markup(uid)
     await _send_banner_panel(update, text, markup)
@@ -1616,6 +1675,10 @@ async def panel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     query = update.callback_query
     uid = query.from_user.id if query.from_user else 0
     data = query.data
+
+    if is_maintenance() and not is_admin(uid):
+        await query.answer("🛠️ Bot en mantenimiento.", show_alert=True)
+        return
 
     if data == "panel:back":
         await query.answer()
@@ -1694,6 +1757,54 @@ async def panel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             parse_mode=ParseMode.HTML,
         )
 
+    elif data == "panel:toggle_maint":
+        if not is_admin(uid):
+            await query.answer("⛔ Solo el propietario.", show_alert=True)
+            return
+        new_state = not is_maintenance()
+        set_maintenance(new_state)
+        await query.answer(f"Mantenimiento {'ACTIVADO 🔴' if new_state else 'DESACTIVADO 🟢'}", show_alert=True)
+        await _edit_panel_message(query, _main_panel_text(uid), _main_panel_markup(uid))
+
+        # Notificación masiva automática a los usuarios
+        if _USERS_FILE.exists():
+            uids = [u.strip() for u in _USERS_FILE.read_text(encoding="utf-8").splitlines() if u.strip().isdigit()]
+            alert_msg = (
+                "🛠️ <b>" + to_sans_bold_italic("AVISO DE MANTENIMIENTO") + "</b>\n━━━━━━━━━━━━━━━━━━━━━━\nEl bot ha entrado en mantenimiento temporal para actualización de stock y mejoras de velocidad. Volveremos en breve."
+                if new_state else
+                "🟢 <b>" + to_sans_bold_italic("MANTENIMIENTO FINALIZADO") + "</b>\n━━━━━━━━━━━━━━━━━━━━━━\nEl bot ya se encuentra 100% operativo. ¡Ya puedes generar tus cookies y usar el checker 5G!"
+            )
+            for target_uid in uids:
+                if int(target_uid) != OWNER_ID:
+                    try:
+                        await context.bot.send_message(chat_id=int(target_uid), text=alert_msg, parse_mode=ParseMode.HTML)
+                    except Exception:
+                        pass
+
+    elif data == "panel:synccloud":
+        if not is_admin(uid):
+            await query.answer("⛔ Solo el propietario.", show_alert=True)
+            return
+        await query.answer("🔄 Sincronizando desde Telegram Cloud…")
+        try:
+            chat = await context.bot.get_chat(OWNER_ID)
+            if chat.pinned_message and chat.pinned_message.document:
+                f = await chat.pinned_message.document.get_file()
+                b = await f.download_as_bytearray()
+                d = json.loads(b.decode("utf-8", errors="replace"))
+                if "vault" in d:
+                    _save_vault(d["vault"])
+                if "credits" in d:
+                    _save_credits(d["credits"])
+                if "users" in d and isinstance(d["users"], list):
+                    _USERS_FILE.write_text("\n".join(d["users"]) + "\n", encoding="utf-8")
+                await query.message.reply_text(f"✅ <b>Sincronización completa:</b> {len(d.get('vault', []))} cuentas restauradas desde la nube.", parse_mode=ParseMode.HTML)
+                await _edit_panel_message(query, _main_panel_text(uid), _main_panel_markup(uid))
+            else:
+                await query.message.reply_text("⚠️ No se encontró mensaje fijado de respaldo en tu chat.", parse_mode=ParseMode.HTML)
+        except Exception as e:
+            await query.message.reply_text(f"❌ Error al sincronizar: {e}")
+
     elif data == "panel:gencookie":
         if not consume_credit(uid):
             await query.answer("❌ Sin créditos disponibles.", show_alert=True)
@@ -1717,9 +1828,9 @@ async def panel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             )
             return
 
-        await query.answer("⚡ Obteniendo cuenta...")
+        await query.answer("⚡ Extrayendo cuenta...")
 
-        # Extracción y entrega instantánea (< 0.05s) sin esperas de red
+        # Extracción instantánea y segura sin excepciones
         chosen_acc = None
         async with _ASYNC_VAULT_LOCK:
             vault = _load_vault()
@@ -1729,35 +1840,69 @@ async def panel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 return
 
             rand_idx = random.randrange(len(vault))
-            chosen_acc = vault.pop(rand_idx)
+            raw_item = vault.pop(rand_idx)
+
+            # Normaliza si es diccionario o string para que NUNCA falle
+            if isinstance(raw_item, dict):
+                acc_token = raw_item.get("token") or extract_core_netflix_id(raw_item.get("cookie", ""))
+                acc_email = raw_item.get("email") or "Netflix Account"
+                acc_plan = raw_item.get("plan") or "Premium"
+                acc_country = raw_item.get("country") or "Desconocido"
+                acc_cookie = raw_item.get("cookie") or f"NetflixId={acc_token}"
+            else:
+                raw_str = str(raw_item)
+                parsed = parse_account_card_from_text(raw_str)
+                if parsed:
+                    acc_token = parsed["token"]
+                    acc_email = parsed["email"]
+                    acc_plan = parsed["plan"]
+                    acc_country = parsed["country"]
+                    acc_cookie = parsed["cookie"]
+                else:
+                    acc_token = extract_core_netflix_id(raw_str)
+                    acc_email = "Netflix Account"
+                    acc_plan = "Premium"
+                    acc_country = "Desconocido"
+                    acc_cookie = f"NetflixId={acc_token}" if acc_token else raw_str.strip()
+
+            chosen_acc = {
+                "token": acc_token,
+                "email": acc_email,
+                "plan": acc_plan,
+                "country": acc_country,
+                "cookie": acc_cookie,
+            }
 
             # Purga inmediata de duplicados en el baúl
-            delivered_token = chosen_acc.get("token") or extract_core_netflix_id(chosen_acc.get("cookie", ""))
-            delivered_email = (chosen_acc.get("email") or "").strip().lower()
+            delivered_token = acc_token
+            delivered_email = acc_email.lower().strip()
 
             clean_vault = []
             for item in vault:
-                item_token = item.get("token") or extract_core_netflix_id(item.get("cookie", ""))
-                if delivered_token and item_token == delivered_token:
+                if isinstance(item, dict):
+                    it_tok = item.get("token") or extract_core_netflix_id(item.get("cookie", ""))
+                    it_em = (item.get("email") or "").lower().strip()
+                else:
+                    it_tok = extract_core_netflix_id(str(item))
+                    it_em = ""
+
+                if delivered_token and it_tok == delivered_token:
                     continue
-                if delivered_email and delivered_email != "netflix account" and item.get("email", "").lower() == delivered_email:
+                if delivered_email and delivered_email != "netflix account" and it_em == delivered_email:
                     continue
                 clean_vault.append(item)
 
             _save_vault(clean_vault)
 
-        plan = chosen_acc.get("plan") or "Premium"
-        country = chosen_acc.get("country") or "Desconocido"
-        email = chosen_acc.get("email") or "Netflix Account"
-        clean_cookie = chosen_acc.get("cookie") or f"NetflixId={chosen_acc.get('token', '')}"
-        token_for_url = chosen_acc.get("token") or extract_core_netflix_id(clean_cookie)
+        clean_cookie = chosen_acc["cookie"]
+        token_for_url = chosen_acc["token"]
 
         txt = (
             "🎉 <b>" + to_sans_bold_italic("TU CUENTA DE NETFLIX ESTA LISTA!") + "</b>\n"
             "━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"● 🎬 <b>" + to_sans_bold_italic("Plan:") + f"</b> {plan}\n"
-            f"● 🌍 <b>" + to_sans_bold_italic("Pais:") + f"</b> {_country_display(country)}\n"
-            f"● 📧 <b>" + to_sans_bold_italic("Email:") + f"</b> <code>{email}</code>\n"
+            f"● 🎬 <b>" + to_sans_bold_italic("Plan:") + f"</b> {chosen_acc['plan']}\n"
+            f"● 🌍 <b>" + to_sans_bold_italic("Pais:") + f"</b> {_country_display(chosen_acc['country'])}\n"
+            f"● 📧 <b>" + to_sans_bold_italic("Email:") + f"</b> <code>{chosen_acc['email']}</code>\n"
             "━━━━━━━━━━━━━━━━━━━━━━\n"
             f"🍪 <b>" + to_sans_bold_italic("Cookie (Toca para copiar):") + f"</b>\n<code>{clean_cookie}</code>\n\n"
             "<i>Presiona un botón para ingresar o activar tu TV:</i>\n"
@@ -1930,7 +2075,7 @@ async def setbanner_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
 
 # ---------------------------------------------------------------------------
-# Gestión de Créditos y Sincronización Automática
+# Gestión de Créditos, Mantenimiento y Auto-Sincronización
 # ---------------------------------------------------------------------------
 
 async def setcredits_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -2002,24 +2147,15 @@ async def addvault_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
                 return
 
             vault = _load_vault()
-            existing_tokens = {item["token"] for item in vault if item.get("token")}
-            existing_emails = {item["email"].lower() for item in vault if item.get("email") and item["email"] != "Netflix Account"}
+            existing_tokens = {extract_core_netflix_id(item.get("token") or item.get("cookie", "")) if isinstance(item, dict) else extract_core_netflix_id(str(item)) for item in vault}
             added = 0
 
             for acc in extracted:
                 tok = acc.get("token")
-                em = acc.get("email", "").lower()
-                if tok and tok in existing_tokens:
-                    continue
-                if em != "netflix account" and em in existing_emails:
-                    continue
-
-                vault.append(acc)
-                if tok:
+                if tok and tok not in existing_tokens:
+                    vault.append(acc)
                     existing_tokens.add(tok)
-                if em != "netflix account":
-                    existing_emails.add(em)
-                added += 1
+                    added += 1
 
             _save_vault(vault)
             await msg.reply_text(
@@ -2060,7 +2196,7 @@ async def addvault_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         return
 
     vault = _load_vault()
-    existing_tokens = {item["token"] for item in vault if item.get("token")}
+    existing_tokens = {extract_core_netflix_id(item.get("token") or item.get("cookie", "")) if isinstance(item, dict) else extract_core_netflix_id(str(item)) for item in vault}
     if acc["token"] in existing_tokens:
         await msg.reply_text("⚠️ Esta cuenta ya se encuentra almacenada en el baúl.", parse_mode=ParseMode.HTML)
         return
@@ -2085,17 +2221,32 @@ async def clearvault_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
     await update.message.reply_text("🗑 <b>El baúl de cookies ha sido vaciado.</b>", parse_mode=ParseMode.HTML)
     await _cloud_auto_save(context.application)
 
+async def maintenance_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """[Admin] Activa o desactiva el modo mantenimiento."""
+    uid = update.effective_user.id if update.effective_user else 0
+    if not is_admin(uid):
+        await update.message.reply_text("⛔ <b>Solo el propietario.</b>", parse_mode=ParseMode.HTML)
+        return
+
+    new_state = not is_maintenance()
+    set_maintenance(new_state)
+
+    msg = (
+        f"🔴 <b>Mantenimiento ACTIVADO.</b>\nLos usuarios comunes recibirán aviso de mantenimiento al intentar usar el bot."
+        if new_state else
+        f"🟢 <b>Mantenimiento DESACTIVADO.</b>\nEl bot vuelve a estar disponible para todos."
+    )
+    await update.message.reply_text(msg, parse_mode=ParseMode.HTML)
+
 
 # ===========================================================================
-# 8. SISTEMA DE RESPALDO Y NUBE TELEGRAM (AUTO-SYNC ANTI-WIPE)
+# 9. SISTEMA DE RESPALDO AUTOMÁTICO EN LA NUBE DE TELEGRAM
 # ===========================================================================
 async def _cloud_auto_save(app: Application) -> None:
     try:
         vault = _load_vault()
         credits_data = _load_credits()
-        users_list = []
-        if _USERS_FILE.exists():
-            users_list = _USERS_FILE.read_text(encoding="utf-8").splitlines()
+        users_list = _USERS_FILE.read_text(encoding="utf-8").splitlines() if _USERS_FILE.exists() else []
 
         payload = {
             "version": "5G-Turbo",
@@ -2513,6 +2664,10 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await restore_command(update, context)
         return
 
+    if is_maintenance() and not is_admin(uid):
+        await update.message.reply_text(MAINTENANCE_TEXT, parse_mode=ParseMode.HTML)
+        return
+
     if not consume_credit(uid):
         await update.message.reply_text(
             OUT_OF_CREDITS_TEXT,
@@ -2643,6 +2798,10 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 
     text = update.message.text.strip()
     if not text:
+        return
+
+    if is_maintenance() and not is_admin(uid):
+        await update.message.reply_text(MAINTENANCE_TEXT, parse_mode=ParseMode.HTML)
         return
 
     if uid and uid in _CHANGEPW_STATE:
@@ -2790,6 +2949,7 @@ def main() -> None:
     app.add_handler(CommandHandler("setcredits", setcredits_command))
     app.add_handler(CommandHandler("backup",     backup_command))
     app.add_handler(CommandHandler("restore",    restore_command))
+    app.add_handler(CommandHandler(["mantenimiento", "maintenance"], maintenance_command))
 
     # Callbacks interactivos
     app.add_handler(CallbackQueryHandler(panel_callback,         pattern=r"^panel:"))
@@ -2812,6 +2972,25 @@ def main() -> None:
         global _BOT_USERNAME
         _BOT_USERNAME = (await application.bot.get_me()).username or ""
 
+        # Auto-restauración silenciosa en arranque usando el mensaje fijado en Telegram
+        try:
+            chat = await application.bot.get_chat(OWNER_ID)
+            if chat.pinned_message and chat.pinned_message.document:
+                f = await chat.pinned_message.document.get_file()
+                b = await f.download_as_bytearray()
+                d = json.loads(b.decode("utf-8", errors="replace"))
+                cloud_vault = d.get("vault", [])
+                local_vault = _load_vault()
+                if len(cloud_vault) > len(local_vault):
+                    _save_vault(cloud_vault)
+                if d.get("credits"):
+                    _save_credits(d["credits"])
+                if d.get("users") and isinstance(d["users"], list):
+                    _USERS_FILE.write_text("\n".join(d["users"]) + "\n", encoding="utf-8")
+                logger.info("Base de datos sincronizada automáticamente desde la nube de Telegram.")
+        except Exception as e:
+            logger.debug(f"Auto-restore on init: {e}")
+
         user_commands = [
             BotCommand("start",    "Panel principal"),
             BotCommand("settings", "Configurar formato y entrega"),
@@ -2826,15 +3005,16 @@ def main() -> None:
         await application.bot.set_my_commands(user_commands, scope=BotCommandScopeDefault())
 
         admin_commands = user_commands + [
-            BotCommand("setcredits", "Asignar créditos a usuario [Admin]"),
-            BotCommand("addvault",   "Cargar cookies al baúl [Admin]"),
-            BotCommand("clearvault", "Vaciar cookies del baúl [Admin]"),
-            BotCommand("backup",     "Descargar respaldo de baúl y créditos [Admin]"),
-            BotCommand("restore",    "Restaurar respaldo desde archivo [Admin]"),
-            BotCommand("proxy",      "Gestor de proxies [Admin]"),
-            BotCommand("users",      "Descargar lista de usuarios [Admin]"),
-            BotCommand("broadcast",  "Enviar notificación masiva [Admin]"),
-            BotCommand("setbanner",  "Configurar video de cabecera [Admin]"),
+            BotCommand("setcredits",    "Asignar créditos a usuario [Admin]"),
+            BotCommand("addvault",      "Cargar cookies al baúl [Admin]"),
+            BotCommand("clearvault",    "Vaciar cookies del baúl [Admin]"),
+            BotCommand("mantenimiento", "Activar/Desactivar mantenimiento [Admin]"),
+            BotCommand("backup",        "Descargar respaldo de baúl y créditos [Admin]"),
+            BotCommand("restore",       "Restaurar respaldo desde archivo [Admin]"),
+            BotCommand("proxy",         "Gestor de proxies [Admin]"),
+            BotCommand("users",         "Descargar lista de usuarios [Admin]"),
+            BotCommand("broadcast",     "Enviar notificación masiva [Admin]"),
+            BotCommand("setbanner",     "Configurar video de cabecera [Admin]"),
         ]
         try:
             await application.bot.set_my_commands(
