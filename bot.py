@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""BILL CYPHER CHK NF — Auto-Unzip Vault & Live Counter Edition"""
+"""BILL CYPHER CHK NF — Credits & Vault System Edition"""
 
 import os
 import io
@@ -62,16 +62,121 @@ logger.setLevel(logging.WARNING)
 BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 
 # ===========================================================================
-# 1. PROPIETARIO FIJO Y EXCLUSIVO
+# 1. PROPIETARIO Y CONFIGURACIÓN DE CONTACTO
 # ===========================================================================
 OWNER_ID: int = 5320997298
+OWNER_USER: str = "didierJC"
+OWNER_URL: str = f"https://t.me/{OWNER_USER}"
 
 def is_admin(uid: int) -> bool:
     return bool(uid and uid == OWNER_ID)
 
 
 # ===========================================================================
-# 2. SISTEMA DE BAÚL DE COOKIES (AUTO-UNZIP & SANITIZADO)
+# 2. SISTEMA DE CRÉDITOS Y MEMBRESÍAS
+# ===========================================================================
+_CREDITS_FILE = Path("credits.json")
+
+def _load_credits() -> dict:
+    if _CREDITS_FILE.exists():
+        try:
+            return json.loads(_CREDITS_FILE.read_text(encoding="utf-8"))
+        except Exception:
+            return {}
+    return {}
+
+def _save_credits(data: dict) -> None:
+    _CREDITS_FILE.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+def get_user_credits_info(uid: int) -> dict:
+    """Devuelve el balance y estado del usuario."""
+    if is_admin(uid):
+        return {"type": "owner", "credits": "Ilimitado 👑", "can_use": True}
+
+    data = _load_credits()
+    user_data = data.get(str(uid), {})
+    today_str = date.today().isoformat()
+
+    # Usuario Premium
+    if user_data.get("is_premium"):
+        creds = user_data.get("credits", "unlimited")
+        if creds == "unlimited":
+            return {"type": "premium", "credits": "Ilimitado ⭐", "can_use": True}
+        try:
+            c_val = int(creds)
+        except ValueError:
+            c_val = 0
+        return {"type": "premium", "credits": f"{c_val} restantes ⭐", "can_use": c_val > 0, "balance": c_val}
+
+    # Usuario Normal (3 créditos diarios)
+    last_date = user_data.get("last_date", "")
+    used_today = user_data.get("used_today", 0)
+    if last_date != today_str:
+        used_today = 0
+        user_data["last_date"] = today_str
+        user_data["used_today"] = 0
+        data[str(uid)] = user_data
+        _save_credits(data)
+
+    remaining = max(0, 3 - used_today)
+    return {"type": "normal", "credits": f"{remaining}/3 hoy", "can_use": remaining > 0, "balance": remaining}
+
+def consume_credit(uid: int) -> bool:
+    """Descuenta 1 crédito al usuario. Devuelve True si la operación fue permitida."""
+    if is_admin(uid):
+        return True
+
+    data = _load_credits()
+    user_data = data.setdefault(str(uid), {"is_premium": False})
+    today_str = date.today().isoformat()
+
+    if user_data.get("is_premium"):
+        creds = user_data.get("credits", "unlimited")
+        if creds == "unlimited":
+            return True
+        try:
+            c_val = int(creds)
+        except ValueError:
+            c_val = 0
+        if c_val <= 0:
+            return False
+        user_data["credits"] = c_val - 1
+        data[str(uid)] = user_data
+        _save_credits(data)
+        return True
+    else:
+        last_date = user_data.get("last_date", "")
+        used_today = user_data.get("used_today", 0)
+        if last_date != today_str:
+            used_today = 0
+            user_data["last_date"] = today_str
+
+        if used_today >= 3:
+            return False
+
+        user_data["used_today"] = used_today + 1
+        user_data["last_date"] = today_str
+        data[str(uid)] = user_data
+        _save_credits(data)
+        return True
+
+OUT_OF_CREDITS_TEXT = (
+    "⚠️ <b>¡Créditos diarios agotados!</b>\n"
+    "━━━━━━━━━━━━━━━━━━\n"
+    "Has alcanzado el límite de <b>3 activaciones diarias gratuitas</b>.\n\n"
+    "💎 <i>Para obtener créditos ilimitados o activar tu plan Premium, contacta directamente al propietario:</i>\n"
+    "━━━━━━━━━━━━━━━━━━"
+)
+
+def out_of_credits_markup() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("⭐ Adquirir Premium (@didierJC) ↗️", url=OWNER_URL)],
+        [InlineKeyboardButton("🔙 Volver al Panel", callback_data="panel:back")],
+    ])
+
+
+# ===========================================================================
+# 3. SISTEMA DE BAÚL DE COOKIES (AUTO-UNZIP & SANITIZADO)
 # ===========================================================================
 _VAULT_FILE = Path("cookie_vault.json")
 _NETFLIX_MARKERS = ("NetflixId", "SecureNetflixId", "nfvdid", "netflix.com")
@@ -96,12 +201,10 @@ def _save_vault(cookies: list[str]) -> None:
     _VAULT_FILE.write_text(json.dumps(cookies, ensure_ascii=False, indent=2), encoding="utf-8")
 
 def extract_cookies_from_text_block(text: str) -> list[str]:
-    """Extrae las líneas Netscape o tokens limpios de un archivo o tarjeta."""
     text = text.strip()
     if not text or not _has_netflix_markers(text):
         return []
 
-    # Si es una tarjeta generada por el bot con bloque de cookies
     netscape_lines = [
         line.strip() for line in text.splitlines()
         if ".netflix.com" in line.lower() and any(m.lower() in line.lower() for m in _NETFLIX_MARKERS)
@@ -109,7 +212,6 @@ def extract_cookies_from_text_block(text: str) -> list[str]:
     if netscape_lines and any("netflixid" in l.lower() for l in netscape_lines):
         return ["\n".join(netscape_lines)]
 
-    # Si es JSON o texto combo plano
     blocks = split_cookies_from_text(text)
     clean_blocks = []
     for b in blocks:
@@ -126,7 +228,6 @@ def extract_cookies_from_text_block(text: str) -> list[str]:
     return clean_blocks or ([text] if _has_netflix_markers(text) else [])
 
 def extract_all_cookies_from_bytes(raw_bytes: bytes, filename: str = "") -> list[str]:
-    """Descomprime y extrae todas las cookies de un ZIP o lee un archivo de texto."""
     is_zip = filename.lower().endswith(".zip") or raw_bytes.startswith(b"PK\x03\x04")
     extracted_cookies = []
 
@@ -160,7 +261,7 @@ def extract_all_cookies_from_bytes(raw_bytes: bytes, filename: str = "") -> list
 
 
 # ===========================================================================
-# 3. BANNER MULTIMEDIA
+# 4. BANNER MULTIMEDIA
 # ===========================================================================
 _BANNER_FILE = Path("banner_id.txt")
 BANNER_MEDIA = "banner.mp4"
@@ -174,7 +275,7 @@ def _get_banner_source() -> str:
 
 
 # ===========================================================================
-# 4. AISLAMIENTO Y NORMALIZACIÓN DE ESTADOS
+# 5. AISLAMIENTO Y NORMALIZACIÓN DE ESTADOS
 # ===========================================================================
 def _clean_checker_session() -> None:
     for attr in ("session", "s", "client", "http", "http_session", "_session"):
@@ -197,7 +298,6 @@ def safe_check_cookie(*args, **kwargs) -> dict:
         _clean_checker_session()
 
 def normalize_status(raw_status: str, result_dict: dict = None) -> str:
-    """Normaliza cualquier respuesta para que las cuentas caídas se sumen a Dead."""
     st = str(raw_status or "").lower().strip()
     if st in ("hit", "live", "valid", "active", "success"):
         return "hit"
@@ -349,13 +449,21 @@ def _set_delivery(user_id: int, mode: str) -> None:
 def _main_panel_text(uid: int) -> str:
     mode_lbl = "Full" if _get_mode(uid) == "full" else "Básico"
     dlv_lbl  = "Cards 💬" if _get_delivery(uid) == "cards" else "ZIP 📦"
-    role_lbl = "👑 Propietario" if is_admin(uid) else "👤 Usuario"
+    
+    cred_info = get_user_credits_info(uid)
+    if cred_info["type"] == "owner":
+        role_lbl = "👑 Propietario"
+    elif cred_info["type"] == "premium":
+        role_lbl = "⭐ Premium"
+    else:
+        role_lbl = "👤 Usuario"
 
     return (
         "👁️ <b>BILL CYPHER CHK NF</b>\n"
         "━━━━━━━━━━━━━━━━━━\n"
         f"● <b>Tu Rol:</b> {role_lbl}\n"
         f"● <b>Tu ID:</b> <code>{uid}</code>\n"
+        f"● <b>Créditos:</b> <code>{cred_info['credits']}</code>\n"
         f"● <b>Ajustes:</b> {mode_lbl} · {dlv_lbl}\n"
         "● <b>Estado:</b> Online 🟩\n"
         "━━━━━━━━━━━━━━━━━━\n"
@@ -1552,6 +1660,16 @@ async def panel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         )
 
     elif data == "panel:gencookie":
+        # Verificación y descuento de créditos
+        if not consume_credit(uid):
+            await query.answer("❌ Sin créditos disponibles.", show_alert=True)
+            await query.message.reply_text(
+                OUT_OF_CREDITS_TEXT,
+                parse_mode=ParseMode.HTML,
+                reply_markup=out_of_credits_markup()
+            )
+            return
+
         vault = _load_vault()
         if not vault:
             await query.answer("❌ Cookies agotadas", show_alert=True)
@@ -1756,6 +1874,53 @@ async def setbanner_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         parse_mode=ParseMode.HTML,
     )
 
+async def setcredits_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """[Admin] Permite al propietario asignar créditos Premium a cualquier usuario."""
+    uid = update.effective_user.id if update.effective_user else 0
+    if not is_admin(uid):
+        await update.message.reply_text("⛔ <b>Solo el propietario.</b>", parse_mode=ParseMode.HTML)
+        return
+
+    if len(context.args) < 2:
+        await update.message.reply_text(
+            "⚠️ <b>Uso de gestión de créditos:</b>\n\n"
+            "<code>/setcredits &lt;ID_usuario&gt; &lt;cantidad | unlimited | reset&gt;</code>\n\n"
+            "<b>Ejemplos:</b>\n"
+            "• <code>/setcredits 123456789 20</code> (Otorga 20 créditos Premium)\n"
+            "• <code>/setcredits 123456789 unlimited</code> (Créditos ilimitados)\n"
+            "• <code>/setcredits 123456789 reset</code> (Regresa a usuario normal con 3 diarios)",
+            parse_mode=ParseMode.HTML
+        )
+        return
+
+    target_id = context.args[0].strip()
+    amount_str = context.args[1].strip().lower()
+
+    data = _load_credits()
+    user_data = data.setdefault(target_id, {})
+
+    if amount_str in ("unlimited", "ilimitado", "inf"):
+        user_data["is_premium"] = True
+        user_data["credits"] = "unlimited"
+        resp = f"⭐ <b>Usuario <code>{target_id}</code> actualizado:</b> Créditos ILIMITADOS asignados."
+    elif amount_str in ("reset", "normal", "0"):
+        user_data["is_premium"] = False
+        user_data["credits"] = 0
+        user_data["used_today"] = 0
+        resp = f"👤 <b>Usuario <code>{target_id}</code> restablecido:</b> Cuenta Normal (3 créditos diarios)."
+    elif amount_str.isdigit():
+        val = int(amount_str)
+        user_data["is_premium"] = True
+        user_data["credits"] = val
+        resp = f"⭐ <b>Usuario <code>{target_id}</code> actualizado:</b> <code>{val}</code> créditos Premium asignados."
+    else:
+        await update.message.reply_text("❌ Valor inválido. Usa un número entero, <code>unlimited</code> o <code>reset</code>.")
+        return
+
+    data[target_id] = user_data
+    _save_credits(data)
+    await update.message.reply_text(resp, parse_mode=ParseMode.HTML)
+
 async def addvault_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """[Admin] Carga cookies al baúl desde texto o respondiendo a un archivo/mensaje."""
     uid = update.effective_user.id if update.effective_user else 0
@@ -1766,7 +1931,6 @@ async def addvault_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     msg = update.message
     target = msg.reply_to_message if msg.reply_to_message else msg
 
-    # Si se respondió a un documento o el mensaje actual tiene documento
     if target.document:
         doc = target.document
         fname = doc.file_name or "archivo"
@@ -1802,7 +1966,6 @@ async def addvault_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             await msg.reply_text(f"⚠️ Error procesando archivo: {e}")
             return
 
-    # Si se envió texto plano o argumento
     text = ""
     if context.args:
         text = " ".join(context.args)
@@ -1846,7 +2009,6 @@ async def addvault_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     )
 
 async def clearvault_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """[Admin] Vacía el stock del baúl."""
     uid = update.effective_user.id if update.effective_user else 0
     if not is_admin(uid):
         await update.message.reply_text("⛔ <b>Solo el propietario.</b>", parse_mode=ParseMode.HTML)
@@ -2192,9 +2354,17 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await setbanner_command(update, context)
         return
 
-    # Si el propietario envía un archivo con /addvault para el baúl
     if caption.startswith("/addvault") and is_admin(uid):
         await addvault_command(update, context)
+        return
+
+    # Verificación de créditos antes de permitir el escaneo
+    if not consume_credit(uid):
+        await update.message.reply_text(
+            OUT_OF_CREDITS_TEXT,
+            parse_mode=ParseMode.HTML,
+            reply_markup=out_of_credits_markup()
+        )
         return
 
     if uid in _ACTIVE_USERS:
@@ -2340,6 +2510,15 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     ok, err_msg = _validate_cookie_text(text)
     if not ok:
         await update.message.reply_text(err_msg, parse_mode=ParseMode.HTML)
+        return
+
+    # Verificación de créditos antes de permitir el escaneo por texto pegado
+    if not consume_credit(uid):
+        await update.message.reply_text(
+            OUT_OF_CREDITS_TEXT,
+            parse_mode=ParseMode.HTML,
+            reply_markup=out_of_credits_markup()
+        )
         return
 
     if uid in _ACTIVE_USERS:
@@ -2534,6 +2713,7 @@ def main() -> None:
     app.add_handler(CommandHandler("setbanner",  setbanner_command))
     app.add_handler(CommandHandler("addvault",   addvault_command))
     app.add_handler(CommandHandler("clearvault", clearvault_command))
+    app.add_handler(CommandHandler("setcredits", setcredits_command))
 
     # ── Callbacks interactivos ────────────────────────────────────────────────
     app.add_handler(CallbackQueryHandler(panel_callback,         pattern=r"^panel:"))
@@ -2576,8 +2756,9 @@ def main() -> None:
         ]
         await application.bot.set_my_commands(user_commands, scope=BotCommandScopeDefault())
 
-        # Comandos exclusivos para tu cuenta (ID: 5320997298)
+        # Comandos exclusivos para el chat del propietario (ID: 5320997298)
         admin_commands = user_commands + [
+            BotCommand("setcredits", "Asignar créditos a usuario [Admin]"),
             BotCommand("addvault",   "Cargar cookies al baúl [Admin]"),
             BotCommand("clearvault", "Vaciar cookies del baúl [Admin]"),
             BotCommand("proxy",      "Gestor de proxies [Admin]"),
