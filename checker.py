@@ -41,9 +41,16 @@ def _decode_js_hex(s: str) -> str:
 
 
 def _decode_unicode_escapes(s: str) -> str:
-    """Decodifica secuencias \\uXXXX a caracteres y emojis reales (ej. \\uD83D\\uDEA9 -> 🚩)."""
+    """Decodifica entidades HTML y secuencias unicode a caracteres y emojis reales."""
     if not s:
         return s
+    # 1. Decodifica entidades HTML como &#x1F6A9; -> 🚩 o &amp; -> &
+    try:
+        s = _html.unescape(s)
+    except Exception:
+        pass
+
+    # 2. Decodifica secuencias de escape unicode \uD83D\uDEA9 -> 🚩
     if '\\u' in s or '\\U' in s:
         try:
             s = s.encode('raw_unicode_escape').decode('unicode_escape')
