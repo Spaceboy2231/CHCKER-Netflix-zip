@@ -1345,12 +1345,37 @@ def check_cookie(cookie_text: str, generate_token: bool = True, bulk_mode: bool 
         result["is_third_party"]= pay_info.get("is_third_party", False)
         result["partner_name"] = pay_info.get("partner_name") or ""
 
+               # 1. Si el nombre quedó como "1" o número, se limpia para que el bot tome el del correo
+        if str(result.get("name", "")).strip() in ("1", "null", "undefined") or str(result.get("name", "")).strip().isdigit():
+            result["name"] = ""
+
+        # 2. Consultar perfiles reales si aún no se han obtenido
         pnames, pcount = _extract_profiles_list(browse_html or account_html)
         if not pnames or pcount == 0:
-            pnames, pcount = _extract_profiles_list(account_html)
-        result["profile_names"]  = pnames
-        result["profile_count"]  = pcount
-        result["profiles"]       = pcount if pcount > 0 else ("Unknown" if not pnames else len(pnames))
+            try:
+                r_br = session.get("https://www.netflix.com/browse", cookies=cookies, timeout=4, allow_redirects=True)
+                if r_br.status_code == 200 and len(r_br.text) > 1000:
+                    pnames, pcount = _extract_profiles_list(r_br.text)
+            except Exception:
+                pass
+
+        # Filtrar el "1" falso de la lista de perfiles
+        clean_pnames = [p for p in pnames if str(p).strip() not in ("1", "null") and not str(p).strip().isdigit()]
+        result["profile_names"] = clean_pnames
+        result["profile_count"] = pcount if pcount > 0 else (len(clean_pnames) if clean_pnames else 1)
+        result["profiles"] = result["profile_count"]
+
+        # 3. Asignar operador en facturación por terceros (Spark NZ, IndiHome, etc.) para quitar el Unknown
+        partner = result.get("partner_name") or ""
+        card_t = str(result.get("card_type") or "")
+        pay_t = str(result.get("payment") or "")
+        is_3rd = result.get("is_third_party") or bool(partner) or "3rd party" in pay_t.lower() or "3rd party" in card_t.lower()
+        if is_3rd:
+            prov = partner or card_t.split("(")[0].strip() or pay_t.split("(")[0].strip() or "Terceros"
+            if result.get("next_billing") in ("Unknown", "Desconocido", None, ""):
+                result["next_billing"] = f"Facturado por {prov}"
+            if result.get("price") in ("Unknown", "Desconocido", None, ""):
+                result["price"] = f"Incluido con {prov}"
 
         if result["status"] == "hit" and (result["is_on_hold"] or
                 "on hold" in account_html.lower() or "payment hold" in account_html.lower()):
