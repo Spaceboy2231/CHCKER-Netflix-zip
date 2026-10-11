@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""BILL CYPHER CHK NF — Clean Visual Edition"""
+"""BILL CYPHER CHK NF — Vault & Live Counter Edition"""
 
 import os
 import io
@@ -9,6 +9,7 @@ import asyncio
 import logging
 import tempfile
 import zipfile
+import json
 import re
 import functools
 from datetime import date
@@ -70,28 +71,40 @@ def is_admin(uid: int) -> bool:
 
 
 # ===========================================================================
-# 2. CONFIGURACIÓN DEL BANNER MULTIMEDIA
+# 2. SISTEMA DE BAÚL DE COOKIES (STOCK / GEN COOKIE PÚBLICO)
+# ===========================================================================
+_VAULT_FILE = Path("cookie_vault.json")
+
+def _load_vault() -> list[str]:
+    if _VAULT_FILE.exists():
+        try:
+            return json.loads(_VAULT_FILE.read_text(encoding="utf-8"))
+        except Exception:
+            return []
+    return []
+
+def _save_vault(cookies: list[str]) -> None:
+    _VAULT_FILE.write_text(json.dumps(cookies, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+# ===========================================================================
+# 3. BANNER MULTIMEDIA
 # ===========================================================================
 _BANNER_FILE = Path("banner_id.txt")
 BANNER_MEDIA = "banner.mp4"
 
 def _get_banner_source() -> str:
-    """Obtiene el ID del video subido por Telegram o la ruta local."""
     if _BANNER_FILE.exists():
         val = _BANNER_FILE.read_text(encoding="utf-8").strip()
         if val:
             return val
     return BANNER_MEDIA
 
-CHANNEL_URL = "https://t.me/TuCanal"
-GROUP_URL   = "https://t.me/TuGrupo"
-
 
 # ===========================================================================
-# 3. AISLAMIENTO DE SESIÓN Y NORMALIZACIÓN DE ESTADOS
+# 4. AISLAMIENTO Y NORMALIZACIÓN DE ESTADOS
 # ===========================================================================
 def _clean_checker_session() -> None:
-    """Limpia a fondo sesiones HTTP y cookies previas en checker.py."""
     for attr in ("session", "s", "client", "http", "http_session", "_session"):
         if hasattr(checker, attr):
             sess = getattr(checker, attr, None)
@@ -112,10 +125,7 @@ def safe_check_cookie(*args, **kwargs) -> dict:
         _clean_checker_session()
 
 def normalize_status(raw_status: str, result_dict: dict = None) -> str:
-    """
-    Normaliza cualquier variante de estado para que 'dead', 'die' o 'invalid'
-    se sumen correctamente al contador de cuentas malas.
-    """
+    """Normaliza cualquier respuesta para que las cuentas caídas se sumen a Dead."""
     st = str(raw_status or "").lower().strip()
     if st in ("hit", "live", "valid", "active", "success"):
         return "hit"
@@ -123,17 +133,7 @@ def normalize_status(raw_status: str, result_dict: dict = None) -> str:
         return "free"
     if st in ("on_hold", "hold", "espera"):
         return "on_hold"
-    if st in ("invalid", "dead", "die", "muerta", "expired", "bad", "fail", "failed", "expirada"):
-        return "invalid"
-    
-    # Comprobación de seguridad si el diccionario incluye booleanos
-    if result_dict:
-        if result_dict.get("live") is False or result_dict.get("valid") is False:
-            return "invalid"
-        if result_dict.get("live") is True or result_dict.get("valid") is True:
-            return "hit"
-            
-    return "error"
+    return "invalid"
 
 
 # ── Registro persistente de usuarios ───────────────────────────────────────
@@ -153,7 +153,7 @@ def _record_user_id(uid: int) -> None:
         pass
 
 
-# ── Estados y pools globales ───────────────────────────────────────────────
+# ── Estados globales ───────────────────────────────────────────────────────
 _PROXY_ADD_STATE: set[int] = set()
 _PROXY_SOURCE_STATE: set[int] = set()
 _EXECUTOR = ThreadPoolExecutor(max_workers=48)
@@ -276,7 +276,7 @@ def _set_delivery(user_id: int, mode: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Panel visual principal y menús
+# Panel visual principal
 # ---------------------------------------------------------------------------
 
 def _main_panel_text(uid: int) -> str:
@@ -292,20 +292,27 @@ def _main_panel_text(uid: int) -> str:
         f"● <b>Ajustes:</b> {mode_lbl} · {dlv_lbl}\n"
         "● <b>Estado:</b> Online 🟩\n"
         "━━━━━━━━━━━━━━━━━━\n"
-        "⚡ <b>v2.0</b> | <i>Envía tu archivo o cookies abajo</i> 👇"
+        "⚡ <b>v2.0</b> | <i>Envía tus cookies o genera una cuenta abajo</i> 👇"
     )
 
 def _main_panel_markup(uid: int) -> InlineKeyboardMarkup:
     admin_buttons = []
     if is_admin(uid):
+        vault_count = len(_load_vault())
         admin_buttons = [
             [
                 InlineKeyboardButton("🛡 Proxies [Admin]", callback_data="panel:proxy"),
                 InlineKeyboardButton("👥 Usuarios [Admin]", callback_data="panel:users"),
+            ],
+            [
+                InlineKeyboardButton(f"📦 Baúl Stock ({vault_count}) [Admin]", callback_data="panel:vault"),
             ]
         ]
 
     rows = [
+        [
+            InlineKeyboardButton("⚡ GEN COOKIE 🍪", callback_data="panel:gencookie"),
+        ],
         [
             InlineKeyboardButton("⚙️ Configuración", callback_data="panel:settings"),
             InlineKeyboardButton("📊 Estadísticas", callback_data="panel:info"),
@@ -315,10 +322,6 @@ def _main_panel_markup(uid: int) -> InlineKeyboardMarkup:
             InlineKeyboardButton("🔐 Cambiar PW", callback_data="panel:changepw"),
         ],
         *admin_buttons,
-        [
-            InlineKeyboardButton("📢 Canal Oficial ↗️", url=CHANNEL_URL),
-            InlineKeyboardButton("👥 Grupo / Soporte ↗️", url=GROUP_URL),
-        ],
     ]
     return InlineKeyboardMarkup(rows)
 
@@ -484,15 +487,21 @@ def _help_text() -> str:
 def _cancel_keyboard(msg_id: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([[InlineKeyboardButton("🛑 Cancelar", callback_data=f"cancel:{msg_id}")]])
 
-def _login_keyboard(result: dict) -> InlineKeyboardMarkup | None:
+def _login_keyboard(result: dict, show_regen: bool = False) -> InlineKeyboardMarkup | None:
     nft = result.get("nftoken")
+    rows = []
     if nft and nft.get("success"):
-        return InlineKeyboardMarkup([[
+        rows.append([
             InlineKeyboardButton("🖥️ PC",    url=nft["pc_url"]),
             InlineKeyboardButton("📱 Móvil", url=nft["mobile_url"]),
             InlineKeyboardButton("📺 TV",   url=nft["tv_url"]),
-        ]])
-    return None
+        ])
+    if show_regen:
+        rows.append([
+            InlineKeyboardButton("🔄 REGEN COOKIE", callback_data="panel:gencookie"),
+            InlineKeyboardButton("🔙 Panel", callback_data="panel:back"),
+        ])
+    return InlineKeyboardMarkup(rows) if rows else None
 
 
 # ---------------------------------------------------------------------------
@@ -549,7 +558,7 @@ def _yes_no(val) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Formateadores de tarjetas de cuentas
+# Formateadores de tarjetas
 # ---------------------------------------------------------------------------
 
 def _plan_title(plan_name: str, status: str) -> str:
@@ -1197,7 +1206,6 @@ async def process_cookie_sets(update: Update, status_msg, cookie_sets: list[tupl
     session_id = status_msg.message_id
     if uid:
         _USER_SESSION[uid] = session_id
-    error_retry: list[tuple[str, str, str]] = []
 
     for batch_start in range(0, total, BULK_CONCURRENCY):
         if session_id in _CANCEL_SESSIONS:
@@ -1233,13 +1241,8 @@ async def process_cookie_sets(update: Update, status_msg, cookie_sets: list[tupl
             elif status == "on_hold":
                 on_hold += 1
                 hits_list.append((result, src, raw))
-            elif status == "invalid":
-                invalids += 1
             else:
-                if is_bulk:
-                    error_retry.append((src, cs, raw))
-                else:
-                    errors += 1
+                invalids += 1
 
             user_id = update.effective_user.id if update.effective_user else 0
             stats_tracker.record_check(status, user_id=user_id, source=src)
@@ -1263,7 +1266,6 @@ async def process_cookie_sets(update: Update, status_msg, cookie_sets: list[tupl
                 except Exception:
                     pass
 
-        # Actualiza el mensaje en tiempo real inmediatamente después de procesar cada lote
         if is_bulk:
             done_so_far = min(batch_start + len(batch), total)
             elapsed = time.monotonic() - t_start
@@ -1283,33 +1285,6 @@ async def process_cookie_sets(update: Update, status_msg, cookie_sets: list[tupl
                 )
             except Exception:
                 pass
-
-    if is_bulk and error_retry:
-        retry_results = await asyncio.gather(*[
-            loop.run_in_executor(
-                _EXECUTOR,
-                functools.partial(safe_check_cookie, generate_token=False, bulk_mode=True),
-                cs,
-            )
-            for _src, cs, _raw in error_retry
-        ], return_exceptions=True)
-
-        for (src, cs, raw), result in zip(error_retry, retry_results):
-            if isinstance(result, Exception):
-                result = {"status": "invalid", "message": "Timeout"}
-            status = normalize_status(result.get("status"), result)
-            if status == "hit":
-                hits += 1
-                hits_list.append((result, src, raw))
-            elif status == "free":
-                frees += 1
-            elif status == "on_hold":
-                on_hold += 1
-                hits_list.append((result, src, raw))
-            else:
-                invalids += 1
-            stats_tracker.record_check(status, user_id=uid, source=src)
-            result["_source"] = src
 
     elapsed = time.monotonic() - t_start
     speed   = total / elapsed * 60 if elapsed > 0 else 0
@@ -1355,7 +1330,6 @@ async def process_cookie_sets(update: Update, status_msg, cookie_sets: list[tupl
             f"  ❌ Muertas (Dead / Inválidas) » <b>{invalids}</b>\n"
             f"  ⏸️ En espera (On Hold)   » <b>{on_hold}</b>\n"
             f"  🔓 Free (Sin plan)       » <b>{frees}</b>\n"
-            f"  ⚠️ Errores de red        » <b>{errors}</b>\n"
             "━━━━━━━━━━━━━━━━━━\n"
             f"  📦 Total comprobado      » <b>{total}</b>\n"
             f"  ⏱️ Tiempo total          » <b>{time_str}</b>\n"
@@ -1493,6 +1467,63 @@ async def panel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 caption=f"📄 Lista con los {total} IDs registrados",
             )
 
+    elif data == "panel:vault":
+        if not is_admin(uid):
+            await query.answer("⛔ Solo el propietario.", show_alert=True)
+            return
+        await query.answer()
+        vault = _load_vault()
+        await query.message.reply_text(
+            "📦 <b>Gestión del Baúl de Cookies</b>\n"
+            "━━━━━━━━━━━━━━━━━━\n"
+            f"• <b>Stock disponible:</b> <code>{len(vault)}</code> cookies\n\n"
+            "💡 <b>Para agregar cookies:</b>\n"
+            "Envía un archivo <code>.txt</code> con pie de foto <code>/addvault</code> o escribe <code>/addvault &lt;cookies&gt;</code>.\n\n"
+            "💡 <b>Para vaciar stock:</b>\n"
+            "Escribe <code>/clearvault</code>",
+            parse_mode=ParseMode.HTML,
+        )
+
+    elif data == "panel:gencookie":
+        vault = _load_vault()
+        if not vault:
+            await query.answer("❌ Cookies agotadas", show_alert=True)
+            await query.message.reply_text(
+                "📭 <b>¡Se agotaron las cookies!</b>\n"
+                "━━━━━━━━━━━━━━━━━━\n"
+                "Espera a que el propietario cargue nuevas cookies al baúl.\n"
+                "━━━━━━━━━━━━━━━━━━",
+                parse_mode=ParseMode.HTML
+            )
+            return
+
+        await query.answer("⚡ Obteniendo cookie...")
+        cookie_item = vault.pop(0)
+        _save_vault(vault)
+
+        status_gen = await query.message.reply_text("⏳ <i>Generando acceso directo desde el baúl...</i>", parse_mode=ParseMode.HTML)
+        loop = asyncio.get_running_loop()
+        res = await loop.run_in_executor(_EXECUTOR, functools.partial(safe_check_cookie, generate_token=True), cookie_item)
+
+        plan = res.get("plan_name") or "Netflix"
+        country = res.get("country") or "Desconocido"
+        email = res.get("email") or "Netflix Account"
+
+        cookie_snippet = cookie_item[:120] + "..." if len(cookie_item) > 120 else cookie_item
+
+        txt = (
+            "🎉 <b>¡COOKIE DE NETFLIX GENERADA!</b>\n"
+            "━━━━━━━━━━━━━━━━━━\n"
+            f"• <b>Plan:</b> {plan}\n"
+            f"• <b>País:</b> {_country_display(country)}\n"
+            f"• <b>Email:</b> <code>{email}</code>\n"
+            "━━━━━━━━━━━━━━━━━━\n"
+            f"🍪 <b>Cookie:</b>\n<code>{cookie_snippet}</code>\n\n"
+            "<i>Presiona los botones para entrar directo sin contraseña o generar otra:</i>"
+        )
+        kb = _login_keyboard(res, show_regen=True)
+        await status_gen.edit_text(txt, parse_mode=ParseMode.HTML, reply_markup=kb)
+
 async def cancel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     await query.answer("Cancelando…")
@@ -1592,7 +1623,6 @@ async def settings_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     await update.message.reply_text(_settings_text(uid), parse_mode=ParseMode.HTML, reply_markup=_settings_markup(uid))
 
 async def users_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """[Admin] Muestra los usuarios registrados y envía users.txt."""
     uid = update.effective_user.id if update.effective_user else 0
     if not is_admin(uid):
         await update.message.reply_text("⛔ <b>Solo el propietario.</b>", parse_mode=ParseMode.HTML)
@@ -1625,7 +1655,6 @@ async def users_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         )
 
 async def setbanner_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """[Admin] Guarda el video de cabecera enviándolo al chat."""
     uid = update.effective_user.id if update.effective_user else 0
     if not is_admin(uid):
         await update.message.reply_text("⛔ <b>Solo el propietario.</b>", parse_mode=ParseMode.HTML)
@@ -1656,10 +1685,66 @@ async def setbanner_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
     _BANNER_FILE.write_text(file_id, encoding="utf-8")
     await update.message.reply_text(
-        "🎬 <b>¡Video de cabecera configurado con éxito!</b>\n"
-        "A partir de este momento se mostrará arriba del panel.",
+        "🎬 <b>¡Video de cabecera configurado con éxito!</b>",
         parse_mode=ParseMode.HTML,
     )
+
+async def addvault_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    uid = update.effective_user.id if update.effective_user else 0
+    if not is_admin(uid):
+        await update.message.reply_text("⛔ <b>Solo el propietario puede agregar cookies al baúl.</b>", parse_mode=ParseMode.HTML)
+        return
+
+    msg = update.message
+    text = ""
+    if context.args:
+        text = " ".join(context.args)
+    elif msg.reply_to_message and msg.reply_to_message.text:
+        text = msg.reply_to_message.text
+    elif msg.reply_to_message and msg.reply_to_message.caption:
+        text = msg.reply_to_message.caption
+
+    if not text:
+        await msg.reply_text(
+            "📦 <b>Cómo agregar cookies al baúl:</b>\n\n"
+            "1. Envía un archivo <code>.txt</code> con cookies y escribe de pie de foto <code>/addvault</code>\n"
+            "2. O escribe: <code>/addvault &lt;pega tus cookies aquí&gt;</code>\n"
+            "3. O responde a un mensaje con <code>/addvault</code>.",
+            parse_mode=ParseMode.HTML
+        )
+        return
+
+    extracted = split_cookies_from_text(text)
+    if not extracted:
+        await msg.reply_text("⚠️ No se detectaron cookies válidas en el texto.", parse_mode=ParseMode.HTML)
+        return
+
+    vault = _load_vault()
+    existing_set = set(vault)
+    added = 0
+    for c in extracted:
+        c_clean = c.strip()
+        if c_clean and c_clean not in existing_set:
+            vault.append(c_clean)
+            existing_set.add(c_clean)
+            added += 1
+
+    _save_vault(vault)
+    await msg.reply_text(
+        f"✅ <b>¡Cookies agregadas al baúl con éxito!</b>\n"
+        "━━━━━━━━━━━━━━━━━━\n"
+        f"• 📥 <b>Añadidas:</b> <code>{added}</code>\n"
+        f"• 📦 <b>Total disponible en stock:</b> <code>{len(vault)}</code>",
+        parse_mode=ParseMode.HTML
+    )
+
+async def clearvault_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    uid = update.effective_user.id if update.effective_user else 0
+    if not is_admin(uid):
+        await update.message.reply_text("⛔ <b>Solo el propietario.</b>", parse_mode=ParseMode.HTML)
+        return
+    _save_vault([])
+    await update.message.reply_text("🗑 <b>El baúl de cookies ha sido vaciado.</b>", parse_mode=ParseMode.HTML)
 
 
 # ---------------------------------------------------------------------------
@@ -1994,8 +2079,41 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         _record_user_id(uid)
 
     caption = (update.message.caption or "").strip()
+
     if caption.startswith("/setbanner") and is_admin(uid):
         await setbanner_command(update, context)
+        return
+
+    if caption.startswith("/addvault") and is_admin(uid):
+        try:
+            tg_file = await doc.get_file()
+            raw_data = await tg_file.download_as_bytearray()
+            text = raw_data.decode("utf-8", errors="replace")
+            extracted = split_cookies_from_text(text)
+            if not extracted:
+                await update.message.reply_text("⚠️ No se detectaron cookies válidas en el archivo.", parse_mode=ParseMode.HTML)
+                return
+
+            vault = _load_vault()
+            existing_set = set(vault)
+            added = 0
+            for c in extracted:
+                c_clean = c.strip()
+                if c_clean and c_clean not in existing_set:
+                    vault.append(c_clean)
+                    existing_set.add(c_clean)
+                    added += 1
+
+            _save_vault(vault)
+            await update.message.reply_text(
+                f"✅ <b>¡Cookies añadidas al baúl desde el archivo!</b>\n"
+                "━━━━━━━━━━━━━━━━━━\n"
+                f"• 📥 <b>Añadidas:</b> <code>{added}</code>\n"
+                f"• 📦 <b>Total disponible en stock:</b> <code>{len(vault)}</code>",
+                parse_mode=ParseMode.HTML
+            )
+        except Exception as e:
+            await update.message.reply_text(f"⚠️ Error procesando archivo para baúl: {e}")
         return
 
     if uid in _ACTIVE_USERS:
@@ -2321,18 +2439,20 @@ def main() -> None:
 
     # ── Handlers de comandos ──────────────────────────────────────────────────
     app.add_handler(CommandHandler(["start", "cmds", "panel"], start_command))
-    app.add_handler(CommandHandler("help",      help_command))
-    app.add_handler(CommandHandler("info",      info_command))
-    app.add_handler(CommandHandler("mode",      mode_command))
-    app.add_handler(CommandHandler("fullinfo",  fullinfo_command))
-    app.add_handler(CommandHandler("basic",     basic_command))
-    app.add_handler(CommandHandler("settings",  settings_command))
-    app.add_handler(CommandHandler("changepw",  changepw_command))
-    app.add_handler(CommandHandler("cancel",    cancel_command))
-    app.add_handler(CommandHandler("proxy",     proxy_command))
+    app.add_handler(CommandHandler("help",       help_command))
+    app.add_handler(CommandHandler("info",       info_command))
+    app.add_handler(CommandHandler("mode",       mode_command))
+    app.add_handler(CommandHandler("fullinfo",   fullinfo_command))
+    app.add_handler(CommandHandler("basic",      basic_command))
+    app.add_handler(CommandHandler("settings",   settings_command))
+    app.add_handler(CommandHandler("changepw",   changepw_command))
+    app.add_handler(CommandHandler("cancel",     cancel_command))
+    app.add_handler(CommandHandler("proxy",      proxy_command))
     app.add_handler(CommandHandler(["broadcast", "notif"], broadcast_command))
-    app.add_handler(CommandHandler("users",     users_command))
-    app.add_handler(CommandHandler("setbanner", setbanner_command))
+    app.add_handler(CommandHandler("users",      users_command))
+    app.add_handler(CommandHandler("setbanner",  setbanner_command))
+    app.add_handler(CommandHandler("addvault",   addvault_command))
+    app.add_handler(CommandHandler("clearvault", clearvault_command))
 
     # ── Callbacks interactivos ────────────────────────────────────────────────
     app.add_handler(CallbackQueryHandler(panel_callback,         pattern=r"^panel:"))
@@ -2361,7 +2481,7 @@ def main() -> None:
         global _BOT_USERNAME
         _BOT_USERNAME = (await application.bot.get_me()).username or ""
 
-        # Comandos para usuarios normales
+        # Comandos disponibles para usuarios normales
         user_commands = [
             BotCommand("start",    "Panel principal"),
             BotCommand("settings", "Configurar formato y entrega"),
@@ -2377,10 +2497,12 @@ def main() -> None:
 
         # Comandos exclusivos para tu cuenta (ID: 5320997298)
         admin_commands = user_commands + [
-            BotCommand("proxy",     "Gestor de proxies [Admin]"),
-            BotCommand("users",     "Descargar lista de usuarios [Admin]"),
-            BotCommand("broadcast", "Enviar notificación masiva [Admin]"),
-            BotCommand("setbanner", "Configurar video de cabecera [Admin]"),
+            BotCommand("addvault",   "Cargar cookies al baúl [Admin]"),
+            BotCommand("clearvault", "Vaciar cookies del baúl [Admin]"),
+            BotCommand("proxy",      "Gestor de proxies [Admin]"),
+            BotCommand("users",      "Descargar lista de usuarios [Admin]"),
+            BotCommand("broadcast",  "Enviar notificación masiva [Admin]"),
+            BotCommand("setbanner",  "Configurar video de cabecera [Admin]"),
         ]
         try:
             await application.bot.set_my_commands(
