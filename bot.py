@@ -48,16 +48,16 @@ BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 # CONFIGURACIÓN VISUAL & MULTIMEDIA
 # ===========================================================================
 
-# 1. Nombre de tu archivo de galería en la misma carpeta del bot (mp4, gif, jpg, png)
+# Archivo multimedia en la carpeta del bot (mp4, gif, jpg, png o URL directa)
 BANNER_MEDIA = "banner.mp4"
 
-# 2. Enlaces de tus botones oficiales
+# Enlaces de soporte y comunidad
 CHANNEL_URL = "https://t.me/TuCanal"
 GROUP_URL   = "https://t.me/TuGrupo"
 
-# 3. IDs de Emojis Animados de Telegram Premium (dejar en "" si no se usan)
+# IDs de Emojis Animados de Telegram Premium (dejar en "" para usar estándar)
 ANIMATED_EMOJIS = {
-    "bill": "",       # Ícono de cabecera (fallback: 🎬)
+    "bill": "",       # Ícono cabecera (fallback: 🎬)
     "fire": "",       # Fuego de versión (fallback: 🔥)
     "check": "",      # Estado online (fallback: 🟩)
 }
@@ -93,7 +93,7 @@ def is_admin(uid: int) -> bool:
     return _ADMIN_ID is not None and uid == _ADMIN_ID
 
 
-# ── Estados globales y pools ───────────────────────────────────────────────
+# ── Estados y pools globales ───────────────────────────────────────────────
 _PROXY_ADD_STATE: set[int] = set()
 _PROXY_SOURCE_STATE: set[int] = set()
 
@@ -217,38 +217,30 @@ def _set_delivery(user_id: int, mode: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Panel principal y menús secundarios
+# Panel visual compacto y menús secundarios
 # ---------------------------------------------------------------------------
 
 def _main_panel_text(uid: int) -> str:
-    """Texto del panel principal basado 100% en el bot del usuario."""
+    """Panel principal compacto diseñado para no desplazar videos o GIFs."""
     icon_bill = tg_icon("bill", "🎬")
     icon_fire = tg_icon("fire", "🔥")
 
-    mode_lbl = "Información completa" if _get_mode(uid) == "full" else "Básico"
+    mode_lbl = "Full" if _get_mode(uid) == "full" else "Básico"
     dlv_lbl  = "Cards 💬" if _get_delivery(uid) == "cards" else "ZIP 📦"
 
     return (
         f"{icon_bill} <b>BILL CYPHER CHK NF</b>\n"
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-        "Envíame un archivo de cookies y lo verificaré <b>en tiempo real</b> con los servidores de Netflix.\n\n"
-        "📋 <b>Lo que obtengo de cada cuenta:</b>\n"
-        "  • 📧 Email  ·  🔑 Password  ·  📱 Phone\n"
-        "  • 📦 Plan   ·  🎬 Quality   ·  💰 Price\n"
-        "  • 💳 Card   ·  🌍 Country   ·  🗓️ Billing date\n"
-        "  • 👥 Profiles  ·  ✔️ Email verified  ·  📌 Hold status\n"
-        "  • 🖥️ Acceso PC  ·  📱 Acceso móvil  ·  📺 Acceso TV (enlaces de 1 clic)\n\n"
-        "📦 <b>Bulk checks:</b>\n"
-        "  • Barra de progreso en vivo ➔ Resumen ➔ ZIP de hits\n"
-        "  • Carpetas: <code>Premium Resultados/</code> &amp; <code>Normal Resultados/</code>\n"
-        "  • Enlaces de 1 clic + Cookies Netscape incluidas\n\n"
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        f"⚙️ <b>Configuración:</b> {mode_lbl} · {dlv_lbl}\n"
-        f"{icon_fire} <b>Bot Version:</b> 2.0 👁️"
+        "━━━━━━━━━━━━━━━━━━\n"
+        "👁️ <i>Checker de Netflix en tiempo real</i>\n\n"
+        "● <b>Estado:</b> Online 🟩\n"
+        f"● <b>Ajustes:</b> {mode_lbl} · {dlv_lbl}\n"
+        "● <b>Soporte:</b> Netscape · JSON · ZIP\n"
+        "━━━━━━━━━━━━━━━━━━\n"
+        f"{icon_fire} <b>v2.0</b> | <i>Envía tu archivo o texto abajo</i> 👇"
     )
 
 def _main_panel_markup(uid: int) -> InlineKeyboardMarkup:
-    """Botonera estructurada en pares ordenados."""
+    """Botonera interactiva en pares simétricos."""
     return InlineKeyboardMarkup([
         [
             InlineKeyboardButton("⚙️ Configuración", callback_data="panel:settings"),
@@ -270,7 +262,7 @@ def _panel_back_markup() -> InlineKeyboardMarkup:
     ])
 
 async def _send_banner_panel(update: Update, text: str, markup: InlineKeyboardMarkup) -> None:
-    """Envía el panel con video/GIF/foto de galería si existe en la carpeta."""
+    """Envía el panel con video/GIF/foto de galería local o URL."""
     target = update.message or (update.callback_query.message if update.callback_query else None)
     if not target:
         return
@@ -321,7 +313,7 @@ def _settings_text(uid: int) -> str:
     dlv_lbl  = "💬 Card-by-Card" if delivery == "cards" else "📦 ZIP"
     return (
         "⚙️ <b>Configuración del Bot</b>\n"
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        "━━━━━━━━━━━━━━━━━━\n\n"
         f"📊 <b>Formato de salida:</b> {mode_lbl}\n"
         f"  <i>Detalle con el que se muestra cada tarjeta</i>\n\n"
         f"📤 <b>Modo de entrega:</b> {dlv_lbl}\n"
@@ -377,7 +369,7 @@ def _info_text(uid: int) -> str:
 
     return (
         "📊 <b>Estadísticas en Tiempo Real</b>\n"
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        "━━━━━━━━━━━━━━━━━━\n\n"
         f"⏱️ <b>Uptime:</b> {uptime}\n"
         f"📦 <b>Total Chequeado:</b> {total_checks}\n"
         f"✅ <b>Hits Activos:</b> {hits} ({hit_rate}%)\n"
@@ -388,13 +380,13 @@ def _info_text(uid: int) -> str:
         f"👤 <b>Usuarios Únicos:</b> {users}\n"
         f"🔄 <b>Procesos Activos:</b> {active}\n"
         f"🚀 <b>Velocidad:</b> {cpm} checks/min\n"
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        "━━━━━━━━━━━━━━━━━━"
     )
 
 def _help_text() -> str:
     return (
         "📖 <b>Formatos de Cookies Admitidos</b>\n"
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        "━━━━━━━━━━━━━━━━━━\n\n"
         "<b>1. Netscape (.txt)</b>\n"
         "<code>.netflix.com  TRUE  /  TRUE  9999  NetflixId  ct%3D…</code>\n\n"
         "<b>2. Pipe-combo (.txt)</b>\n"
@@ -403,7 +395,7 @@ def _help_text() -> str:
         '<code>[{"name":"NetflixId","value":"ct%3D…"}]</code>\n\n'
         "<b>4. Archivo ZIP (.zip)</b>\n"
         "Comprime múltiples archivos <code>.txt</code> o <code>.json</code>.\n\n"
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        "━━━━━━━━━━━━━━━━━━\n"
         "<i>💡 Solo envía el archivo al bot o pega el texto directamente.</i>"
     )
 
@@ -424,7 +416,7 @@ def _login_keyboard(result: dict) -> InlineKeyboardMarkup | None:
 
 
 # ---------------------------------------------------------------------------
-# Helpers generales
+# Helpers y barra de progreso moderna
 # ---------------------------------------------------------------------------
 
 def _flag(country: str) -> str:
@@ -462,11 +454,12 @@ def _country_display(country: str) -> str:
     flag = _flag(country)
     return f"{country} {flag}".strip() if flag else country
 
-def make_progress_bar(done: int, total: int, width: int = 20) -> str:
+def make_progress_bar(done: int, total: int, width: int = 14) -> str:
+    """Barra de progreso moderna con bloques compactos."""
     if total == 0:
-        return f"[{'░' * width}] 0%"
+        return f"[{'▱' * width}] 0%"
     filled = int(width * done / total)
-    bar = "▓" * filled + "░" * (width - filled)
+    bar = "▰" * filled + "▱" * (width - filled)
     pct = int(100 * done / total)
     return f"[{bar}] {pct}%"
 
@@ -568,7 +561,7 @@ def format_result_full(result: dict, index: int = 1, total: int = 1, source: str
 
     lines = [
         f"🎬 <b>{title}{counter}</b>",
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+        "━━━━━━━━━━━━━━━━━━",
     ]
     if source:
         lines.append(f"📁 <b>Origen:</b> <code>{source}</code>")
@@ -625,7 +618,7 @@ def format_result_full(result: dict, index: int = 1, total: int = 1, source: str
         lines.append("🍪 <b>Cookie:</b>")
         lines.append(f"<code>NetflixId={nf_id}</code>")
 
-    lines.append("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+    lines.append("━━━━━━━━━━━━━━━━━━")
     return "\n".join(lines)
 
 def format_result_basic(result: dict, index: int = 1, total: int = 1, source: str = "") -> str:
@@ -653,7 +646,7 @@ def format_result_basic(result: dict, index: int = 1, total: int = 1, source: st
 
     lines = [
         f"🎬 <b>{title}{counter}</b>",
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+        "━━━━━━━━━━━━━━━━━━",
         _status_line(status, plan),
         "",
         "👤 <b>Account</b>",
@@ -693,7 +686,7 @@ def format_result_basic(result: dict, index: int = 1, total: int = 1, source: st
     if nft and not nft.get("success"):
         lines.append(f"<i>⚠️ Enlaces de inicio: {nft.get('error', 'desconocido')}</i>\n")
 
-    lines.append("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+    lines.append("━━━━━━━━━━━━━━━━━━")
     return "\n".join(lines)
 
 def format_error_card(result: dict, index: int = 1, total: int = 1, source: str = "") -> str:
@@ -711,7 +704,7 @@ def format_error_card(result: dict, index: int = 1, total: int = 1, source: str 
 
     lines = [
         header,
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+        "━━━━━━━━━━━━━━━━━━",
     ]
     if source:
         lines.append(f"📁 Origen: <code>{source}</code>")
@@ -719,7 +712,7 @@ def format_error_card(result: dict, index: int = 1, total: int = 1, source: str 
     if nf_id:
         snippet = nf_id[:35] + "…" if len(nf_id) > 35 else nf_id
         lines.append(f"🍪 Cookie: <code>{snippet}</code>")
-    lines.append("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+    lines.append("━━━━━━━━━━━━━━━━━━")
     return "\n".join(lines)
 
 def format_result(result: dict, index: int = 1, total: int = 1, source: str = "", user_id: int = 0) -> str:
@@ -1048,7 +1041,7 @@ async def send_hits_zip(update: Update, hits: list[tuple[dict, str, str]]) -> No
 
     caption_parts = [
         f"📦 <b>Netflix-Resultados-{total_hits}x-{rand2}.zip</b>",
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+        "━━━━━━━━━━━━━━━━━━",
         f"  🌟 Premium Resultados  »  <b>{len(premium)}</b>",
         f"  ✅ Normal Resultados   »  <b>{len(normal)}</b>",
         f"  📊 Total               »  <b>{total_hits}</b>",
@@ -1056,7 +1049,7 @@ async def send_hits_zip(update: Update, hits: list[tuple[dict, str, str]]) -> No
     if dupes_removed > 0:
         caption_parts.append(f"  ♻️ Duplicados eliminados »  <b>{dupes_removed}</b>")
     caption_parts += [
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+        "━━━━━━━━━━━━━━━━━━",
         "📁 <code>Premium Resultados/</code>  — Cuentas Premium 4K",
         "📁 <code>Normal Resultados/</code>   — Estándar / Básicas",
         "📄 <code>_SUMMARY.txt</code>   — Resumen general",
@@ -1104,7 +1097,7 @@ async def panel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         _CHANGEPW_STATE[uid] = {"step": "netflix_id"}
         await query.message.reply_text(
             "🔐 <b>Cambiar Contraseña</b> <i>[BETA]</i>\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            "━━━━━━━━━━━━━━━━━━\n\n"
             "Paso 1 de 3 — Introduce el valor de la cookie <b>NetflixId</b> de la cuenta:\n"
             "<i>(la cadena NetflixId que empieza por ct%3D)</i>\n\n"
             "Envía /cancel en cualquier momento para abortar.",
@@ -1229,7 +1222,7 @@ async def changepw_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     _CHANGEPW_STATE[uid] = {"step": "netflix_id"}
     await update.message.reply_text(
         "🔐 <b>Cambiar Contraseña</b> <i>[BETA]</i>\n"
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        "━━━━━━━━━━━━━━━━━━\n\n"
         "Paso 1 de 3 — Introduce el valor de la cookie <b>NetflixId</b> de la cuenta:\n\n"
         "Envía /cancel en cualquier momento para abortar.",
         parse_mode=ParseMode.HTML,
@@ -1314,7 +1307,7 @@ async def _handle_changepw_input(update: Update, uid: int, text: str) -> None:
         if result["success"]:
             await status_msg.edit_text(
                 "✅ <b>¡Contraseña cambiada con éxito!</b>\n"
-                "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                "━━━━━━━━━━━━━━━━━━\n\n"
                 f"🔑 Nueva contraseña: <code>{new_pw}</code>",
                 parse_mode=ParseMode.HTML,
             )
@@ -1367,7 +1360,7 @@ def _proxy_panel_text() -> str:
     total = pm.count
     lines = [
         "🛡 <b>Gestor de Proxies</b>",
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+        "━━━━━━━━━━━━━━━━━━",
         f"Status: {status}",
     ]
     if total:
@@ -1379,7 +1372,7 @@ def _proxy_panel_text() -> str:
         for i, s in enumerate(sources):
             short = s[:50] + "…" if len(s) > 50 else s
             lines.append(f"  <code>{i+1}. {short}</code>")
-    lines.append("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+    lines.append("━━━━━━━━━━━━━━━━━━")
     return "\n".join(lines)
 
 def _proxy_panel_markup(pm) -> InlineKeyboardMarkup:
@@ -1460,7 +1453,7 @@ async def proxy_admin_callback(update: Update, context: ContextTypes.DEFAULT_TYP
 
 
 # ---------------------------------------------------------------------------
-# Procesamiento de documentos y texto entrante
+# Procesamiento de documentos y texto entrante (Carga Visual Mejorada)
 # ---------------------------------------------------------------------------
 
 async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1487,7 +1480,13 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     if uid:
         _ACTIVE_USERS[uid] = time.time()
 
-    status_msg = await update.message.reply_text("⏳ Descargando archivo…")
+    status_msg = await update.message.reply_text(
+        "⚡ <b>BILL CYPHER | INICIALIZANDO</b>\n"
+        "━━━━━━━━━━━━━━━━━━\n"
+        "📥 <i>Descargando archivo de cookies...</i>\n"
+        "━━━━━━━━━━━━━━━━━━",
+        parse_mode=ParseMode.HTML
+    )
     suffix = ".zip" if is_zip else (Path(fname).suffix or ".txt")
     tmp_path = None
 
@@ -1511,7 +1510,13 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
     try:
         if is_zip:
-            await status_msg.edit_text("📦 Extrayendo ZIP…")
+            await status_msg.edit_text(
+                "⚡ <b>BILL CYPHER | INICIALIZANDO</b>\n"
+                "━━━━━━━━━━━━━━━━━━\n"
+                "📦 <i>Extrayendo cuentas del archivo ZIP...</i>\n"
+                "━━━━━━━━━━━━━━━━━━",
+                parse_mode=ParseMode.HTML
+            )
             try:
                 entries = read_cookie_texts_from_zip(tmp_path)
             except Exception as _e:
@@ -1606,7 +1611,13 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     if uid:
         _ACTIVE_USERS[uid] = time.time()
 
-    status_msg = await update.message.reply_text("⏳ Analizando cookies…")
+    status_msg = await update.message.reply_text(
+        "⚡ <b>BILL CYPHER | INICIALIZANDO</b>\n"
+        "━━━━━━━━━━━━━━━━━━\n"
+        "🔍 <i>Analizando cookies enviadas...</i>\n"
+        "━━━━━━━━━━━━━━━━━━",
+        parse_mode=ParseMode.HTML
+    )
     try:
         await process_cookies(update, status_msg, text, source="texto pegado")
     except Exception as e:
@@ -1726,7 +1737,7 @@ async def besthits_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
 
 # ---------------------------------------------------------------------------
-# Procesamiento central de verificación
+# Procesamiento central de verificación y diseño de carga
 # ---------------------------------------------------------------------------
 
 async def process_cookies(update: Update, status_msg, cookie_text: str, source: str = "") -> None:
@@ -1736,16 +1747,21 @@ async def process_cookies(update: Update, status_msg, cookie_text: str, source: 
         return
 
     if len(sets) == 1:
-        from checker import auto_parse_cookies
-        c = auto_parse_cookies(sets[0])
-        keys = [k for k in c if k in ("NetflixId", "SecureNetflixId", "nfvdid", "gsid")]
         await status_msg.edit_text(
-            f"🍪 <b>Detectado:</b> 1 cuenta ({', '.join(keys) or '…'})\n🔍 Verificando en tiempo real…",
+            "⚡ <b>BILL CYPHER | CHECKING</b>\n"
+            "━━━━━━━━━━━━━━━━━━\n"
+            "🍪 <b>Cuenta:</b> 1 detectada\n"
+            "🔄 <b>Estado:</b> <i>Conectando a Netflix API...</i>\n"
+            "━━━━━━━━━━━━━━━━━━",
             parse_mode=ParseMode.HTML,
         )
     else:
         await status_msg.edit_text(
-            f"🍪 <b>Detectadas:</b> {len(sets)} cuentas\n🔍 Iniciando verificación masiva…",
+            "⚡ <b>BILL CYPHER | CHECKING</b>\n"
+            "━━━━━━━━━━━━━━━━━━\n"
+            f"📦 <b>Lote detectado:</b> {len(sets)} cuentas\n"
+            "🔄 <b>Estado:</b> <i>Iniciando verificación masiva...</i>\n"
+            "━━━━━━━━━━━━━━━━━━",
             parse_mode=ParseMode.HTML,
         )
 
@@ -1785,10 +1801,14 @@ async def process_cookie_sets(update: Update, status_msg, cookie_sets: list[tupl
             speed = done_so_far / elapsed * 60 if elapsed > 1 and done_so_far > 0 else 0
             try:
                 await status_msg.edit_text(
-                    f"⚡ <b>Verificación Masiva en Curso</b>\n\n"
-                    f"{make_progress_bar(done_so_far, total)}  {done_so_far}/{total}\n\n"
-                    f"✅ {hits}  ❌ {invalids}  ⏸️ {on_hold}  🔓 {frees}  ⚠️ {errors}\n\n"
-                    f"🚀 {speed:.1f} acc/min",
+                    "⚡ <b>BILL CYPHER | VERIFICANDO</b>\n"
+                    "━━━━━━━━━━━━━━━━━━\n"
+                    f"📊 <b>Progreso:</b> {make_progress_bar(done_so_far, total)} {done_so_far}/{total}\n"
+                    f"🚀 <b>Velocidad:</b> {speed:.1f} acc/min\n\n"
+                    f"● <b>Hits:</b> {hits}  ·  <b>Inválidas:</b> {invalids}\n"
+                    f"● <b>En espera:</b> {on_hold}  ·  <b>Free:</b> {frees}\n"
+                    "━━━━━━━━━━━━━━━━━━\n"
+                    "⏳ <i>Procesando cuentas en tiempo real...</i>",
                     parse_mode=ParseMode.HTML,
                     reply_markup=_cancel_keyboard(session_id),
                 )
@@ -1849,6 +1869,7 @@ async def process_cookie_sets(update: Update, status_msg, cookie_sets: list[tupl
                 except Exception:
                     pass
 
+    # Reintentos de cuentas que arrojaron error
     if is_bulk and error_retry:
         retry_results = await asyncio.gather(*[
             loop.run_in_executor(
@@ -1902,7 +1923,11 @@ async def process_cookie_sets(update: Update, status_msg, cookie_sets: list[tupl
         premium_count = sum(1 for r, _, _ in hits_list if "premium" in (r.get("plan_name") or "").lower())
         try:
             await status_msg.edit_text(
-                f"✅ <b>¡Finalizado!</b>\n\n⏱️ {time_str} · 🚀 {speed:.1f} acc/min",
+                "⚡ <b>BILL CYPHER | COMPLETADO</b>\n"
+                "━━━━━━━━━━━━━━━━━━\n"
+                f"✅ <i>Verificación masiva completada con éxito</i>\n"
+                f"⏱️ <b>Tiempo:</b> {time_str}  ·  🚀 <b>Velocidad:</b> {speed:.1f} acc/min\n"
+                "━━━━━━━━━━━━━━━━━━",
                 parse_mode=ParseMode.HTML,
                 reply_markup=None,
             )
@@ -1911,13 +1936,13 @@ async def process_cookie_sets(update: Update, status_msg, cookie_sets: list[tupl
 
         await update.message.reply_text(
             f"📊 <b>Resumen Masivo — Resultados</b>\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "━━━━━━━━━━━━━━━━━━\n"
             f"  ✅ Hits (activos)     » <b>{hits}</b> (🌟 Premium: {premium_count})\n"
             f"  ⏸️ En espera          » <b>{on_hold}</b>\n"
             f"  🔓 Free (sin plan)    » <b>{frees}</b>\n"
             f"  ❌ Inválidas/Expiradas» <b>{invalids}</b>\n"
             f"  ⚠️ Errores            » <b>{errors}</b>\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "━━━━━━━━━━━━━━━━━━\n"
             f"  📦 Total comprobado   » <b>{total}</b>\n"
             f"  ⏱️ Tiempo total       » <b>{time_str}</b>\n"
             f"  🚀 Velocidad media    » <b>{speed:.1f} acc/min</b>",
@@ -1962,7 +1987,7 @@ async def process_cookie_sets(update: Update, status_msg, cookie_sets: list[tupl
                     best_kb  = _login_keyboard(best_result)
                     full_best = (
                         "🏆 <b>Mejor Cuenta del Lote</b>\n"
-                        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" + best_txt
+                        "━━━━━━━━━━━━━━━━━━\n" + best_txt
                     )
                     await update.message.reply_text(full_best, parse_mode=ParseMode.HTML, reply_markup=best_kb)
                 except Exception:
@@ -2008,7 +2033,7 @@ def main() -> None:
         .build()
     )
 
-    # ── Comandos y panel interactivo ──────────────────────────────────────────
+    # Comandos
     app.add_handler(CommandHandler(["start", "cmds", "panel"], start_command))
     app.add_handler(CommandHandler("help",     help_command))
     app.add_handler(CommandHandler("info",     info_command))
@@ -2021,7 +2046,7 @@ def main() -> None:
     app.add_handler(CommandHandler("proxy",    proxy_command))
     app.add_handler(CommandHandler("setadmin", setadmin_command))
 
-    # ── Callbacks de botones Inline ───────────────────────────────────────────
+    # Callbacks interactivos
     app.add_handler(CallbackQueryHandler(panel_callback,         pattern=r"^panel:"))
     app.add_handler(CallbackQueryHandler(proxy_admin_callback,  pattern=r"^proxy:"))
     app.add_handler(CallbackQueryHandler(cancel_callback,       pattern=r"^cancel:"))
@@ -2035,7 +2060,7 @@ def main() -> None:
     app.add_handler(CallbackQueryHandler(noop_callback,         pattern=r"^noop$"))
     app.add_handler(CallbackQueryHandler(gen_link_callback,     pattern=r"^genlink:"))
 
-    # ── Mensajes de cookies y archivos ────────────────────────────────────────
+    # Mensajes
     app.add_handler(MessageHandler(filters.Document.ALL,           handle_document))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
 
