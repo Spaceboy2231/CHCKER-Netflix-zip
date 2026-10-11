@@ -16,7 +16,7 @@ from datetime import date
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 
-from telegram import Update, Document, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, Document, InlineKeyboardButton, InlineKeyboardMarkup, BotCommand
 from telegram.ext import (
     Application,
     CallbackQueryHandler,
@@ -26,6 +26,14 @@ from telegram.ext import (
     filters,
 )
 from telegram.constants import ParseMode
+from telegram.error import (
+    Conflict,
+    RetryAfter,
+    TimedOut,
+    NetworkError,
+    Forbidden,
+    BadRequest,
+)
 
 from checker import check_cookie
 import stats as stats_tracker
@@ -68,6 +76,24 @@ def tg_icon(name: str, fallback: str) -> str:
     if eid:
         return f'<tg-emoji emoji-id="{eid}">{fallback}</tg-emoji>'
     return fallback
+
+
+# ── Registro persistente de usuarios para Notificaciones (/broadcast) ──────
+_USERS_FILE = Path("users.txt")
+
+def _record_user_id(uid: int) -> None:
+    """Registra los IDs de los usuarios para el envío de notificaciones globales."""
+    try:
+        if not uid:
+            return
+        existing = set()
+        if _USERS_FILE.exists():
+            existing = set(_USERS_FILE.read_text(encoding="utf-8").splitlines())
+        if str(uid) not in existing:
+            with open(_USERS_FILE, "a", encoding="utf-8") as f:
+                f.write(f"{uid}\n")
+    except Exception:
+        pass
 
 
 # ── Admin ID ──────────────────────────────────────────────────────────────
@@ -455,7 +481,7 @@ def _country_display(country: str) -> str:
     return f"{country} {flag}".strip() if flag else country
 
 def make_progress_bar(done: int, total: int, width: int = 14) -> str:
-    """Barra de progreso moderna con bloques compactos."""
+    """Barra de progreso con bloques limpios y compactos."""
     if total == 0:
         return f"[{'▱' * width}] 0%"
     filled = int(width * done / total)
@@ -840,7 +866,7 @@ def _score_account(result: dict) -> tuple:
 
 
 # ---------------------------------------------------------------------------
-# Generador y empaquetador ZIP de hits
+# Generador y empaquetador ZIP de hits con protección anti-surrogates
 # ---------------------------------------------------------------------------
 
 async def send_hits_zip(update: Update, hits: list[tuple[dict, str, str]]) -> None:
@@ -877,6 +903,10 @@ async def send_hits_zip(update: Update, hits: list[tuple[dict, str, str]]) -> No
 
     premium = [(r, s, w) for r, s, w in deduped if "premium" in (r.get("plan_name") or "").lower()]
     normal  = [(r, s, w) for r, s, w in deduped if "premium" not in (r.get("plan_name") or "").lower()]
+
+    def _safe_encode(text: str) -> bytes:
+        """Sanitiza surrogates huérfanos y caracteres corruptos para evitar que zipfile falle."""
+        return str(text).encode("utf-8", errors="replace")
 
     def _account_file(i: int, total: int, result: dict, source: str) -> str:
         email   = result.get("email")        or f"account_{i}"
@@ -1011,25 +1041,27 @@ async def send_hits_zip(update: Update, hits: list[tuple[dict, str, str]]) -> No
                 "  • Cookie (formato Netscape)",
                 "  • Enlaces directos PC / Móvil / TV",
             ]
-            zf.writestr("_SUMMARY.txt", "\n".join(summary_lines))
+            zf.writestr("_SUMMARY.txt", _safe_encode("\n".join(summary_lines)))
 
             for i, (result, src, _) in enumerate(premium, 1):
                 email   = result.get("email") or f"account_{i}"
-                safe    = re.sub(r'[^\w@._-]', '_', email)[:35]
-                plan    = re.sub(r'[^\w ]', '', result.get("plan_name") or "Premium")[:20].strip()
+                safe    = re.sub(r'[^\w@._-]', '_', str(email))[:35]
+                plan    = re.sub(r'[^\w ]', '', str(result.get("plan_name") or "Premium"))[:20].strip()
                 c_flag  = _flag(result.get("country") or "")
                 flag_pre = f"{c_flag}_" if c_flag else ""
                 fname   = f"Premium Resultados/{i:02d}_{flag_pre}{safe}_{plan}.txt"
-                zf.writestr(fname, _account_file(i, len(premium), result, src))
+                content_bytes = _safe_encode(_account_file(i, len(premium), result, src))
+                zf.writestr(fname, content_bytes)
 
             for i, (result, src, _) in enumerate(normal, 1):
                 email   = result.get("email") or f"account_{i}"
-                safe    = re.sub(r'[^\w@._-]', '_', email)[:35]
-                plan    = re.sub(r'[^\w ]', '', result.get("plan_name") or "Hit")[:20].strip()
+                safe    = re.sub(r'[^\w@._-]', '_', str(email))[:35]
+                plan    = re.sub(r'[^\w ]', '', str(result.get("plan_name") or "Hit"))[:20].strip()
                 c_flag  = _flag(result.get("country") or "")
                 flag_pre = f"{c_flag}_" if c_flag else ""
                 fname   = f"Normal Resultados/{i:02d}_{flag_pre}{safe}_{plan}.txt"
-                zf.writestr(fname, _account_file(i, len(normal), result, src))
+                content_bytes = _safe_encode(_account_file(i, len(normal), result, src))
+                zf.writestr(fname, content_bytes)
 
     except Exception as _zip_err:
         logger.exception("send_hits_zip falló")
@@ -1069,8 +1101,11 @@ async def send_hits_zip(update: Update, hits: list[tuple[dict, str, str]]) -> No
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if update.effective_user:
-        stats_tracker.record_user(update.effective_user.id)
-    uid = update.effective_user.id if update.effective_user else 0
+        uid = update.effective_user.id
+        stats_tracker.record_user(uid)
+        _record_user_id(uid)
+    else:
+        uid = 0
     text = _main_panel_text(uid)
     markup = _main_panel_markup(uid)
     await _send_banner_panel(update, text, markup)
@@ -1155,14 +1190,20 @@ async def closesettings_callback(update: Update, context: ContextTypes.DEFAULT_T
         pass
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if update.effective_user:
+        _record_user_id(update.effective_user.id)
     await update.message.reply_text(_help_text(), parse_mode=ParseMode.HTML)
 
 async def info_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     uid = update.effective_user.id if update.effective_user else 0
+    if uid:
+        _record_user_id(uid)
     await update.message.reply_text(_info_text(uid), parse_mode=ParseMode.HTML)
 
 async def mode_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     uid = update.effective_user.id if update.effective_user else 0
+    if uid:
+        _record_user_id(uid)
     current = _get_mode(uid)
     await update.message.reply_text(
         f"⚙️ <b>Modo de salida actual:</b> <b>{'Información completa' if current == 'full' else 'Básico'}</b>\n\n"
@@ -1178,17 +1219,95 @@ async def mode_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
 async def fullinfo_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     uid = update.effective_user.id if update.effective_user else 0
+    if uid:
+        _record_user_id(uid)
     _USER_MODE[uid] = "full"
     await update.message.reply_text("✅ Modo de salida establecido en <b>Información completa</b>.", parse_mode=ParseMode.HTML)
 
 async def basic_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     uid = update.effective_user.id if update.effective_user else 0
+    if uid:
+        _record_user_id(uid)
     _USER_MODE[uid] = "basic"
     await update.message.reply_text("✅ Modo de salida establecido en <b>Básico</b>.", parse_mode=ParseMode.HTML)
 
 async def settings_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     uid = update.effective_user.id if update.effective_user else 0
+    if uid:
+        _record_user_id(uid)
     await update.message.reply_text(_settings_text(uid), parse_mode=ParseMode.HTML, reply_markup=_settings_markup(uid))
+
+
+# ---------------------------------------------------------------------------
+# Comando de Difusión / Notificación masiva para usuarios
+# ---------------------------------------------------------------------------
+
+async def broadcast_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Envía un mensaje de difusión a todos los usuarios registrados."""
+    uid = update.effective_user.id if update.effective_user else 0
+    if not is_admin(uid):
+        await update.message.reply_text("⛔ <b>Solo administradores.</b>", parse_mode=ParseMode.HTML)
+        return
+
+    if not context.args:
+        await update.message.reply_text(
+            "📢 <b>Uso de Notificación Global:</b>\n\n"
+            "<code>/broadcast Tu mensaje aquí</code>\n"
+            "o\n"
+            "<code>/notif Tu mensaje aquí</code>\n\n"
+            "<i>Soporta formato HTML (<b>negrita</b>, <code>código</code>, enlaces).</i>",
+            parse_mode=ParseMode.HTML,
+        )
+        return
+
+    broadcast_msg = update.message.text.split(maxsplit=1)[1]
+    if not _USERS_FILE.exists():
+        await update.message.reply_text("⚠️ No hay usuarios registrados en la base de datos.")
+        return
+
+    uids = [u.strip() for u in _USERS_FILE.read_text(encoding="utf-8").splitlines() if u.strip().isdigit()]
+    total_users = len(uids)
+
+    if total_users == 0:
+        await update.message.reply_text("⚠️ No hay usuarios registrados todavía.")
+        return
+
+    status_msg = await update.message.reply_text(
+        f"⏳ <b>Enviando notificación a {total_users} usuario(s)…</b>",
+        parse_mode=ParseMode.HTML,
+    )
+
+    sent = 0
+    blocked = 0
+
+    formatted_broadcast = (
+        "📢 <b>NOTIFICACIÓN DE BILL CYPHER</b>\n"
+        "━━━━━━━━━━━━━━━━━━\n\n"
+        f"{broadcast_msg}\n\n"
+        "━━━━━━━━━━━━━━━━━━"
+    )
+
+    for target_uid in uids:
+        try:
+            await context.bot.send_message(
+                chat_id=int(target_uid),
+                text=formatted_broadcast,
+                parse_mode=ParseMode.HTML,
+            )
+            sent += 1
+            await asyncio.sleep(0.05)
+        except Exception:
+            blocked += 1
+
+    await status_msg.edit_text(
+        "✅ <b>Difusión finalizada</b>\n"
+        "━━━━━━━━━━━━━━━━━━\n\n"
+        f"• 📤 <b>Enviados con éxito:</b> {sent}\n"
+        f"• 🚫 <b>Bloqueados / Fallidos:</b> {blocked}\n"
+        f"• 👥 <b>Total registrados:</b> {total_users}\n"
+        "━━━━━━━━━━━━━━━━━━",
+        parse_mode=ParseMode.HTML,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -1219,6 +1338,8 @@ def _extract_netflix_id(text: str) -> str:
 
 async def changepw_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     uid = update.effective_user.id if update.effective_user else 0
+    if uid:
+        _record_user_id(uid)
     _CHANGEPW_STATE[uid] = {"step": "netflix_id"}
     await update.message.reply_text(
         "🔐 <b>Cambiar Contraseña</b> <i>[BETA]</i>\n"
@@ -1343,6 +1464,7 @@ async def setadmin_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     uid = update.effective_user.id if update.effective_user else None
     if uid is None:
         return
+    _record_user_id(uid)
     if _ADMIN_ID is not None:
         if uid == _ADMIN_ID:
             await update.message.reply_text("✅ Ya eres el administrador.")
@@ -1459,6 +1581,8 @@ async def proxy_admin_callback(update: Update, context: ContextTypes.DEFAULT_TYP
 async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     doc: Document = update.message.document
     uid = update.effective_user.id if update.effective_user else None
+    if uid:
+        _record_user_id(uid)
 
     if uid in _ACTIVE_USERS:
         await update.message.reply_text("⏳ Ya tienes una comprobación activa. Espera a que termine.", parse_mode=ParseMode.HTML)
@@ -1567,8 +1691,9 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     uid = update.effective_user.id if update.effective_user else None
-    if update.effective_user:
-        stats_tracker.record_user(update.effective_user.id)
+    if uid:
+        stats_tracker.record_user(uid)
+        _record_user_id(uid)
 
     text = update.message.text.strip()
     if not text:
@@ -2002,13 +2127,33 @@ async def process_cookie_sets(update: Update, status_msg, cookie_sets: list[tupl
 
 
 # ---------------------------------------------------------------------------
-# Manejador global de errores
+# Manejador global de errores (Con silenciador de conflicto activo)
 # ---------------------------------------------------------------------------
 
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
-    logger.error("Unhandled exception: %s", context.error)
+    """Ignora conflictos temporales de sesión previa y controla excepciones no manejadas."""
+    err = context.error
+
+    # Telegram Conflict: la sesión anterior aún se está cerrando en Telegram (despliegue de Render/VPS)
+    if isinstance(err, Conflict):
+        return[span_0](start_span)[span_0](end_span)
+
+    # Límites de tasa o errores de red transitorios
+    if isinstance(err, RetryAfter):
+        logger.warning("Telegram rate limit: reintento en %ss", err.retry_after)
+        return
+    if isinstance(err, (TimedOut, NetworkError)):
+        return[span_1](start_span)[span_1](end_span)
+    if isinstance(err, Forbidden):
+        return[span_2](start_span)[span_2](end_span)
+    if isinstance(err, BadRequest):
+        logger.warning("Telegram BadRequest: %s", err)
+        return
+
+    logger.error("Unhandled exception: %s", err, exc_info=context.error)
     if isinstance(update, Update) and update.effective_user:
         _ACTIVE_USERS.pop(update.effective_user.id, None)
+        _USER_SESSION.pop(update.effective_user.id, None)
 
 
 # ---------------------------------------------------------------------------
@@ -2033,7 +2178,7 @@ def main() -> None:
         .build()
     )
 
-    # Comandos
+    # ── Comandos disponibles ──────────────────────────────────────────────────
     app.add_handler(CommandHandler(["start", "cmds", "panel"], start_command))
     app.add_handler(CommandHandler("help",     help_command))
     app.add_handler(CommandHandler("info",     info_command))
@@ -2045,8 +2190,9 @@ def main() -> None:
     app.add_handler(CommandHandler("cancel",   cancel_command))
     app.add_handler(CommandHandler("proxy",    proxy_command))
     app.add_handler(CommandHandler("setadmin", setadmin_command))
+    app.add_handler(CommandHandler(["broadcast", "notif"], broadcast_command))
 
-    # Callbacks interactivos
+    # ── Callbacks de botones interactivos ─────────────────────────────────────
     app.add_handler(CallbackQueryHandler(panel_callback,         pattern=r"^panel:"))
     app.add_handler(CallbackQueryHandler(proxy_admin_callback,  pattern=r"^proxy:"))
     app.add_handler(CallbackQueryHandler(cancel_callback,       pattern=r"^cancel:"))
@@ -2060,21 +2206,24 @@ def main() -> None:
     app.add_handler(CallbackQueryHandler(noop_callback,         pattern=r"^noop$"))
     app.add_handler(CallbackQueryHandler(gen_link_callback,     pattern=r"^genlink:"))
 
-    # Mensajes
+    # ── Mensajes de cookies y archivos ────────────────────────────────────────
     app.add_handler(MessageHandler(filters.Document.ALL,           handle_document))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
 
+    # ── Manejador de errores global ───────────────────────────────────────────
     app.add_error_handler(error_handler)
 
     async def _post_init(application: Application) -> None:
         asyncio.create_task(_session_watchdog())
-        from telegram import BotCommand
         global _BOT_USERNAME
         _BOT_USERNAME = (await application.bot.get_me()).username or ""
         await application.bot.set_my_commands([
             BotCommand("start",    "Panel principal"),
             BotCommand("cmds",     "Abrir Command Panel"),
             BotCommand("settings", "Configurar formato y modo de entrega"),
+            BotCommand("mode",     "Cambiar modo (Básico / Full)"),
+            BotCommand("basic",    "Activar modo básico"),
+            BotCommand("fullinfo", "Activar información completa"),
             BotCommand("info",     "Estadísticas en tiempo real"),
             BotCommand("help",     "Formatos de cookies soportados"),
             BotCommand("changepw", "Cambiar contraseña de una cuenta"),
