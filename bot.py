@@ -20,6 +20,7 @@ import json
 import re
 import functools
 import threading
+import html
 from datetime import date
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
@@ -255,7 +256,7 @@ def out_of_credits_markup() -> InlineKeyboardMarkup:
 
 
 # ===========================================================================
-# 5. BAÚL ESTRUCTURADO (SIN CRASHEOS Y CON AUTO-CONVERSIÓN)
+# 5. BAÚL ESTRUCTURADO (DEDUPLICACIÓN TOTAL Y NORMALIZACIÓN)
 # ===========================================================================
 _VAULT_FILE = Path("cookie_vault.json")
 _NETFLIX_MARKERS = ("NetflixId", "SecureNetflixId", "nfvdid", "netflix.com")
@@ -277,18 +278,58 @@ def extract_core_netflix_id(cookie_str: str) -> str:
         return val
     return ""
 
-def _load_vault() -> list:
+def _normalize_vault_item(item) -> dict | None:
+    if isinstance(item, dict):
+        tok = item.get("token") or extract_core_netflix_id(item.get("cookie", ""))
+        if tok:
+            return {
+                "token": tok,
+                "email": item.get("email") or "Netflix Account",
+                "plan": item.get("plan") or "Premium",
+                "country": item.get("country") or "Desconocido",
+                "cookie": item.get("cookie") or f"NetflixId={tok}",
+            }
+        return None
+    elif isinstance(item, str) and _has_netflix_markers(item):
+        tok = extract_core_netflix_id(item)
+        if tok:
+            return {
+                "token": tok,
+                "email": "Netflix Account",
+                "plan": "Premium",
+                "country": "Desconocido",
+                "cookie": f"NetflixId={tok}",
+            }
+    return None
+
+def _load_vault() -> list[dict]:
     if _VAULT_FILE.exists():
         try:
-            data = json.loads(_VAULT_FILE.read_text(encoding="utf-8"))
-            return data if isinstance(data, list) else []
+            raw_data = json.loads(_VAULT_FILE.read_text(encoding="utf-8"))
+            if not isinstance(raw_data, list):
+                return []
+            parsed = []
+            seen_tokens = set()
+            for x in raw_data:
+                norm = _normalize_vault_item(x)
+                if norm and norm["token"] not in seen_tokens:
+                    seen_tokens.add(norm["token"])
+                    parsed.append(norm)
+            return parsed
         except Exception:
             return []
     return []
 
 def _save_vault(items: list) -> None:
     try:
-        _VAULT_FILE.write_text(json.dumps(items, ensure_ascii=False, indent=2), encoding="utf-8")
+        normalized_list = []
+        seen_tokens = set()
+        for x in items:
+            norm = _normalize_vault_item(x)
+            if norm and norm["token"] not in seen_tokens:
+                seen_tokens.add(norm["token"])
+                normalized_list.append(norm)
+        _VAULT_FILE.write_text(json.dumps(normalized_list, ensure_ascii=False, indent=2), encoding="utf-8")
     except Exception as e:
         logger.warning(f"Error guardando vault: {e}")
 
@@ -346,7 +387,7 @@ def extract_all_accounts_from_bytes(raw_bytes: bytes, filename: str = "") -> lis
                     except Exception:
                         continue
         except Exception as e:
-            logger.warning("Error leyendo ZIP: %s", e)
+            logger.warning(f"Error leyendo ZIP: {e}")
     else:
         text = raw_bytes.decode("utf-8", errors="replace")
         acc = parse_account_card_from_text(text)
@@ -361,10 +402,10 @@ def extract_all_accounts_from_bytes(raw_bytes: bytes, filename: str = "") -> lis
 # ===========================================================================
 def build_official_login_keyboard(raw_token: str) -> InlineKeyboardMarkup:
     """
-    Botones optimizados con la estética Amarillo / Negro:
-    • 📺 TV: Abre /tv9?nftoken= con la sesión ya iniciada en la pantalla de código.
-    • 📱 Móvil: Abre /unsupported?nftoken= para forzar la sesión en el navegador sin abrir la app.
-    • 🖥️ PC: Abre /browse?nftoken= directamente en navegador web.
+    Botones limpios y oficiales:
+    • 📺 TV: Abre /tv9?nftoken= mostrando la pantalla de activación con perfil iniciado.
+    • 📱 Móvil: Abre /unsupported?nftoken= para navegar en web sin abrir la app.
+    • 🖥️ PC: Abre /browse?nftoken= para acceso directo.
     """
     token = raw_token.strip()
     pc_url = f"https://www.netflix.com/browse?nftoken={token}"
@@ -373,13 +414,13 @@ def build_official_login_keyboard(raw_token: str) -> InlineKeyboardMarkup:
 
     buttons = [
         [
-            InlineKeyboardButton("⬛ 🖥️ 𝙋𝘾 ↗️", url=pc_url),
-            InlineKeyboardButton("🟡 📱 𝙈𝙤́𝙫𝙞𝙡 ↗️", url=mobile_url),
-            InlineKeyboardButton("⬛ 📺 𝙏𝙑 ↗️", url=tv_url),
+            InlineKeyboardButton("🖥️ 𝙋𝘾 ↗️", url=pc_url),
+            InlineKeyboardButton("📱 𝙈𝙤́𝙫𝙞𝙡 ↗️", url=mobile_url),
+            InlineKeyboardButton("📺 𝙏𝙑 ↗️", url=tv_url),
         ],
         [
-            InlineKeyboardButton("🟡 🔄 𝙍𝙀𝙂𝙀𝙉 𝘾𝙊𝙊𝙆𝙄𝙀 🟡", callback_data="panel:gencookie"),
-            InlineKeyboardButton("⬛ 🔙 𝙋𝙖𝙣𝙚𝙡 ⬛", callback_data="panel:back"),
+            InlineKeyboardButton("🔄 𝙍𝙀𝙂𝙀𝙉 𝘾𝙊𝙊𝙆𝙄𝙀", callback_data="panel:gencookie"),
+            InlineKeyboardButton("🔙 𝙋𝙖𝙣𝙚𝙡", callback_data="panel:back"),
         ]
     ]
     return InlineKeyboardMarkup(buttons)
@@ -561,7 +602,7 @@ def _set_delivery(user_id: int, mode: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Panel visual principal (Amarillo y Negro)
+# Panel visual principal (Estilo Sans-Bold Italic)
 # ---------------------------------------------------------------------------
 
 def _main_panel_text(uid: int) -> str:
@@ -611,7 +652,7 @@ def _main_panel_markup(uid: int) -> InlineKeyboardMarkup:
 
     rows = [
         [
-            InlineKeyboardButton("🟡 ⚡ " + to_sans_bold_italic("GEN COOKIE") + " ⚡ 🟡", callback_data="panel:gencookie"),
+            InlineKeyboardButton("⚡ " + to_sans_bold_italic("GEN COOKIE") + " 🍿", callback_data="panel:gencookie"),
         ],
         [
             InlineKeyboardButton("⚙️ Configuración", callback_data="panel:settings"),
@@ -789,7 +830,7 @@ def _cancel_keyboard(msg_id: int) -> InlineKeyboardMarkup:
 
 
 # ---------------------------------------------------------------------------
-# Formateadores de tarjetas de resultados
+# Formateadores de resultados
 # ---------------------------------------------------------------------------
 
 def _country_display(country: str) -> str:
@@ -1733,7 +1774,6 @@ async def panel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await query.answer(f"Mantenimiento {'ACTIVADO 🔴' if new_state else 'DESACTIVADO 🟢'}", show_alert=True)
         await _edit_panel_message(query, _main_panel_text(uid), _main_panel_markup(uid))
 
-        # Notificación masiva automática a todos los usuarios
         if _USERS_FILE.exists():
             uids = [u.strip() for u in _USERS_FILE.read_text(encoding="utf-8").splitlines() if u.strip().isdigit()]
             alert_msg = (
@@ -1797,7 +1837,6 @@ async def panel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
         await query.answer("⚡ Extrayendo cuenta...")
 
-        # Extracción instantánea sin errores de tipo
         chosen_acc = None
         async with _ASYNC_VAULT_LOCK:
             vault = _load_vault()
@@ -1809,73 +1848,59 @@ async def panel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             rand_idx = random.randrange(len(vault))
             raw_item = vault.pop(rand_idx)
 
-            if isinstance(raw_item, dict):
-                acc_token = raw_item.get("token") or extract_core_netflix_id(raw_item.get("cookie", ""))
-                acc_email = raw_item.get("email") or "Netflix Account"
-                acc_plan = raw_item.get("plan") or "Premium"
-                acc_country = raw_item.get("country") or "Desconocido"
-                acc_cookie = raw_item.get("cookie") or f"NetflixId={acc_token}"
-            else:
-                raw_str = str(raw_item)
-                parsed = parse_account_card_from_text(raw_str)
-                if parsed:
-                    acc_token = parsed["token"]
-                    acc_email = parsed["email"]
-                    acc_plan = parsed["plan"]
-                    acc_country = parsed["country"]
-                    acc_cookie = parsed["cookie"]
-                else:
-                    acc_token = extract_core_netflix_id(raw_str)
-                    acc_email = "Netflix Account"
-                    acc_plan = "Premium"
-                    acc_country = "Desconocido"
-                    acc_cookie = f"NetflixId={acc_token}" if acc_token else raw_str.strip()
+            chosen_acc = _normalize_vault_item(raw_item)
+            if not chosen_acc:
+                refund_credit(uid)
+                _save_vault(vault)
+                await query.message.reply_text("⚠️ Error con el formato de la cuenta. Intenta de nuevo.", parse_mode=ParseMode.HTML)
+                return
 
-            chosen_acc = {
-                "token": acc_token,
-                "email": acc_email,
-                "plan": acc_plan,
-                "country": acc_country,
-                "cookie": acc_cookie,
-            }
-
-            # Elimina de raíz cualquier duplicado que quede de esta misma cuenta en el baúl
-            delivered_token = acc_token
-            delivered_email = acc_email.lower().strip()
+            # Elimina cualquier duplicado de este token o correo del baúl
+            delivered_token = chosen_acc["token"]
+            delivered_email = chosen_acc["email"].lower().strip()
 
             clean_vault = []
             for item in vault:
-                if isinstance(item, dict):
-                    it_tok = item.get("token") or extract_core_netflix_id(item.get("cookie", ""))
-                    it_em = (item.get("email") or "").lower().strip()
-                else:
-                    it_tok = extract_core_netflix_id(str(item))
-                    it_em = ""
-
-                if delivered_token and it_tok == delivered_token:
+                norm_item = _normalize_vault_item(item)
+                if not norm_item:
                     continue
-                if delivered_email and delivered_email != "netflix account" and it_em == delivered_email:
+                if delivered_token and norm_item["token"] == delivered_token:
                     continue
-                clean_vault.append(item)
+                if delivered_email and delivered_email != "netflix account" and norm_item["email"].lower().strip() == delivered_email:
+                    continue
+                clean_vault.append(norm_item)
 
             _save_vault(clean_vault)
 
         clean_cookie = chosen_acc["cookie"]
         token_for_url = chosen_acc["token"]
 
+        email_disp = html.escape(str(chosen_acc.get("email") or "Netflix Account"))
+        plan_disp = html.escape(str(chosen_acc.get("plan") or "Premium"))
+        country_disp = html.escape(str(_country_display(chosen_acc.get("country") or "Desconocido")))
+        cookie_disp = html.escape(str(clean_cookie))
+
         txt = (
             "🎉 <b>" + to_sans_bold_italic("TU CUENTA DE NETFLIX ESTA LISTA!") + "</b>\n"
             "━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"● 🎬 <b>" + to_sans_bold_italic("Plan:") + f"</b> {chosen_acc['plan']}\n"
-            f"● 🌍 <b>" + to_sans_bold_italic("Pais:") + f"</b> {_country_display(chosen_acc['country'])}\n"
-            f"● 📧 <b>" + to_sans_bold_italic("Email:") + f"</b> <code>{chosen_acc['email']}</code>\n"
+            f"● 🎬 <b>" + to_sans_bold_italic("Plan:") + f"</b> {plan_disp}\n"
+            f"● 🌍 <b>" + to_sans_bold_italic("Pais:") + f"</b> {country_disp}\n"
+            f"● 📧 <b>" + to_sans_bold_italic("Email:") + f"</b> <code>{email_disp}</code>\n"
             "━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"🍪 <b>" + to_sans_bold_italic("Cookie (Toca para copiar):") + f"</b>\n<code>{clean_cookie}</code>\n\n"
+            f"🍪 <b>" + to_sans_bold_italic("Cookie (Toca para copiar):") + f"</b>\n<code>{cookie_disp}</code>\n\n"
             "<i>Presiona un botón para ingresar o activar tu TV:</i>\n"
             "<i>💡 Si tu navegador ya tenía una sesión abierta, usa pestaña incógnito para ver este perfil directo.</i>"
         )
         kb = build_official_login_keyboard(token_for_url)
-        await query.message.reply_text(txt, parse_mode=ParseMode.HTML, reply_markup=kb)
+        try:
+            await query.message.reply_text(txt, parse_mode=ParseMode.HTML, reply_markup=kb)
+        except Exception as send_err:
+            logger.exception("Error enviando mensaje de gencookie")
+            # Fallback seguro sin formato HTML para garantizar entrega
+            await query.message.reply_text(
+                f"🎉 TU CUENTA DE NETFLIX ESTA LISTA!\n\nEmail: {chosen_acc['email']}\nPlan: {chosen_acc['plan']}\nCookie:\n{chosen_acc['cookie']}",
+                reply_markup=kb
+            )
 
 async def cancel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
@@ -2113,7 +2138,7 @@ async def addvault_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
                 return
 
             vault = _load_vault()
-            existing_tokens = {extract_core_netflix_id(item.get("token") or item.get("cookie", "")) if isinstance(item, dict) else extract_core_netflix_id(str(item)) for item in vault}
+            existing_tokens = {item["token"] for item in vault if item.get("token")}
             added = 0
 
             for acc in extracted:
@@ -2162,7 +2187,7 @@ async def addvault_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         return
 
     vault = _load_vault()
-    existing_tokens = {extract_core_netflix_id(item.get("token") or item.get("cookie", "")) if isinstance(item, dict) else extract_core_netflix_id(str(item)) for item in vault}
+    existing_tokens = {item["token"] for item in vault if item.get("token")}
     if acc["token"] in existing_tokens:
         await msg.reply_text("⚠️ Esta cuenta ya se encuentra almacenada en el baúl.", parse_mode=ParseMode.HTML)
         return
