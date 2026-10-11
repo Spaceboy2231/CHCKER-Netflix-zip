@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
 BILL CYPHER CHK NF — Edition 5G Turbo Definitive
-• Entrega instantánea sin fallos (100% Exact Match)
-• Enlaces oficiales de TV (/tv8) sin error NSES-404
+• Cero cruce de perfiles (100% Exact Match)
+• Enlaces oficiales de TV (/tv9) y Móvil (/unsupported) sin error NSES-404
 • Modo Mantenimiento con alerta masiva automática
 • Auto-restauración en arranque desde la nube de Telegram (Anti-Wipe)
-• Tipografía estilizada Sans-Serif Bold Italic
+• Tipografía estilizada Sans-Bold Italic (Amarillo y Negro)
 """
 
 import os
@@ -52,7 +52,7 @@ from telegram.error import (
 )
 
 import checker
-from checker import check_cookie
+from checker import check_cookie, generate_nftoken
 import stats as stats_tracker
 from dashboard import start_dashboard
 import mongodb_store
@@ -255,7 +255,7 @@ def out_of_credits_markup() -> InlineKeyboardMarkup:
 
 
 # ===========================================================================
-# 5. BAÚL ROBUSTO (COMPATIBLE CON DICT Y STRINGS SIN CRASHEOS)
+# 5. BAÚL ESTRUCTURADO (SIN CRASHEOS Y CON AUTO-CONVERSIÓN)
 # ===========================================================================
 _VAULT_FILE = Path("cookie_vault.json")
 _NETFLIX_MARKERS = ("NetflixId", "SecureNetflixId", "nfvdid", "netflix.com")
@@ -357,29 +357,29 @@ def extract_all_accounts_from_bytes(raw_bytes: bytes, filename: str = "") -> lis
 
 
 # ===========================================================================
-# 6. ENLACES DIRECTOS OFICIALES (PANTALLA DE ACTIVACIÓN TV /tv8)
+# 6. ENLACES OFICIALES (NETFLIX WEB /tv9 & /unsupported)
 # ===========================================================================
 def build_official_login_keyboard(raw_token: str) -> InlineKeyboardMarkup:
     """
-    Construye los botones exactos:
-    • TV: Abre https://www.netflix.com/tv8?nftoken=... para activar con código de 8 dígitos.
-    • Móvil: Abre https://www.netflix.com/YourAccount?nftoken=... en Safari sin forzar la app.
-    • PC: Abre https://www.netflix.com/browse?nftoken=... para acceso completo.
+    Botones optimizados con la estética Amarillo / Negro:
+    • 📺 TV: Abre /tv9?nftoken= con la sesión ya iniciada en la pantalla de código.
+    • 📱 Móvil: Abre /unsupported?nftoken= para forzar la sesión en el navegador sin abrir la app.
+    • 🖥️ PC: Abre /browse?nftoken= directamente en navegador web.
     """
     token = raw_token.strip()
     pc_url = f"https://www.netflix.com/browse?nftoken={token}"
-    mobile_url = f"https://www.netflix.com/YourAccount?nftoken={token}"
-    tv_url = f"https://www.netflix.com/tv8?nftoken={token}"
+    mobile_url = f"https://www.netflix.com/unsupported?nftoken={token}"
+    tv_url = f"https://www.netflix.com/tv9?nftoken={token}"
 
     buttons = [
         [
-            InlineKeyboardButton("🖥️ 𝙋𝘾 ↗️", url=pc_url),
-            InlineKeyboardButton("📱 𝙈𝙤́𝙫𝙞𝙡 ↗️", url=mobile_url),
-            InlineKeyboardButton("📺 𝙏𝙑 ↗️", url=tv_url),
+            InlineKeyboardButton("⬛ 🖥️ 𝙋𝘾 ↗️", url=pc_url),
+            InlineKeyboardButton("🟡 📱 𝙈𝙤́𝙫𝙞𝙡 ↗️", url=mobile_url),
+            InlineKeyboardButton("⬛ 📺 𝙏𝙑 ↗️", url=tv_url),
         ],
         [
-            InlineKeyboardButton("🔄 𝙍𝙀𝙂𝙀𝙉 𝘾𝙊𝙊𝙆𝙄𝙀", callback_data="panel:gencookie"),
-            InlineKeyboardButton("🔙 𝙋𝙖𝙣𝙚𝙡", callback_data="panel:back"),
+            InlineKeyboardButton("🟡 🔄 𝙍𝙀𝙂𝙀𝙉 𝘾𝙊𝙊𝙆𝙄𝙀 🟡", callback_data="panel:gencookie"),
+            InlineKeyboardButton("⬛ 🔙 𝙋𝙖𝙣𝙚𝙡 ⬛", callback_data="panel:back"),
         ]
     ]
     return InlineKeyboardMarkup(buttons)
@@ -561,7 +561,7 @@ def _set_delivery(user_id: int, mode: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Panel visual principal (Tipografía Sans-Bold Italic)
+# Panel visual principal (Amarillo y Negro)
 # ---------------------------------------------------------------------------
 
 def _main_panel_text(uid: int) -> str:
@@ -611,7 +611,7 @@ def _main_panel_markup(uid: int) -> InlineKeyboardMarkup:
 
     rows = [
         [
-            InlineKeyboardButton("⚡ " + to_sans_bold_italic("GEN COOKIE") + " 🍪", callback_data="panel:gencookie"),
+            InlineKeyboardButton("🟡 ⚡ " + to_sans_bold_italic("GEN COOKIE") + " ⚡ 🟡", callback_data="panel:gencookie"),
         ],
         [
             InlineKeyboardButton("⚙️ Configuración", callback_data="panel:settings"),
@@ -789,39 +789,8 @@ def _cancel_keyboard(msg_id: int) -> InlineKeyboardMarkup:
 
 
 # ---------------------------------------------------------------------------
-# Formateadores de resultados
+# Formateadores de tarjetas de resultados
 # ---------------------------------------------------------------------------
-
-def _flag(country: str) -> str:
-    country = (country or "").strip()
-    for ch in country:
-        if 0x1F1E6 <= ord(ch) <= 0x1F1FF:
-            return ""
-    code = country.upper()
-    if len(code) == 2 and code.isalpha():
-        return chr(0x1F1E6 + ord(code[0]) - ord("A")) + chr(0x1F1E6 + ord(code[1]) - ord("A"))
-    NAME_MAP = {
-        "india": "IN", "poland": "PL", "portugal": "PT",
-        "united states": "US", "usa": "US", "uk": "GB",
-        "united kingdom": "GB", "germany": "DE", "france": "FR",
-        "italy": "IT", "spain": "ES", "brazil": "BR", "mexico": "MX",
-        "canada": "CA", "australia": "AU", "netherlands": "NL",
-        "turkey": "TR", "russia": "RU", "japan": "JP",
-        "south korea": "KR", "indonesia": "ID", "thailand": "TH",
-        "vietnam": "VN", "pakistan": "PK", "bangladesh": "BD",
-        "argentina": "AR", "colombia": "CO", "chile": "CL",
-        "romania": "RO", "ukraine": "UA", "sweden": "SE",
-        "norway": "NO", "denmark": "DK", "finland": "FI",
-        "czech": "CZ", "hungary": "HU", "slovakia": "SK",
-        "croatia": "HR", "serbia": "RS", "bulgaria": "BG",
-        "greece": "GR", "israel": "IL", "saudi arabia": "SA",
-        "uae": "AE", "egypt": "EG", "nigeria": "NG",
-        "south africa": "ZA", "kenya": "KE",
-    }
-    code2 = NAME_MAP.get(country.lower())
-    if code2:
-        return chr(0x1F1E6 + ord(code2[0]) - ord("A")) + chr(0x1F1E6 + ord(code2[1]) - ord("A"))
-    return ""
 
 def _country_display(country: str) -> str:
     flag = _flag(country)
@@ -1209,8 +1178,6 @@ def _score_account(result: dict) -> tuple:
 # ---------------------------------------------------------------------------
 
 async def send_hits_zip(update: Update, hits: list[tuple[dict, str, str]]) -> None:
-    from checker import generate_nftoken
-
     loop = asyncio.get_running_loop()
     today = date.today().isoformat()
     exp = "9999999999"
@@ -1332,8 +1299,8 @@ async def send_hits_zip(update: Update, hits: list[tuple[dict, str, str]]) -> No
         if nft.get("success"):
             token_val = nf_id
             pc_lnk = f"https://www.netflix.com/browse?nftoken={token_val}"
-            mob_lnk = f"https://www.netflix.com/YourAccount?nftoken={token_val}"
-            tv_lnk = f"https://www.netflix.com/tv8?nftoken={token_val}"
+            mob_lnk = f"https://www.netflix.com/unsupported?nftoken={token_val}"
+            tv_lnk = f"https://www.netflix.com/tv9?nftoken={token_val}"
             lines.append(box_line("💻 PC:", pc_lnk))
             lines.append(box_line("📱 Móvil:", mob_lnk))
             lines.append(box_line("📺 TV:", tv_lnk))
@@ -1538,7 +1505,7 @@ async def process_cookie_sets(update: Update, status_msg, cookie_sets: list[tupl
                 except Exception:
                     pass
 
-        # Throttle de edición a 3.5 segundos para no ser bloqueado por Telegram
+        # Throttle a 3.5 segundos para no ser bloqueado por Telegram
         if is_bulk:
             now_time = time.monotonic()
             done_so_far = min(batch_start + len(batch), total)
@@ -1766,7 +1733,7 @@ async def panel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await query.answer(f"Mantenimiento {'ACTIVADO 🔴' if new_state else 'DESACTIVADO 🟢'}", show_alert=True)
         await _edit_panel_message(query, _main_panel_text(uid), _main_panel_markup(uid))
 
-        # Notificación masiva automática a los usuarios
+        # Notificación masiva automática a todos los usuarios
         if _USERS_FILE.exists():
             uids = [u.strip() for u in _USERS_FILE.read_text(encoding="utf-8").splitlines() if u.strip().isdigit()]
             alert_msg = (
@@ -1830,7 +1797,7 @@ async def panel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
         await query.answer("⚡ Extrayendo cuenta...")
 
-        # Extracción instantánea y segura sin excepciones
+        # Extracción instantánea sin errores de tipo
         chosen_acc = None
         async with _ASYNC_VAULT_LOCK:
             vault = _load_vault()
@@ -1842,7 +1809,6 @@ async def panel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             rand_idx = random.randrange(len(vault))
             raw_item = vault.pop(rand_idx)
 
-            # Normaliza si es diccionario o string para que NUNCA falle
             if isinstance(raw_item, dict):
                 acc_token = raw_item.get("token") or extract_core_netflix_id(raw_item.get("cookie", ""))
                 acc_email = raw_item.get("email") or "Netflix Account"
@@ -1873,7 +1839,7 @@ async def panel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 "cookie": acc_cookie,
             }
 
-            # Purga inmediata de duplicados en el baúl
+            # Elimina de raíz cualquier duplicado que quede de esta misma cuenta en el baúl
             delivered_token = acc_token
             delivered_email = acc_email.lower().strip()
 
@@ -2222,7 +2188,6 @@ async def clearvault_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
     await _cloud_auto_save(context.application)
 
 async def maintenance_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """[Admin] Activa o desactiva el modo mantenimiento."""
     uid = update.effective_user.id if update.effective_user else 0
     if not is_admin(uid):
         await update.message.reply_text("⛔ <b>Solo el propietario.</b>", parse_mode=ParseMode.HTML)
@@ -2974,20 +2939,19 @@ def main() -> None:
 
         # Auto-restauración silenciosa en arranque usando el mensaje fijado en Telegram
         try:
-            chat = await application.bot.get_chat(OWNER_ID)
-            if chat.pinned_message and chat.pinned_message.document:
-                f = await chat.pinned_message.document.get_file()
-                b = await f.download_as_bytearray()
-                d = json.loads(b.decode("utf-8", errors="replace"))
-                cloud_vault = d.get("vault", [])
-                local_vault = _load_vault()
-                if len(cloud_vault) > len(local_vault):
-                    _save_vault(cloud_vault)
-                if d.get("credits"):
-                    _save_credits(d["credits"])
-                if d.get("users") and isinstance(d["users"], list):
-                    _USERS_FILE.write_text("\n".join(d["users"]) + "\n", encoding="utf-8")
-                logger.info("Base de datos sincronizada automáticamente desde la nube de Telegram.")
+            if not _VAULT_FILE.exists() or len(_load_vault()) == 0:
+                chat = await application.bot.get_chat(OWNER_ID)
+                if chat.pinned_message and chat.pinned_message.document:
+                    f = await chat.pinned_message.document.get_file()
+                    b = await f.download_as_bytearray()
+                    d = json.loads(b.decode("utf-8", errors="replace"))
+                    if "vault" in d:
+                        _save_vault(d["vault"])
+                    if "credits" in d:
+                        _save_credits(d["credits"])
+                    if "users" in d and isinstance(d["users"], list):
+                        _USERS_FILE.write_text("\n".join(d["users"]) + "\n", encoding="utf-8")
+                    logger.info("Base de datos restaurada automáticamente desde la nube de Telegram.")
         except Exception as e:
             logger.debug(f"Auto-restore on init: {e}")
 
