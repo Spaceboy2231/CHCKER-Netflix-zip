@@ -846,24 +846,36 @@ def _extract_payment_info(html: str) -> dict:
     return result
 
 
-def _extract_profiles_list(html: str) -> tuple[list[str], int]:
-    """Extrae perfiles decodificando emojis y analizando tanto JSON como elementos HTML."""
-    if not html:
+def _extract_profiles_list(html_str: str) -> tuple[list[str], int]:
+    """Extrae perfiles decodificando emojis, entidades HTML (&apos;, &#x1F6A9;) y texto JSON."""
+    if not html_str:
         return [], 0
 
-    html_decoded = _decode_js_hex(html)
+    import html as _html_lib
+
+    html_decoded = _decode_js_hex(html_str)
     names = []
     seen = set()
 
     def _add_name(candidate: str):
-        c = _decode_unicode_escapes(candidate).strip()
+        if not candidate:
+            return
+        # 1. Convierte entidades HTML como &apos; -> ' y &#x1F6A9; -> 🚩
+        c = _html_lib.unescape(str(candidate)).strip()
+        # 2. Decodifica secuencias unicode \uXXXX si aún quedan
+        if '\\u' in c or '\\U' in c:
+            try:
+                c = c.encode('raw_unicode_escape').decode('unicode_escape')
+            except Exception:
+                pass
+        c = c.strip()
         if c and c.lower() not in ("null", "undefined", "true", "false", ""):
             if c not in seen:
                 seen.add(c)
                 names.append(c)
 
     # 1. netflix.reactContext
-    ctx = _extract_reactcontext(html)
+    ctx = _extract_reactcontext(html_str)
     if ctx:
         models = ctx.get("models", {})
         prof_data = (
@@ -881,7 +893,7 @@ def _extract_profiles_list(html: str) -> tuple[list[str], int]:
     for m in re.finditer(r'"profileName"\s*:\s*"([^"]{1,80})"', html_decoded):
         _add_name(m.group(1))
 
-    # 3. HTML tags visibles
+    # 3. HTML tags visibles (ManageProfiles / browse)
     html_patterns = [
         r'class="profile-name"[^>]*>([^<]+)<',
         r'data-uia="profile-name"[^>]*>([^<]+)<',
