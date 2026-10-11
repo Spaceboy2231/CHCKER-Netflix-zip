@@ -850,7 +850,7 @@ def _extract_profiles_list(html: str) -> tuple[list[str], int]:
     # Extract any visible profile names
     for m in re.finditer(r'"profileName"\s*:\s*"([^"]{1,60})"', html_decoded):
         name = m.group(1).strip()
-        if name and name not in seen and name != "1" and not name.isdigit():
+        if name and name not in seen:
             seen.add(name)
             names.append(name)
 
