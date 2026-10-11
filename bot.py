@@ -16,7 +16,15 @@ from datetime import date
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 
-from telegram import Update, Document, InlineKeyboardButton, InlineKeyboardMarkup, BotCommand
+from telegram import (
+    Update,
+    Document,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    BotCommand,
+    BotCommandScopeDefault,
+    BotCommandScopeChat,
+)
 from telegram.ext import (
     Application,
     CallbackQueryHandler,
@@ -54,10 +62,9 @@ logger.setLevel(logging.WARNING)
 BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 
 # ===========================================================================
-# 1. CONFIGURACIÓN DEL PROPIETARIO / ADMIN
+# 1. PROPIETARIO Y ADMINISTRADOR CONFIGURADO
 # ===========================================================================
-# Si conoces tu ID numérico puedes colocarlo aquí, o usar /setadmin force en el bot.
-OWNER_ID: int = 0
+OWNER_ID: int = 5320997298
 
 _ADMIN_ID_FILE = Path("admin_id.txt")
 
@@ -84,28 +91,36 @@ _ADMIN_ID: int | None = _load_admin_id()
 def is_admin(uid: int) -> bool:
     if not uid:
         return False
-    if OWNER_ID and uid == OWNER_ID:
+    if uid == OWNER_ID:
         return True
     return _ADMIN_ID is not None and uid == _ADMIN_ID
 
 
 # ===========================================================================
-# 2. CONFIGURACIÓN VISUAL, MULTIMEDIA Y TUS EMOJIS ANIMADOS
+# 2. CONFIGURACIÓN VISUAL, MULTIMEDIA Y EMOJIS ANIMADOS
 # ===========================================================================
+_BANNER_FILE = Path("banner_id.txt")
 BANNER_MEDIA = "banner.mp4"
-CHANNEL_URL  = "https://t.me/TuCanal"
-GROUP_URL    = "https://t.me/TuGrupo"
+
+def _get_banner_source() -> str:
+    """Devuelve el ID guardado por /setbanner o el archivo local."""
+    if _BANNER_FILE.exists():
+        val = _BANNER_FILE.read_text(encoding="utf-8").strip()
+        if val:
+            return val
+    return BANNER_MEDIA
+
+CHANNEL_URL = "https://t.me/TuCanal"
+GROUP_URL   = "https://t.me/TuGrupo"
 
 _EMOJI_FILE = Path("emojis.json")
-
-# IDs únicos extraídos directamente de tu lista
 ANIMATED_EMOJIS = {
-    "bill": "4904565554943099861",       # Logo / Cabecera Bill Cypher
-    "separator": "5467919827995733062",  # Separador
-    "bullet": "5123344136665039833",     # Viñetas / Puntos
-    "fire": "5427009714745517609",       # Fuego / Versión
-    "check": "5116414868357907335",      # Estado / Online
-    "extra": "5282731554135615450",      # Ícono adicional
+    "bill": "4904565554943099861",
+    "separator": "5467919827995733062",
+    "bullet": "5123344136665039833",
+    "fire": "5427009714745517609",
+    "check": "5116414868357907335",
+    "extra": "5282731554135615450",
 }
 
 if _EMOJI_FILE.exists():
@@ -115,7 +130,6 @@ if _EMOJI_FILE.exists():
         pass
 
 def tg_icon(name: str, fallback: str) -> str:
-    """Devuelve la etiqueta de emoji animado si está configurada, o el emoji estándar."""
     eid = ANIMATED_EMOJIS.get(name, "")
     if eid:
         return f'<tg-emoji emoji-id="{eid}">{fallback}</tg-emoji>'
@@ -126,7 +140,7 @@ def tg_icon(name: str, fallback: str) -> str:
 # 3. AISLAMIENTO DE SESIÓN (SOLUCIÓN A COOKIES REPETIDAS)
 # ===========================================================================
 def _clean_checker_session() -> None:
-    """Limpia cualquier cookie jar o sesión residual para que no mezcle cuentas."""
+    """Limpia cualquier sesión o cookie residual para evitar mezcla de cuentas."""
     for attr in ("session", "s", "client", "http", "http_session", "_session"):
         if hasattr(checker, attr):
             sess = getattr(checker, attr, None)
@@ -140,7 +154,6 @@ def _clean_checker_session() -> None:
                     sess.headers.pop("Cookie", None)
 
 def safe_check_cookie(*args, **kwargs) -> dict:
-    """Ejecuta el chequeo garantizando aislamiento total entre archivos."""
     _clean_checker_session()
     try:
         return check_cookie(*args, **kwargs)
@@ -148,7 +161,7 @@ def safe_check_cookie(*args, **kwargs) -> dict:
         _clean_checker_session()
 
 
-# ── Registro persistente de usuarios para Notificaciones (/broadcast) ──────
+# ── Registro de usuarios ──────────────────────────────────────────────────
 _USERS_FILE = Path("users.txt")
 
 def _record_user_id(uid: int) -> None:
@@ -165,7 +178,7 @@ def _record_user_id(uid: int) -> None:
         pass
 
 
-# ── Estados y pools globales ───────────────────────────────────────────────
+# ── Estados globales ───────────────────────────────────────────────────────
 _PROXY_ADD_STATE: set[int] = set()
 _PROXY_SOURCE_STATE: set[int] = set()
 _EXECUTOR = ThreadPoolExecutor(max_workers=48)
@@ -314,6 +327,7 @@ def _main_panel_text(uid: int) -> str:
 
 def _main_panel_markup(uid: int) -> InlineKeyboardMarkup:
     admin_buttons = []
+    # Solo el administrador ve estos botones
     if is_admin(uid):
         admin_buttons = [
             [
@@ -349,7 +363,42 @@ async def _send_banner_panel(update: Update, text: str, markup: InlineKeyboardMa
     if not target:
         return
 
-    banner_path = Path(BANNER_MEDIA)
+    banner_source = _get_banner_source()
+
+    # Si es file_id guardado o URL
+    if len(banner_source) > 30 or banner_source.startswith("http"):
+        try:
+            await target.reply_video(
+                video=banner_source,
+                caption=text,
+                parse_mode=ParseMode.HTML,
+                reply_markup=markup,
+                supports_streaming=True,
+            )
+            return
+        except Exception:
+            try:
+                await target.reply_animation(
+                    animation=banner_source,
+                    caption=text,
+                    parse_mode=ParseMode.HTML,
+                    reply_markup=markup,
+                )
+                return
+            except Exception:
+                try:
+                    await target.reply_photo(
+                        photo=banner_source,
+                        caption=text,
+                        parse_mode=ParseMode.HTML,
+                        reply_markup=markup,
+                    )
+                    return
+                except Exception:
+                    pass
+
+    # Si es archivo local
+    banner_path = Path(banner_source)
     if banner_path.exists():
         ext = banner_path.suffix.lower()
         try:
@@ -380,20 +429,7 @@ async def _send_banner_panel(update: Update, text: str, markup: InlineKeyboardMa
                     )
                     return
         except Exception as e:
-            logger.warning("Error enviando multimedia: %s", e)
-
-    elif BANNER_MEDIA.startswith("http://") or BANNER_MEDIA.startswith("https://"):
-        try:
-            await target.reply_video(
-                video=BANNER_MEDIA,
-                caption=text,
-                parse_mode=ParseMode.HTML,
-                reply_markup=markup,
-                supports_streaming=True,
-            )
-            return
-        except Exception:
-            pass
+            logger.warning("Error enviando archivo local: %s", e)
 
     await target.reply_text(text, parse_mode=ParseMode.HTML, reply_markup=markup)
 
@@ -502,7 +538,7 @@ def _login_keyboard(result: dict) -> InlineKeyboardMarkup | None:
 
 
 # ---------------------------------------------------------------------------
-# Helpers y barra de progreso moderna
+# Helpers y barra de progreso
 # ---------------------------------------------------------------------------
 
 def _flag(country: str) -> str:
@@ -1364,11 +1400,50 @@ async def users_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 
 # ---------------------------------------------------------------------------
+# Configuración del video banner
+# ---------------------------------------------------------------------------
+
+async def setbanner_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """[Admin] Permite guardar el video/GIF de cabecera enviándolo por Telegram."""
+    uid = update.effective_user.id if update.effective_user else 0
+    if not is_admin(uid):
+        await update.message.reply_text("⛔ <b>Solo administradores.</b>", parse_mode=ParseMode.HTML)
+        return
+
+    msg = update.message
+    target = msg.reply_to_message if msg.reply_to_message else msg
+
+    file_id = None
+    if target.video:
+        file_id = target.video.file_id
+    elif target.animation:
+        file_id = target.animation.file_id
+    elif target.photo:
+        file_id = target.photo[-1].file_id
+
+    if not file_id:
+        await update.message.reply_text(
+            "⚠️ <b>Cómo usar:</b>\n\n"
+            "1. Envía el video/GIF a este chat y ponle de pie de foto <code>/setbanner</code>\n"
+            "o\n"
+            "2. Responde a cualquier video de este chat con <code>/setbanner</code>.",
+            parse_mode=ParseMode.HTML,
+        )
+        return
+
+    _BANNER_FILE.write_text(file_id, encoding="utf-8")
+    await update.message.reply_text(
+        "🎬 <b>¡Video de cabecera configurado con éxito!</b>\n"
+        "A partir de ahora se reproducirá arriba del panel.",
+        parse_mode=ParseMode.HTML,
+    )
+
+
+# ---------------------------------------------------------------------------
 # Comandos de Emojis Animados
 # ---------------------------------------------------------------------------
 
 async def emojis_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Muestra el estado de los emojis animados configurados."""
     lines = [
         "✨ <b>Configuración de Emojis Animados</b>",
         "━━━━━━━━━━━━━━━━━━",
@@ -1385,7 +1460,6 @@ async def emojis_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.HTML)
 
 async def setemoji_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Permite al admin configurar el ID numérico de un emoji animado individual."""
     uid = update.effective_user.id if update.effective_user else 0
     if not is_admin(uid):
         await update.message.reply_text("⛔ <b>Solo administradores.</b>", parse_mode=ParseMode.HTML)
@@ -1417,7 +1491,6 @@ async def setemoji_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     )
 
 async def setemojis_batch_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """[Admin] Procesa y guarda la lista completa de IDs pegada desde Telegram."""
     uid = update.effective_user.id if update.effective_user else 0
     if not is_admin(uid):
         await update.message.reply_text("⛔ <b>Solo administradores.</b>", parse_mode=ParseMode.HTML)
@@ -1689,23 +1762,24 @@ async def setadmin_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         return
     _record_user_id(uid)
 
-    force = context.args and context.args[0].lower() in ("force", "reset")
-    if _ADMIN_ID is not None and not force and uid != _ADMIN_ID and not (OWNER_ID and uid == OWNER_ID):
+    if uid == OWNER_ID:
         await update.message.reply_text(
-            f"⛔ <b>El administrador ya está establecido.</b>\n\n"
-            f"Para forzar tu asignación como dueño, usa <code>/setadmin force</code>.",
+            f"👑 <b>Ya eres el Propietario del Bot.</b>\n"
+            f"Tu ID (<code>{uid}</code>) tiene control absoluto permanente.",
             parse_mode=ParseMode.HTML,
         )
+        return
+
+    force = context.args and context.args[0].lower() in ("force", "reset")
+    if _ADMIN_ID is not None and not force and uid != _ADMIN_ID:
+        await update.message.reply_text("⛔ El administrador ya ha sido establecido.")
         return
 
     _ADMIN_ID = uid
     _save_admin_id(uid)
     await update.message.reply_text(
-        f"👑 <b>¡Reconocido como Propietario & Admin!</b>\n"
-        "━━━━━━━━━━━━━━━━━━\n"
-        f"• <b>Tu ID:</b> <code>{uid}</code>\n"
-        f"• <b>Estado:</b> Administrador Activo ✅\n\n"
-        "Tienes acceso a /proxy, /users, /broadcast, /emojis y /setemojis.",
+        f"👑 <b>¡Reconocido como Administrador!</b>\n"
+        f"ID: <code>{uid}</code>",
         parse_mode=ParseMode.HTML,
     )
 
@@ -2231,7 +2305,6 @@ async def process_cookie_sets(update: Update, status_msg, cookie_sets: list[tupl
                 except Exception:
                     pass
 
-    # Reintentos de cuentas con error
     if is_bulk and error_retry:
         retry_results = await asyncio.gather(*[
             loop.run_in_executor(
@@ -2408,7 +2481,7 @@ def main() -> None:
         .build()
     )
 
-    # ── Comandos disponibles ──────────────────────────────────────────────────
+    # ── Handlers de comandos ──────────────────────────────────────────────────
     app.add_handler(CommandHandler(["start", "cmds", "panel"], start_command))
     app.add_handler(CommandHandler("help",      help_command))
     app.add_handler(CommandHandler("info",      info_command))
@@ -2425,8 +2498,9 @@ def main() -> None:
     app.add_handler(CommandHandler("emojis",    emojis_command))
     app.add_handler(CommandHandler("setemoji",  setemoji_command))
     app.add_handler(CommandHandler("setemojis", setemojis_batch_command))
+    app.add_handler(CommandHandler("setbanner", setbanner_command))
 
-    # ── Callbacks de botones interactivos ─────────────────────────────────────
+    # ── Callbacks interactivos ────────────────────────────────────────────────
     app.add_handler(CallbackQueryHandler(panel_callback,         pattern=r"^panel:"))
     app.add_handler(CallbackQueryHandler(proxy_admin_callback,  pattern=r"^proxy:"))
     app.add_handler(CallbackQueryHandler(cancel_callback,       pattern=r"^cancel:"))
@@ -2440,7 +2514,7 @@ def main() -> None:
     app.add_handler(CallbackQueryHandler(noop_callback,         pattern=r"^noop$"))
     app.add_handler(CallbackQueryHandler(gen_link_callback,     pattern=r"^genlink:"))
 
-    # ── Mensajes de cookies y archivos ────────────────────────────────────────
+    # ── Mensajes y archivos ───────────────────────────────────────────────────
     app.add_handler(MessageHandler(filters.Document.ALL,           handle_document))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
 
@@ -2451,23 +2525,38 @@ def main() -> None:
         asyncio.create_task(_session_watchdog())
         global _BOT_USERNAME
         _BOT_USERNAME = (await application.bot.get_me()).username or ""
-        await application.bot.set_my_commands([
+
+        # 1. Comandos públicos para usuarios comunes
+        user_commands = [
             BotCommand("start",    "Panel principal"),
-            BotCommand("cmds",     "Abrir Command Panel"),
-            BotCommand("settings", "Configurar formato y modo de entrega"),
+            BotCommand("settings", "Configurar formato y entrega"),
             BotCommand("mode",     "Cambiar modo (Básico / Full)"),
             BotCommand("basic",    "Activar modo básico"),
             BotCommand("fullinfo", "Activar información completa"),
             BotCommand("info",     "Estadísticas en tiempo real"),
             BotCommand("help",     "Formatos de cookies soportados"),
-            BotCommand("changepw", "Cambiar contraseña de una cuenta"),
-            BotCommand("emojis",   "Ver configuración de emojis animados"),
-            BotCommand("proxy",    "Gestor de proxies [Admin]"),
-            BotCommand("users",    "Ver y descargar lista de usuarios [Admin]"),
-            BotCommand("broadcast","Enviar notificación a usuarios [Admin]"),
-            BotCommand("setadmin", "Obtener rol de administrador"),
+            BotCommand("changepw", "Cambiar contraseña de cuenta"),
             BotCommand("cancel",   "Cancelar operación en curso"),
-        ])
+        ]
+        await application.bot.set_my_commands(user_commands, scope=BotCommandScopeDefault())
+
+        # 2. Comandos completos para tu chat (ID: 5320997298)
+        if OWNER_ID:
+            admin_commands = user_commands + [
+                BotCommand("proxy",     "Gestor de proxies [Admin]"),
+                BotCommand("users",     "Descargar lista de usuarios [Admin]"),
+                BotCommand("broadcast", "Enviar notificación masiva [Admin]"),
+                BotCommand("setbanner", "Configurar video de cabecera [Admin]"),
+                BotCommand("emojis",    "Ver emojis animados [Admin]"),
+                BotCommand("setemojis", "Cargar lista de emojis [Admin]"),
+            ]
+            try:
+                await application.bot.set_my_commands(
+                    admin_commands,
+                    scope=BotCommandScopeChat(chat_id=OWNER_ID)
+                )
+            except Exception as e:
+                logger.debug("No se pudo configurar scope chat: %s", e)
 
     app.post_init = _post_init
 
