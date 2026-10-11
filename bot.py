@@ -45,27 +45,21 @@ logger.setLevel(logging.WARNING)
 BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 
 # ===========================================================================
-# CONFIGURACIÓN VISUAL & MULTIMEDIA (ESTILO KAORI CHK / BILL CYPHER)
+# CONFIGURACIÓN VISUAL & MULTIMEDIA
 # ===========================================================================
 
-# 1. Nombre de tu imagen, video o GIF de galería en la carpeta del bot
-# Admite: 'banner.mp4', 'banner.gif', 'banner.jpg', 'banner.png' o un link HTTP
+# 1. Nombre de tu archivo de galería en la misma carpeta del bot (mp4, gif, jpg, png)
 BANNER_MEDIA = "banner.mp4"
 
 # 2. Enlaces de tus botones oficiales
 CHANNEL_URL = "https://t.me/TuCanal"
 GROUP_URL   = "https://t.me/TuGrupo"
 
-# 3. Emojis Animados de Telegram Premium:
-# Si tienes Telegram Premium, coloca aquí los IDs que te dé @GetEmojiIdBot.
-# Si los dejas vacíos "", el bot usará los emojis estándar automáticamente.
+# 3. IDs de Emojis Animados de Telegram Premium (dejar en "" si no se usan)
 ANIMATED_EMOJIS = {
-    "bill": "",       # Ícono principal (fallback: 🔺)
-    "bullet": "",     # Viñetas (fallback: ●)
-    "fire": "",       # Fuego / Estado (fallback: 🔥)
-    "check": "",      # Online / Aprobado (fallback: 🟩)
-    "gear": "",       # Engranaje (fallback: ⚙️)
-    "stats": "",      # Estadísticas (fallback: 📊)
+    "bill": "",       # Ícono de cabecera (fallback: 🎬)
+    "fire": "",       # Fuego de versión (fallback: 🔥)
+    "check": "",      # Estado online (fallback: 🟩)
 }
 
 def tg_icon(name: str, fallback: str) -> str:
@@ -76,7 +70,7 @@ def tg_icon(name: str, fallback: str) -> str:
     return fallback
 
 
-# ── Admin ID — set ADMIN_ID env var, or first user to /setadmin becomes admin ──
+# ── Admin ID ──────────────────────────────────────────────────────────────
 _ADMIN_ID_FILE = Path("admin_id.txt")
 
 def _load_admin_id() -> int | None:
@@ -99,7 +93,7 @@ def is_admin(uid: int) -> bool:
     return _ADMIN_ID is not None and uid == _ADMIN_ID
 
 
-# ── Proxy add/import flows ────────────────────────────────────────────────────
+# ── Estados globales y pools ───────────────────────────────────────────────
 _PROXY_ADD_STATE: set[int] = set()
 _PROXY_SOURCE_STATE: set[int] = set()
 
@@ -223,31 +217,38 @@ def _set_delivery(user_id: int, mode: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Paneles visuales estilo Kaori Chk
+# Panel principal y menús secundarios
 # ---------------------------------------------------------------------------
 
 def _main_panel_text(uid: int) -> str:
-    """Texto del Command Panel principal con estética Kaori Chk."""
-    icon_bill   = tg_icon("bill", "🔺")
-    icon_bullet = tg_icon("bullet", "●")
-    icon_fire   = tg_icon("fire", "🔥")
-    icon_check  = tg_icon("check", "🟩")
+    """Texto del panel principal basado 100% en el bot del usuario."""
+    icon_bill = tg_icon("bill", "🎬")
+    icon_fire = tg_icon("fire", "🔥")
 
-    mode_lbl = "Full" if _get_mode(uid) == "full" else "Básico"
+    mode_lbl = "Información completa" if _get_mode(uid) == "full" else "Básico"
     dlv_lbl  = "Cards 💬" if _get_delivery(uid) == "cards" else "ZIP 📦"
 
     return (
-        f"{icon_bill} <b>Bill Cypher | Command Panel</b>\n"
-        "━━━━━━━━━━━━━━━━━━\n"
-        f"{icon_bullet} <b>Gateway:</b> Netflix NFToken | <b>Tools:</b> 6\n"
-        f"{icon_bullet} <b>Api Status:</b> Online {icon_check}\n"
-        f"{icon_bullet} <b>Config:</b> {mode_lbl} · {dlv_lbl}\n"
-        "━━━━━━━━━━━━━━━━━━\n"
+        f"{icon_bill} <b>BILL CYPHER CHK NF</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        "Envíame un archivo de cookies y lo verificaré <b>en tiempo real</b> con los servidores de Netflix.\n\n"
+        "📋 <b>Lo que obtengo de cada cuenta:</b>\n"
+        "  • 📧 Email  ·  🔑 Password  ·  📱 Phone\n"
+        "  • 📦 Plan   ·  🎬 Quality   ·  💰 Price\n"
+        "  • 💳 Card   ·  🌍 Country   ·  🗓️ Billing date\n"
+        "  • 👥 Profiles  ·  ✔️ Email verified  ·  📌 Hold status\n"
+        "  • 🖥️ Acceso PC  ·  📱 Acceso móvil  ·  📺 Acceso TV (enlaces de 1 clic)\n\n"
+        "📦 <b>Bulk checks:</b>\n"
+        "  • Barra de progreso en vivo ➔ Resumen ➔ ZIP de hits\n"
+        "  • Carpetas: <code>Premium Resultados/</code> &amp; <code>Normal Resultados/</code>\n"
+        "  • Enlaces de 1 clic + Cookies Netscape incluidas\n\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"⚙️ <b>Configuración:</b> {mode_lbl} · {dlv_lbl}\n"
         f"{icon_fire} <b>Bot Version:</b> 2.0 👁️"
     )
 
 def _main_panel_markup(uid: int) -> InlineKeyboardMarkup:
-    """Botonera 2x2 interactiva estilo Kaori Chk."""
+    """Botonera estructurada en pares ordenados."""
     return InlineKeyboardMarkup([
         [
             InlineKeyboardButton("⚙️ Configuración", callback_data="panel:settings"),
@@ -269,7 +270,7 @@ def _panel_back_markup() -> InlineKeyboardMarkup:
     ])
 
 async def _send_banner_panel(update: Update, text: str, markup: InlineKeyboardMarkup) -> None:
-    """Envía el panel con video/GIF/foto local si existe; caso contrario envía texto."""
+    """Envía el panel con video/GIF/foto de galería si existe en la carpeta."""
     target = update.message or (update.callback_query.message if update.callback_query else None)
     if not target:
         return
@@ -301,7 +302,6 @@ async def _send_banner_panel(update: Update, text: str, markup: InlineKeyboardMa
     await target.reply_text(text, parse_mode=ParseMode.HTML, reply_markup=markup)
 
 async def _edit_panel_message(query, text: str, markup: InlineKeyboardMarkup | None = None) -> None:
-    """Edita el caption si es multimedia o el texto si es mensaje normal."""
     try:
         if query.message and query.message.caption is not None:
             await query.edit_message_caption(caption=text, parse_mode=ParseMode.HTML, reply_markup=markup)
@@ -314,9 +314,6 @@ async def _edit_panel_message(query, text: str, markup: InlineKeyboardMarkup | N
         except Exception:
             pass
 
-
-# ── Textos de paneles secundarios ───────────────────────────────────────────
-
 def _settings_text(uid: int) -> str:
     mode     = _get_mode(uid)
     delivery = _get_delivery(uid)
@@ -324,7 +321,7 @@ def _settings_text(uid: int) -> str:
     dlv_lbl  = "💬 Card-by-Card" if delivery == "cards" else "📦 ZIP"
     return (
         "⚙️ <b>Configuración del Bot</b>\n"
-        "━━━━━━━━━━━━━━━━━━\n\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
         f"📊 <b>Formato de salida:</b> {mode_lbl}\n"
         f"  <i>Detalle con el que se muestra cada tarjeta</i>\n\n"
         f"📤 <b>Modo de entrega:</b> {dlv_lbl}\n"
@@ -380,7 +377,7 @@ def _info_text(uid: int) -> str:
 
     return (
         "📊 <b>Estadísticas en Tiempo Real</b>\n"
-        "━━━━━━━━━━━━━━━━━━\n\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
         f"⏱️ <b>Uptime:</b> {uptime}\n"
         f"📦 <b>Total Chequeado:</b> {total_checks}\n"
         f"✅ <b>Hits Activos:</b> {hits} ({hit_rate}%)\n"
@@ -391,13 +388,13 @@ def _info_text(uid: int) -> str:
         f"👤 <b>Usuarios Únicos:</b> {users}\n"
         f"🔄 <b>Procesos Activos:</b> {active}\n"
         f"🚀 <b>Velocidad:</b> {cpm} checks/min\n"
-        "━━━━━━━━━━━━━━━━━━"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     )
 
 def _help_text() -> str:
     return (
         "📖 <b>Formatos de Cookies Admitidos</b>\n"
-        "━━━━━━━━━━━━━━━━━━\n\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
         "<b>1. Netscape (.txt)</b>\n"
         "<code>.netflix.com  TRUE  /  TRUE  9999  NetflixId  ct%3D…</code>\n\n"
         "<b>2. Pipe-combo (.txt)</b>\n"
@@ -406,7 +403,7 @@ def _help_text() -> str:
         '<code>[{"name":"NetflixId","value":"ct%3D…"}]</code>\n\n'
         "<b>4. Archivo ZIP (.zip)</b>\n"
         "Comprime múltiples archivos <code>.txt</code> o <code>.json</code>.\n\n"
-        "━━━━━━━━━━━━━━━━━━\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
         "<i>💡 Solo envía el archivo al bot o pega el texto directamente.</i>"
     )
 
@@ -540,7 +537,6 @@ def _build_card_line(result: dict) -> str:
     return result.get("payment") or "Desconocido"
 
 def format_result_full(result: dict, index: int = 1, total: int = 1, source: str = "") -> str:
-    """Modo de información completa con diseño alineado."""
     status  = result.get("status", "error")
     plan    = result.get("plan_name")   or ""
     email   = result.get("email")       or "Hidden"
@@ -571,8 +567,8 @@ def format_result_full(result: dict, index: int = 1, total: int = 1, source: str
     counter = f"  #{index}/{total}" if total > 1 else ""
 
     lines = [
-        f"🔺 <b>{title}{counter}</b>",
-        "━━━━━━━━━━━━━━━━━━",
+        f"🎬 <b>{title}{counter}</b>",
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
     ]
     if source:
         lines.append(f"📁 <b>Origen:</b> <code>{source}</code>")
@@ -580,40 +576,40 @@ def format_result_full(result: dict, index: int = 1, total: int = 1, source: str
     lines.append("")
     lines.append("👤 <b>Detalles de la cuenta:</b>")
     if name:
-        lines.append(f"  ● Name: {name}")
-    lines.append(f"  ● Email: <code>{email}</code>")
+        lines.append(f"  • Name: {name}")
+    lines.append(f"  • Email: <code>{email}</code>")
     if password:
-        lines.append(f"  ● Contraseña: <code>{password}</code>")
-    lines.append(f"  ● País: {_country_display(country)}")
-    lines.append(f"  ● Plan: {plan or 'Desconocido'}")
-    lines.append(f"  ● Precio: {price}")
-    lines.append(f"  ● Miembro desde: {since}")
-    lines.append(f"  ● Próxima facturación: {billing}")
-    lines.append(f"  ● Pago: {payment}")
+        lines.append(f"  • Contraseña: <code>{password}</code>")
+    lines.append(f"  • País: {_country_display(country)}")
+    lines.append(f"  • Plan: {plan or 'Desconocido'}")
+    lines.append(f"  • Precio: {price}")
+    lines.append(f"  • Miembro desde: {since}")
+    lines.append(f"  • Próxima facturación: {billing}")
+    lines.append(f"  • Pago: {payment}")
     if card_line and card_line != payment:
-        lines.append(f"  ● Card: {card_line}")
+        lines.append(f"  • Card: {card_line}")
     if phone:
-        lines.append(f"  ● Phone: <code>{phone}</code> (Sí)")
+        lines.append(f"  • Phone: <code>{phone}</code> (Sí)")
     else:
-        lines.append(f"  ● Phone: N/A")
-    lines.append(f"  ● Calidad: {quality}")
-    lines.append(f"  ● Streams: {streams}")
-    lines.append(f"  ● Hold Status: {'Sí' if (status == 'on_hold' or is_on_hold) else 'No'}")
+        lines.append(f"  • Phone: N/A")
+    lines.append(f"  • Calidad: {quality}")
+    lines.append(f"  • Streams: {streams}")
+    lines.append(f"  • Hold Status: {'Sí' if (status == 'on_hold' or is_on_hold) else 'No'}")
 
     has_extra = num_extra > 0 if isinstance(num_extra, int) else False
-    lines.append(f"  ● Miembro extra: {'Sí' if has_extra else 'No'}")
-    lines.append(f"  ● Cupo extra: {str(num_extra) if has_extra else 'N/A'}")
-    lines.append(f"  ● Email Verified: {_yes_no(email_verified)}")
-    lines.append(f"  ● Prueba gratuita: {'Sí' if is_free_trial else 'No'}")
-    lines.append(f"  ● Membership: {ms_status}")
+    lines.append(f"  • Miembro extra: {'Sí' if has_extra else 'No'}")
+    lines.append(f"  • Cupo extra: {str(num_extra) if has_extra else 'N/A'}")
+    lines.append(f"  • Email Verified: {_yes_no(email_verified)}")
+    lines.append(f"  • Prueba gratuita: {'Sí' if is_free_trial else 'No'}")
+    lines.append(f"  • Membership: {ms_status}")
 
     prof_count = result.get("profile_count") or (
         profiles_count if isinstance(profiles_count, int) else
         (len(profile_names) if profile_names else 0)
     )
-    lines.append(f"  ● Connected Profiles: {prof_count if prof_count else 'Desconocido'}")
+    lines.append(f"  • Connected Profiles: {prof_count if prof_count else 'Desconocido'}")
     if profile_names:
-        lines.append(f"  ● Profile Names: {', '.join(profile_names)}")
+        lines.append(f"  • Profile Names: {', '.join(profile_names)}")
         if isinstance(prof_count, int) and prof_count > len(profile_names):
             lines.append(f"    <i>(+{prof_count - len(profile_names)} perfiles más)</i>")
 
@@ -629,11 +625,10 @@ def format_result_full(result: dict, index: int = 1, total: int = 1, source: str
         lines.append("🍪 <b>Cookie:</b>")
         lines.append(f"<code>NetflixId={nf_id}</code>")
 
-    lines.append("━━━━━━━━━━━━━━━━━━")
+    lines.append("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
     return "\n".join(lines)
 
 def format_result_basic(result: dict, index: int = 1, total: int = 1, source: str = "") -> str:
-    """Modo básico compacto estilo Kaori Chk."""
     status   = result.get("status", "error")
     plan     = result.get("plan_name")    or ""
     email    = result.get("email")        or "Hidden"
@@ -657,33 +652,33 @@ def format_result_basic(result: dict, index: int = 1, total: int = 1, source: st
     counter = f"  #{index}/{total}" if total > 1 else ""
 
     lines = [
-        f"🔺 <b>{title}{counter}</b>",
-        "━━━━━━━━━━━━━━━━━━",
+        f"🎬 <b>{title}{counter}</b>",
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
         _status_line(status, plan),
         "",
         "👤 <b>Account</b>",
     ]
     if name:
-        lines.append(f"  ● Name: {name}")
-    lines.append(f"  ● Email: <code>{email}</code>")
+        lines.append(f"  • Name: {name}")
+    lines.append(f"  • Email: <code>{email}</code>")
     if password:
-        lines.append(f"  ● Contraseña: <code>{password}</code>")
+        lines.append(f"  • Contraseña: <code>{password}</code>")
     if phone:
-        lines.append(f"  ● Phone: {phone}")
+        lines.append(f"  • Phone: {phone}")
 
     lines.append("")
     lines.append("📋 <b>Subscription</b>")
-    lines.append(f"  ● País: {_country_display(country)}")
-    lines.append(f"  ● Plan: {plan or 'Desconocido'}")
-    lines.append(f"  ● Calidad: {quality} · {streams} screens")
-    lines.append(f"  ● Precio: {price}")
-    lines.append(f"  ● Facturación: {billing}")
+    lines.append(f"  • País: {_country_display(country)}")
+    lines.append(f"  • Plan: {plan or 'Desconocido'}")
+    lines.append(f"  • Calidad: {quality} · {streams} screens")
+    lines.append(f"  • Precio: {price}")
+    lines.append(f"  • Facturación: {billing}")
     if card_line and card_line not in ("Desconocido", ""):
-        lines.append(f"  ● Pago: {card_line}")
+        lines.append(f"  • Pago: {card_line}")
 
     prof_names_str = ", ".join(result.get("profile_names") or [])
     if prof_names_str:
-        lines.append(f"  ● Perfiles ({result.get('profiles', 1)}): {prof_names_str}")
+        lines.append(f"  • Perfiles ({result.get('profiles', 1)}): {prof_names_str}")
 
     lines.append("")
     if nf_id:
@@ -698,7 +693,7 @@ def format_result_basic(result: dict, index: int = 1, total: int = 1, source: st
     if nft and not nft.get("success"):
         lines.append(f"<i>⚠️ Enlaces de inicio: {nft.get('error', 'desconocido')}</i>\n")
 
-    lines.append("━━━━━━━━━━━━━━━━━━")
+    lines.append("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
     return "\n".join(lines)
 
 def format_error_card(result: dict, index: int = 1, total: int = 1, source: str = "") -> str:
@@ -716,15 +711,15 @@ def format_error_card(result: dict, index: int = 1, total: int = 1, source: str 
 
     lines = [
         header,
-        "━━━━━━━━━━━━━━━━━━",
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
     ]
     if source:
         lines.append(f"📁 Origen: <code>{source}</code>")
-    lines.append(f"● Motivo: <i>{reason}</i>")
+    lines.append(f"• Motivo: <i>{reason}</i>")
     if nf_id:
         snippet = nf_id[:35] + "…" if len(nf_id) > 35 else nf_id
         lines.append(f"🍪 Cookie: <code>{snippet}</code>")
-    lines.append("━━━━━━━━━━━━━━━━━━")
+    lines.append("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
     return "\n".join(lines)
 
 def format_result(result: dict, index: int = 1, total: int = 1, source: str = "", user_id: int = 0) -> str:
@@ -1053,7 +1048,7 @@ async def send_hits_zip(update: Update, hits: list[tuple[dict, str, str]]) -> No
 
     caption_parts = [
         f"📦 <b>Netflix-Resultados-{total_hits}x-{rand2}.zip</b>",
-        "━━━━━━━━━━━━━━━━━━",
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
         f"  🌟 Premium Resultados  »  <b>{len(premium)}</b>",
         f"  ✅ Normal Resultados   »  <b>{len(normal)}</b>",
         f"  📊 Total               »  <b>{total_hits}</b>",
@@ -1061,7 +1056,7 @@ async def send_hits_zip(update: Update, hits: list[tuple[dict, str, str]]) -> No
     if dupes_removed > 0:
         caption_parts.append(f"  ♻️ Duplicados eliminados »  <b>{dupes_removed}</b>")
     caption_parts += [
-        "━━━━━━━━━━━━━━━━━━",
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
         "📁 <code>Premium Resultados/</code>  — Cuentas Premium 4K",
         "📁 <code>Normal Resultados/</code>   — Estándar / Básicas",
         "📄 <code>_SUMMARY.txt</code>   — Resumen general",
@@ -1088,7 +1083,6 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     await _send_banner_panel(update, text, markup)
 
 async def panel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Gestiona los botones del panel interactivo estilo Kaori Chk."""
     query = update.callback_query
     uid = query.from_user.id if query.from_user else 0
     data = query.data
@@ -1110,7 +1104,7 @@ async def panel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         _CHANGEPW_STATE[uid] = {"step": "netflix_id"}
         await query.message.reply_text(
             "🔐 <b>Cambiar Contraseña</b> <i>[BETA]</i>\n"
-            "━━━━━━━━━━━━━━━━━━\n\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
             "Paso 1 de 3 — Introduce el valor de la cookie <b>NetflixId</b> de la cuenta:\n"
             "<i>(la cadena NetflixId que empieza por ct%3D)</i>\n\n"
             "Envía /cancel en cualquier momento para abortar.",
@@ -1235,7 +1229,7 @@ async def changepw_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     _CHANGEPW_STATE[uid] = {"step": "netflix_id"}
     await update.message.reply_text(
         "🔐 <b>Cambiar Contraseña</b> <i>[BETA]</i>\n"
-        "━━━━━━━━━━━━━━━━━━\n\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
         "Paso 1 de 3 — Introduce el valor de la cookie <b>NetflixId</b> de la cuenta:\n\n"
         "Envía /cancel en cualquier momento para abortar.",
         parse_mode=ParseMode.HTML,
@@ -1298,7 +1292,7 @@ async def _handle_changepw_input(update: Update, uid: int, text: str) -> None:
         return
 
     if step == "confirm":
-        if text.strip().upper() != "SÍ" and text.strip().upper() != "SI" and text.strip().upper() != "YES":
+        if text.strip().upper() not in ("SÍ", "SI", "YES"):
             await update.message.reply_text("❌ No confirmado. Envía <b>SÍ</b> para continuar o /cancel.", parse_mode=ParseMode.HTML)
             return
 
@@ -1320,7 +1314,7 @@ async def _handle_changepw_input(update: Update, uid: int, text: str) -> None:
         if result["success"]:
             await status_msg.edit_text(
                 "✅ <b>¡Contraseña cambiada con éxito!</b>\n"
-                "━━━━━━━━━━━━━━━━━━\n\n"
+                "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
                 f"🔑 Nueva contraseña: <code>{new_pw}</code>",
                 parse_mode=ParseMode.HTML,
             )
@@ -1373,7 +1367,7 @@ def _proxy_panel_text() -> str:
     total = pm.count
     lines = [
         "🛡 <b>Gestor de Proxies</b>",
-        "━━━━━━━━━━━━━━━━━━",
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
         f"Status: {status}",
     ]
     if total:
@@ -1385,7 +1379,7 @@ def _proxy_panel_text() -> str:
         for i, s in enumerate(sources):
             short = s[:50] + "…" if len(s) > 50 else s
             lines.append(f"  <code>{i+1}. {short}</code>")
-    lines.append("━━━━━━━━━━━━━━━━━━")
+    lines.append("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
     return "\n".join(lines)
 
 def _proxy_panel_markup(pm) -> InlineKeyboardMarkup:
@@ -1855,7 +1849,6 @@ async def process_cookie_sets(update: Update, status_msg, cookie_sets: list[tupl
                 except Exception:
                     pass
 
-    # Reintentos rápidos de errores en modo masivo
     if is_bulk and error_retry:
         retry_results = await asyncio.gather(*[
             loop.run_in_executor(
@@ -1891,7 +1884,6 @@ async def process_cookie_sets(update: Update, status_msg, cookie_sets: list[tupl
     _CANCEL_SESSIONS.discard(session_id)
     _USER_SESSION.pop(uid, None)
 
-    # Filtrar duplicados
     if is_bulk and hits_list:
         _seen_keys: set[str] = set()
         _deduped: list[tuple[dict, str, str]] = []
@@ -1919,13 +1911,13 @@ async def process_cookie_sets(update: Update, status_msg, cookie_sets: list[tupl
 
         await update.message.reply_text(
             f"📊 <b>Resumen Masivo — Resultados</b>\n"
-            "━━━━━━━━━━━━━━━━━━\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
             f"  ✅ Hits (activos)     » <b>{hits}</b> (🌟 Premium: {premium_count})\n"
             f"  ⏸️ En espera          » <b>{on_hold}</b>\n"
             f"  🔓 Free (sin plan)    » <b>{frees}</b>\n"
             f"  ❌ Inválidas/Expiradas» <b>{invalids}</b>\n"
             f"  ⚠️ Errores            » <b>{errors}</b>\n"
-            "━━━━━━━━━━━━━━━━━━\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
             f"  📦 Total comprobado   » <b>{total}</b>\n"
             f"  ⏱️ Tiempo total       » <b>{time_str}</b>\n"
             f"  🚀 Velocidad media    » <b>{speed:.1f} acc/min</b>",
@@ -1963,7 +1955,6 @@ async def process_cookie_sets(update: Update, status_msg, cookie_sets: list[tupl
                 except Exception as _ze:
                     await update.message.reply_text(f"⚠️ Error al crear el ZIP: {_ze}", parse_mode=ParseMode.HTML)
 
-                # Mejor hit del lote
                 try:
                     sorted_hits = sorted(hits_list, key=lambda x: _score_account(x[0]), reverse=True)
                     best_result, best_src, _ = sorted_hits[0]
@@ -1971,7 +1962,7 @@ async def process_cookie_sets(update: Update, status_msg, cookie_sets: list[tupl
                     best_kb  = _login_keyboard(best_result)
                     full_best = (
                         "🏆 <b>Mejor Cuenta del Lote</b>\n"
-                        "━━━━━━━━━━━━━━━━━━\n" + best_txt
+                        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" + best_txt
                     )
                     await update.message.reply_text(full_best, parse_mode=ParseMode.HTML, reply_markup=best_kb)
                 except Exception:
@@ -2056,7 +2047,7 @@ def main() -> None:
         global _BOT_USERNAME
         _BOT_USERNAME = (await application.bot.get_me()).username or ""
         await application.bot.set_my_commands([
-            BotCommand("start",    "Panel de comandos interactivo"),
+            BotCommand("start",    "Panel principal"),
             BotCommand("cmds",     "Abrir Command Panel"),
             BotCommand("settings", "Configurar formato y modo de entrega"),
             BotCommand("info",     "Estadísticas en tiempo real"),
