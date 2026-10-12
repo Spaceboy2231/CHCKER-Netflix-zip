@@ -1,13 +1,11 @@
 #!/usr/bin/env python3
 """
 BILL CYPHER CHK NF — Edition 5G Turbo Definitive
-• Filtro estricto de Hits en ZIP (Cero falsos positivos o cuentas sin link)
-• Cero cruce de perfiles (100% Exact Match)
-• Enlaces oficiales de TV (/tv9) y Móvil (/unsupported) con sesión autenticada
-• Modo Mantenimiento con alerta masiva automática
+• Purga estricta de cuentas: Cero falsos positivos o cuentas sin link
+• Enlaces oficiales idénticos al bot de referencia (PC / Mobile / TV8)
+• ZIP 100% limpio (Cero "No disponible")
 • Auto-restauración en arranque desde la nube de Telegram (Anti-Wipe)
-• Reporte de fallos en tiempo real a @didierJC
-• Tipografía estilizada Sans-Bold Italic
+• Alertas automáticas de error a @didierJC
 """
 
 import os
@@ -388,20 +386,20 @@ def parse_account_card_from_text(text: str) -> dict | None:
     if not text or not _has_netflix_markers(text):
         return None
 
-    if "status: no disponible" in text.lower() and "💻 pc:" not in text.lower():
+    if "status: no disponible" in text.lower() and "pc / browser" not in text.lower():
         return None
 
     token = extract_core_netflix_id(text)
     if not token:
         return None
 
-    email_match = re.search(r'Email:\s*([^\s\n]+@[^\s\n]+)', text, re.IGNORECASE)
+    email_match = re.search(r'Email\s*(?:/\s*Account)?\s*:\s*([^\s\n]+@[^\s\n]+)', text, re.IGNORECASE)
     email = email_match.group(1).strip() if email_match else "Netflix Account"
 
-    plan_match = re.search(r'Plan:\s*([^\n]+)', text, re.IGNORECASE)
+    plan_match = re.search(r'Plan\s*(?:Type)?\s*:\s*([^\n]+)', text, re.IGNORECASE)
     plan = plan_match.group(1).strip() if plan_match else "Premium"
 
-    country_match = re.search(r'País:\s*([^\n]+)', text, re.IGNORECASE)
+    country_match = re.search(r'(?:País|Country\s*/\s*Region)\s*:\s*([^\n]+)', text, re.IGNORECASE)
     country = country_match.group(1).strip() if country_match else "Desconocido"
 
     clean_cookie = f"NetflixId={token}"
@@ -438,7 +436,7 @@ def extract_all_accounts_from_bytes(raw_bytes: bytes, filename: str = "") -> lis
                     except Exception:
                         continue
         except Exception as e:
-            logger.warning(f"Error leyendo ZIP: %s", e)
+            logger.warning(f"Error leyendo ZIP: {e}")
     else:
         text = raw_bytes.decode("utf-8", errors="replace")
         acc = parse_account_card_from_text(text)
@@ -449,7 +447,7 @@ def extract_all_accounts_from_bytes(raw_bytes: bytes, filename: str = "") -> lis
 
 
 # ===========================================================================
-# 7. GENERADOR DE TOKEN EN VIVO Y ENLACES OFICIALES (/tv9 & /unsupported)
+# 7. GENERADOR DE TOKEN EN VIVO Y ENLACES OFICIALES (FORMATO EXACTO DEL BOT)
 # ===========================================================================
 def get_live_nftoken(cookie_raw: str, core_token: str) -> dict:
     """Solicita a Netflix el token de sesión criptográfico (Bgiqv+...) en vivo."""
@@ -501,10 +499,16 @@ def extract_bgiqv_token(nft_dict: dict, fallback_token: str) -> str:
     return fallback_token
 
 def build_official_login_keyboard(raw_token: str) -> InlineKeyboardMarkup:
+    """
+    Enlaces web oficiales de acceso directo (Idénticos al bot de referencia):
+    • 💻 PC: https://netflix.com/?nftoken=...
+    • 📱 Móvil: https://netflix.com/unsupported?nftoken=...&redirect=true&referrer=oauth_2_via_browser=true
+    • 📺 TV: https://netflix.com/tv8?nftoken=...
+    """
     token = raw_token.strip()
-    pc_url = f"https://www.netflix.com/browse?nftoken={token}"
-    mobile_url = f"https://www.netflix.com/unsupported?nftoken={token}"
-    tv_url = f"https://www.netflix.com/tv9?nftoken={token}"
+    pc_url = f"https://netflix.com/?nftoken={token}"
+    mobile_url = f"https://netflix.com/unsupported?nftoken={token}&redirect=true&referrer=oauth_2_via_browser%3Dtrue"
+    tv_url = f"https://netflix.com/tv8?nftoken={token}"
 
     buttons = [
         [
@@ -924,8 +928,21 @@ def _cancel_keyboard(msg_id: int) -> InlineKeyboardMarkup:
 
 
 # ---------------------------------------------------------------------------
-# Formateadores de tarjetas de cuentas
+# Formateadores de tarjetas de resultados
 # ---------------------------------------------------------------------------
+
+def make_progress_bar(done: int, total: int, width: int = 14) -> str:
+    if total == 0:
+        return f"[{'▱' * width}] 0%"
+    filled = int(width * done / total)
+    bar = "▰" * filled + "▱" * (width - filled)
+    pct = int(100 * done / total)
+    return f"[{bar}] {pct}%"
+
+def _yes_no(val) -> str:
+    if val is None:
+        return "Desconocido"
+    return "Sí" if val else "No"
 
 def _plan_title(plan_name: str, status: str) -> str:
     p = (plan_name or "").lower()
@@ -1319,108 +1336,60 @@ async def send_hits_zip(update: Update, hits: list[tuple[dict, str, str]]) -> No
 
     def _account_file(i: int, total: int, result: dict, source: str) -> str:
         email   = result.get("email")        or f"account_{i}"
-        name    = result.get("name")         or ""
+        name    = result.get("name")         or "Account Owner"
         pwd     = result.get("password")     or ""
         phone   = result.get("phone")        or ""
         country = result.get("country")      or "Desconocido"
         plan    = result.get("plan_name")    or "Desconocido"
         quality = result.get("quality")      or "Desconocido"
         streams = result.get("max_streams")  or "?"
-        price   = result.get("price")        or "Desconocido"
         since   = result.get("member_since") or "Desconocido"
         billing = result.get("next_billing") or "Desconocido"
-        payment = result.get("payment")      or "Desconocido"
-        ct      = result.get("card_type")    or ""
-        cl4     = result.get("card_last4")   or ""
-        cexp    = result.get("card_expiry")  or ""
         profiles= ", ".join(result.get("profile_names") or [])
-        ev      = ("Sí" if result.get("email_verified") is True else "No" if result.get("email_verified") is False else "Desconocido")
-        ms      = result.get("membership_status") or ""
+        ev      = ("Yes" if result.get("email_verified") is True else "No")
+        ms      = result.get("membership_status") or "CURRENT_MEMBER"
         nf_id   = result.get("netflix_id")        or ""
         nf_sec  = result.get("secure_netflix_id") or ""
-        nf_vid  = result.get("nfvdid")            or ""
-        num_ex     = result.get("num_extra_members")  or 0
-        status     = normalize_status(result.get("status"), result)
-        is_hold    = result.get("is_on_hold", False) or (status == "on_hold")
-        free_trial = result.get("is_in_free_trial",  False)
-        prof_count = result.get("profile_count")     or len(result.get("profile_names") or []) or 0
-        flag       = _flag(country)
-        nft        = result.get("nftoken")           or {}
-        issues     = result.get("account_issues")    or []
+        nft     = result.get("nftoken")           or {}
 
-        W = 66
-        sep  = "═" * W
-        thin = "─" * W
+        # Enlace oficial puro con Bgiqv...
+        real_t = extract_bgiqv_token(nft, nf_id)
+        pc_lnk = f"https://netflix.com/?nftoken={real_t}"
+        mob_lnk = f"https://netflix.com/unsupported?nftoken={real_t}&redirect=true&referrer=oauth_2_via_browser%3Dtrue"
+        tv_lnk = f"https://netflix.com/tv8?nftoken={real_t}"
 
-        def box_line(label: str, value: str) -> str:
-            return f"  {label:<20} {value}"
-
+        sep = "=" * 50
         lines = [
             sep,
-            f"  RESULTADO NETFLIX  #{i}/{total}   —   {plan.upper()}",
+            "NETFLIX ACCOUNT SUBSCRIPTION DETAILS",
             sep,
-            "",
-            f"  {'DETALLES DE LA CUENTA':^{W-2}}",
-            thin,
+            f"[+] Email / Account : {email}",
+            f"[+] Account Owner   : {name}",
+            f"[+] Country / Region: {country}",
+            f"[+] Plan Type       : {plan}",
+            f"[+] Video Quality   : {quality}",
+            f"[+] Max Streams     : {streams} Screen(s)",
+            f"[+] Membership Status: {ms}",
+            f"[+] Hold Status     : No",
+            f"[+] Email Verified  : {ev}",
+            f"[+] Member Since    : {since}",
+            f"[+] Next Billing Date: {billing}",
+            f"[+] Profiles        : {profiles or '1'}",
+            sep,
+            "LOGIN NFTOKEN LINKS",
+            sep,
+            f"[+] PC / Browser : {pc_lnk}",
+            f"[+] Mobile Web   : {mob_lnk}",
+            f"[+] TV Code      : {tv_lnk}",
+            sep,
+            "COOKIES (Netscape HTTP Cookie File)",
+            sep,
         ]
-        lines.append(box_line("Email:", email))
-        if pwd:
-            lines.append(box_line("Contraseña:", pwd))
-        if name:
-            lines.append(box_line("Name:", name))
-        if phone:
-            lines.append(box_line("Phone:", phone))
-        lines.append(box_line("País:", f"{country} {flag}".strip()))
-        lines.append(box_line("Status:", "En espera ⏸" if status == "on_hold" else "Active ✅"))
-        lines += ["", f"  {'SUBSCRIPTION':^{W-2}}", thin]
-        lines.append(box_line("Plan:", plan))
-        lines.append(box_line("Calidad:", f"{quality}  ·  {streams} screen(s)"))
-        lines.append(box_line("Precio:", price))
-        lines.append(box_line("Miembro desde:", since))
-        lines.append(box_line("Próxima facturación:", billing))
-        lines.append(box_line("Pago:", payment))
-        if ct:
-            card_str = ct
-            if cl4:
-                card_str += f" ···· {cl4}"
-            if cexp:
-                card_str += f"  (exp {cexp})"
-            lines.append(box_line("Card:", card_str))
-        lines.append(box_line("Hold Status:", "Sí ⏸" if is_hold else "No"))
-        lines.append(box_line("Prueba gratuita:", "Sí" if free_trial else "No"))
-        lines.append(box_line("Miembro extra:", f"Sí — {num_ex} slot(s)" if num_ex > 0 else "No"))
-        lines.append(box_line("Email Verified:", ev))
-        lines.append(box_line("Membership:", ms))
-        lines.append(box_line("Profiles:", str(prof_count) if prof_count else "Desconocido"))
-        if profiles:
-            lines.append(box_line("Profile Names:", profiles))
-        lines.append(box_line("Origen:", source))
-        if issues:
-            lines += ["", f"  {'ACCOUNT ALERTS':^{W-2}}", thin]
-            for iss in issues:
-                lines.append(f"  ⚠  {iss}")
-
-        lines += ["", f"  {'ENLACES DE INICIO DE SESIÓN':^{W-2}}", thin]
-        real_t = extract_bgiqv_token(nft, nf_id)
-        pc_lnk = f"https://www.netflix.com/browse?nftoken={real_t}"
-        mob_lnk = f"https://www.netflix.com/unsupported?nftoken={real_t}"
-        tv_lnk = f"https://www.netflix.com/tv9?nftoken={real_t}"
-        lines.append(box_line("💻 PC:", pc_lnk))
-        lines.append(box_line("📱 Móvil:", mob_lnk))
-        lines.append(box_line("📺 TV:", tv_lnk))
-        if nft.get("expires"):
-            lines.append(box_line("Expires:", nft["expires"]))
-
-        lines += ["", f"  {'COOKIES  (Netscape HTTP Cookie File)':^{W-2}}", thin]
         if nf_id:
-            lines.append(f"  .netflix.com\tTRUE\t/\tTRUE\t{exp}\tNetflixId\t{nf_id}")
+            lines.append(f".netflix.com\tTRUE\t/\tTRUE\t{exp}\tNetflixId\t{nf_id}")
         if nf_sec:
-            lines.append(f"  .netflix.com\tTRUE\t/\tTRUE\t{exp}\tSecureNetflixId\t{nf_sec}")
-        if nf_vid:
-            lines.append(f"  .netflix.com\tTRUE\t/\tFALSE\t{exp}\tnfvdid\t{nf_vid}")
-
-        wm = f"@{_BOT_USERNAME}" if _BOT_USERNAME else "Bill Cypher Netflix Checker"
-        lines += ["", thin, f"  {'Comprobado por ' + wm:^{W-2}}", sep, ""]
+            lines.append(f".netflix.com\tTRUE\t/\tTRUE\t{exp}\tSecureNetflixId\t{nf_sec}")
+        lines.append(sep)
         return "\n".join(lines)
 
     buf = io.BytesIO()
@@ -1428,28 +1397,20 @@ async def send_hits_zip(update: Update, hits: list[tuple[dict, str, str]]) -> No
 
     try:
         with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-            on_hold_count = sum(1 for r, _, _ in deduped if normalize_status(r.get("status"), r) == "on_hold")
-            W = 52
             summary_lines = [
-                "╔" + "═" * W + "╗",
-                f"║{'  RESULTADOS NETFLIX  —  ' + today:^{W}}║",
-                "╠" + "═" * W + "╣",
-                f"║{'':^{W}}║",
-                f"║  Total Resultados     :  {total_hits:<{W-20}}║",
-                f"║  Premium Resultados   :  {len(premium):<{W-20}}║",
-                f"║  Normal Resultados    :  {len(normal):<{W-20}}║",
-                f"║  En espera (incl.):  {on_hold_count:<{W-20}}║",
-                f"║{'':^{W}}║",
+                "==================================================",
+                f"      NETFLIX HITS SUMMARY — {today}",
+                "==================================================",
+                f"Total Cuentas Válidas : {total_hits}",
+                f"⭐ Premium Resultados : {len(premium)}",
+                f"✅ Normal Resultados  : {len(normal)}",
             ]
             if dupes_removed > 0:
-                summary_lines.append(f"║  Duplicados filtrados :  {dupes_removed:<{W-20}}║")
+                summary_lines.append(f"♻️ Duplicados Purgan  : {dupes_removed}")
             summary_lines += [
-                "╚" + "═" * W + "╝",
-                "",
-                "Cada archivo de cuenta contiene:",
-                "  • Detalles completos de la cuenta",
-                "  • Cookie (formato Netscape)",
-                "  • Enlaces directos PC / Móvil / TV",
+                "==================================================",
+                "Cada archivo contiene enlaces activos y sesiones listas.",
+                "==================================================",
             ]
             zf.writestr("_SUMMARY.txt", _safe_encode("\n".join(summary_lines)))
 
@@ -1457,9 +1418,8 @@ async def send_hits_zip(update: Update, hits: list[tuple[dict, str, str]]) -> No
                 email   = result.get("email") or f"account_{i}"
                 safe    = re.sub(r'[^\w@._-]', '_', str(email))[:35]
                 plan    = re.sub(r'[^\w ]', '', str(result.get("plan_name") or "Premium"))[:20].strip()
-                c_flag  = _flag(result.get("country") or "")
-                flag_pre = f"{c_flag}_" if c_flag else ""
-                fname   = f"Premium Resultados/{i:02d}_{flag_pre}{safe}_{plan}.txt"
+                c_code  = _flag(result.get("country") or "") or "XX"
+                fname   = f"Premium Resultados/{i:02d}_{c_code}_{safe}_{plan}.txt"
                 content_bytes = _safe_encode(_account_file(i, len(premium), result, src))
                 zf.writestr(fname, content_bytes)
 
@@ -1467,9 +1427,8 @@ async def send_hits_zip(update: Update, hits: list[tuple[dict, str, str]]) -> No
                 email   = result.get("email") or f"account_{i}"
                 safe    = re.sub(r'[^\w@._-]', '_', str(email))[:35]
                 plan    = re.sub(r'[^\w ]', '', str(result.get("plan_name") or "Hit"))[:20].strip()
-                c_flag  = _flag(result.get("country") or "")
-                flag_pre = f"{c_flag}_" if c_flag else ""
-                fname   = f"Normal Resultados/{i:02d}_{flag_pre}{safe}_{plan}.txt"
+                c_code  = _flag(result.get("country") or "") or "XX"
+                fname   = f"Normal Resultados/{i:02d}_{c_code}_{safe}_{plan}.txt"
                 content_bytes = _safe_encode(_account_file(i, len(normal), result, src))
                 zf.writestr(fname, content_bytes)
 
@@ -1594,7 +1553,7 @@ async def process_cookie_sets(update: Update, status_msg, cookie_sets: list[tupl
             result["_source"] = src
 
             if not is_bulk:
-                # Verificación estricta individual: requiere token válido
+                # Verificación estricta individual: requiere token válido en vivo
                 tok = result.get("netflix_id") or extract_core_netflix_id(cs)
                 nft_res = get_live_nftoken(cs, tok)
                 if nft_res and nft_res.get("success"):
@@ -1609,7 +1568,7 @@ async def process_cookie_sets(update: Update, status_msg, cookie_sets: list[tupl
                         pass
                 else:
                     invalids += 1
-                    txt = format_result({"status": "invalid", "message": "Cookie caída / sin enlaces válidos."}, idx, total, source=src, user_id=uid)
+                    txt = format_result({"status": "invalid", "message": "Cookie caída / sin suscripción activa."}, idx, total, source=src, user_id=uid)
                     await update.message.reply_text(txt, parse_mode=ParseMode.HTML)
 
         if is_bulk:
@@ -1643,9 +1602,9 @@ async def process_cookie_sets(update: Update, status_msg, cookie_sets: list[tupl
     if is_bulk and raw_hits_list:
         try:
             await status_msg.edit_text(
-                "⚡ <b>" + to_sans_bold_italic("BILL CYPHER | VALIDANDO ENLACES") + "</b>\n"
+                "⚡ <b>" + to_sans_bold_italic("BILL CYPHER | PURGANDO CUENTAS") + "</b>\n"
                 "━━━━━━━━━━━━━━━━━━━━━━\n"
-                f"🔍 <i>Validando que cada uno de los {len(raw_hits_list)} hits tenga enlaces activos...</i>",
+                f"🔍 <i>Validando sesión real de los {len(raw_hits_list)} hits detectados...</i>",
                 parse_mode=ParseMode.HTML
             )
         except Exception:
@@ -1655,7 +1614,12 @@ async def process_cookie_sets(update: Update, status_msg, cookie_sets: list[tupl
             res, src, raw = item
             tok = res.get("netflix_id") or extract_core_netflix_id(raw)
             token_data = await loop.run_in_executor(_EXECUTOR, lambda: get_live_nftoken(raw, tok))
+            
+            # FILTRO DEFINITIVO: Solo pasa si genera el token Bgiqv y la membresía no está vencida
             if token_data and token_data.get("success"):
+                ms = str(res.get("membership_status") or "").upper()
+                if "FORMER" in ms or "NEVER" in ms:
+                    return None
                 res["nftoken"] = token_data
                 return (res, src, raw)
             return None
@@ -1697,7 +1661,7 @@ async def process_cookie_sets(update: Update, status_msg, cookie_sets: list[tupl
             f"📊 <b>Resumen Masivo — Resultados</b>\n"
             "━━━━━━━━━━━━━━━━━━━━━━\n"
             f"  ✅ Hits (Live con Enlaces) » <b>{hits}</b> (🌟 Premium: {premium_count})\n"
-            f"  ❌ Muertas / Sin enlace    » <b>{invalids}</b>\n"
+            f"  ❌ Muertas / Expiradas     » <b>{invalids}</b>\n"
             f"  ⏸️ En espera (On Hold)     » <b>{on_hold}</b>\n"
             f"  🔓 Free (Sin plan)         » <b>{frees}</b>\n"
             "━━━━━━━━━━━━━━━━━━━━━━\n"
@@ -1960,6 +1924,7 @@ async def panel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                     lambda: get_live_nftoken(cookie_str, tok)
                 )
 
+                # Comprobación de suscripción activa y token generado
                 if token_data and token_data.get("success"):
                     chosen_acc = norm_cand
                     nft_res = token_data
@@ -2402,7 +2367,6 @@ async def send_admin_error_report(bot, title: str, details: str, update: Update 
         logger.error(f"Fallo enviando reporte de error al admin: {exc}")
 
 async def testerror_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """[Admin] Simula un error para comprobar la llegada de la alerta a tu chat."""
     uid = update.effective_user.id if update.effective_user else 0
     if not is_admin(uid):
         return
@@ -3120,16 +3084,16 @@ def main() -> None:
     app.add_handler(CommandHandler("basic",         basic_command))
     app.add_handler(CommandHandler("settings",      settings_command))
     app.add_handler(CommandHandler("changepw",      changepw_command))
-    app.add_handler(CommandHandler("cancel",        cancel_command))
-    app.add_handler(CommandHandler("proxy",         proxy_command))
+    app.add_handler(CommandHandler("cancel",     cancel_command))
+    app.add_handler(CommandHandler("proxy",      proxy_command))
     app.add_handler(CommandHandler(["broadcast", "notif"], broadcast_command))
-    app.add_handler(CommandHandler("users",         users_command))
-    app.add_handler(CommandHandler("setbanner",     setbanner_command))
-    app.add_handler(CommandHandler("addvault",      addvault_command))
-    app.add_handler(CommandHandler("clearvault",    clearvault_command))
-    app.add_handler(CommandHandler("setcredits",    setcredits_command))
-    app.add_handler(CommandHandler("backup",        backup_command))
-    app.add_handler(CommandHandler("restore",       restore_command))
+    app.add_handler(CommandHandler("users",      users_command))
+    app.add_handler(CommandHandler("setbanner",  setbanner_command))
+    app.add_handler(CommandHandler("addvault",   addvault_command))
+    app.add_handler(CommandHandler("clearvault", clearvault_command))
+    app.add_handler(CommandHandler("setcredits", setcredits_command))
+    app.add_handler(CommandHandler("backup",     backup_command))
+    app.add_handler(CommandHandler("restore",    restore_command))
     app.add_handler(CommandHandler(["mantenimiento", "maintenance"], maintenance_command))
     app.add_handler(CommandHandler("testerror",     testerror_command))
 
@@ -3169,7 +3133,7 @@ def main() -> None:
                     _save_credits(d["credits"])
                 if d.get("users") and isinstance(d["users"], list):
                     _USERS_FILE.write_text("\n".join(d["users"]) + "\n", encoding="utf-8")
-                logger.info("Base de datos sincronizada automáticamente desde la nube de Telegram.")
+                logger.info("Base de datos restaurada automáticamente desde la nube de Telegram.")
         except Exception as e:
             logger.debug(f"Auto-restore on init: {e}")
 
