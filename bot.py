@@ -2,10 +2,11 @@
 """
 BILL CYPHER CHK NF — Edition 5G Turbo Definitive
 • Purga estricta de cuentas: Cero falsos positivos o cuentas sin link
-• Enlaces oficiales idénticos al bot de referencia (PC / Mobile / TV8)
-• ZIP 100% limpio (Cero "No disponible")
-• Auto-restauración en arranque desde la nube de Telegram (Anti-Wipe)
-• Alertas automáticas de error a @didierJC
+• Cero cruce de perfiles (Sesiones Thread-Local 100% aisladas)
+• Enlaces oficiales con parámetros web (PC / Mobile / TV8)
+• ZIP 100% limpio sin emojis internos
+• Marca de agua @didierJC en cada resultado
+• Nueva función interactiva de carga y velocidad en tiempo real
 """
 
 import os
@@ -26,6 +27,7 @@ from datetime import date
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 
+import requests
 from telegram import (
     Update,
     Document,
@@ -78,6 +80,7 @@ PORT = int(os.environ.get("PORT", 5000))
 OWNER_ID: int = 5320997298
 OWNER_USER: str = "didierJC"
 OWNER_URL: str = f"https://t.me/{OWNER_USER}"
+WATERMARK_TEXT: str = "👑 Checked by: @didierJC | BILL CYPHER CHK NF"
 
 def is_admin(uid: int) -> bool:
     return bool(uid and uid == OWNER_ID)
@@ -86,7 +89,37 @@ _ASYNC_VAULT_LOCK = asyncio.Lock()
 
 
 # ===========================================================================
-# 2. TRANSFORMADOR DE TIPOGRAFÍA (Sans-Serif Bold Italic)
+# 2. AISLAMIENTO TOTAL THREAD-LOCAL (ANTI-CRUCE DE PERFILES)
+# ===========================================================================
+class ThreadLocalSessionProxy:
+    """Garantiza que ningún hilo sobreescriba las cookies de otro hilo."""
+    def __init__(self):
+        self._local = threading.local()
+
+    @property
+    def session(self):
+        if not hasattr(self._local, "sess"):
+            self._local.sess = requests.Session()
+        return self._local.sess
+
+    def __getattr__(self, name):
+        return getattr(self.session, name)
+
+    def __setattr__(self, name, value):
+        if name == "_local":
+            super().__setattr__(name, value)
+        else:
+            setattr(self.session, name, value)
+
+# Inyecta aislamiento de sesión dentro del módulo checker
+for _attr in list(dir(checker)):
+    _obj = getattr(checker, _attr, None)
+    if isinstance(_obj, requests.Session):
+        setattr(checker, _attr, ThreadLocalSessionProxy())
+
+
+# ===========================================================================
+# 3. TRANSFORMADOR DE TIPOGRAFÍA (Sans-Serif Bold Italic)
 # ===========================================================================
 def to_sans_bold_italic(text: str) -> str:
     res = []
@@ -106,7 +139,7 @@ to_bold_italic = to_sans_bold_italic
 
 
 # ===========================================================================
-# 3. HELPER DE BANDERAS Y PAÍSES
+# 4. HELPER DE BANDERAS Y PAÍSES
 # ===========================================================================
 def _flag(country: str) -> str:
     if not country:
@@ -152,7 +185,7 @@ def _country_display(country: str) -> str:
 
 
 # ===========================================================================
-# 4. MODO MANTENIMIENTO
+# 5. MODO MANTENIMIENTO
 # ===========================================================================
 _MAINT_FILE = Path("maintenance.json")
 
@@ -180,7 +213,7 @@ MAINTENANCE_TEXT = (
 
 
 # ===========================================================================
-# 5. SISTEMA DE CRÉDITOS (15 DIARIOS / REEMBOLSO AUTOMÁTICO)
+# 6. SISTEMA DE CRÉDITOS (15 DIARIOS / REEMBOLSO AUTOMÁTICO)
 # ===========================================================================
 DAILY_FREE_CREDITS: int = 15
 _CREDITS_FILE = Path("credits.json")
@@ -305,7 +338,7 @@ def out_of_credits_markup() -> InlineKeyboardMarkup:
 
 
 # ===========================================================================
-# 6. BAÚL ESTRUCTURADO (DEDUPLICACIÓN TOTAL Y NORMALIZACIÓN)
+# 7. BAÚL ESTRUCTURADO (DEDUPLICACIÓN TOTAL Y NORMALIZACIÓN)
 # ===========================================================================
 _VAULT_FILE = Path("cookie_vault.json")
 _NETFLIX_MARKERS = ("NetflixId", "SecureNetflixId", "nfvdid", "netflix.com")
@@ -436,7 +469,7 @@ def extract_all_accounts_from_bytes(raw_bytes: bytes, filename: str = "") -> lis
                     except Exception:
                         continue
         except Exception as e:
-            logger.warning(f"Error leyendo ZIP: {e}")
+            logger.warning(f"Error leyendo ZIP: %s", e)
     else:
         text = raw_bytes.decode("utf-8", errors="replace")
         acc = parse_account_card_from_text(text)
@@ -447,7 +480,7 @@ def extract_all_accounts_from_bytes(raw_bytes: bytes, filename: str = "") -> lis
 
 
 # ===========================================================================
-# 7. GENERADOR DE TOKEN EN VIVO Y ENLACES OFICIALES (FORMATO EXACTO DEL BOT)
+# 8. TOKEN EN VIVO Y ENLACES OFICIALES (FORMATO OFICIAL COMPLETO)
 # ===========================================================================
 def get_live_nftoken(cookie_raw: str, core_token: str) -> dict:
     """Solicita a Netflix el token de sesión criptográfico (Bgiqv+...) en vivo."""
@@ -500,7 +533,7 @@ def extract_bgiqv_token(nft_dict: dict, fallback_token: str) -> str:
 
 def build_official_login_keyboard(raw_token: str) -> InlineKeyboardMarkup:
     """
-    Enlaces web oficiales de acceso directo (Idénticos al bot de referencia):
+    Enlaces web oficiales de acceso directo:
     • 💻 PC: https://netflix.com/?nftoken=...
     • 📱 Móvil: https://netflix.com/unsupported?nftoken=...&redirect=true&referrer=oauth_2_via_browser=true
     • 📺 TV: https://netflix.com/tv8?nftoken=...
@@ -525,7 +558,7 @@ def build_official_login_keyboard(raw_token: str) -> InlineKeyboardMarkup:
 
 
 # ===========================================================================
-# 8. BANNER MULTIMEDIA
+# 9. BANNER MULTIMEDIA
 # ===========================================================================
 _BANNER_FILE = Path("banner_id.txt")
 BANNER_MEDIA = "banner.mp4"
@@ -539,20 +572,13 @@ def _get_banner_source() -> str:
 
 
 # ===========================================================================
-# 9. CHECKER Y FORMATO DE ESTADOS
+# 10. CHECKER AISLADO
 # ===========================================================================
 def safe_check_cookie_clean(cookie_str: str, **kwargs) -> dict:
     try:
-        import requests
-        for name, obj in list(checker.__dict__.items()):
-            if isinstance(obj, requests.Session) or hasattr(obj, "cookies"):
-                try:
-                    obj.cookies.clear()
-                except Exception:
-                    pass
-    except Exception:
-        pass
-    return check_cookie(cookie_str, **kwargs)
+        return check_cookie(cookie_str, **kwargs)
+    except Exception as e:
+        return {"status": "invalid", "message": str(e)}
 
 def normalize_status(raw_status: str, result_dict: dict = None) -> str:
     st = str(raw_status or "").lower().strip()
@@ -611,7 +637,6 @@ _GEN_LINK_STORE: dict[str, dict] = {}
 # ---------------------------------------------------------------------------
 # Validaciones de cookies
 # ---------------------------------------------------------------------------
-
 _OTHER_SERVICES: dict[str, str] = {
     "accounts.google.com":  "Google",
     "google.com":           "Google",
@@ -682,7 +707,6 @@ def _validate_cookie_text(text: str) -> tuple[bool, str]:
 # ---------------------------------------------------------------------------
 # Preferencias de usuario
 # ---------------------------------------------------------------------------
-
 def _get_mode(user_id: int) -> str:
     return _USER_MODE.get(user_id, "basic")
 
@@ -702,7 +726,6 @@ def _set_delivery(user_id: int, mode: str) -> None:
 # ---------------------------------------------------------------------------
 # Panel visual principal (Tipografía Sans-Bold Italic)
 # ---------------------------------------------------------------------------
-
 def _main_panel_text(uid: int) -> str:
     mode_lbl = "Full" if _get_mode(uid) == "full" else "Básico"
     dlv_lbl  = "Cards 💬" if _get_delivery(uid) == "cards" else "ZIP 📦"
@@ -930,7 +953,6 @@ def _cancel_keyboard(msg_id: int) -> InlineKeyboardMarkup:
 # ---------------------------------------------------------------------------
 # Formateadores de tarjetas de resultados
 # ---------------------------------------------------------------------------
-
 def make_progress_bar(done: int, total: int, width: int = 14) -> str:
     if total == 0:
         return f"[{'▱' * width}] 0%"
@@ -1063,6 +1085,7 @@ def format_result_basic(result: dict, index: int = 1, total: int = 1, source: st
             lines.append(f"  🔴 {issue}")
         lines.append("")
 
+    lines.append(f"<i>{WATERMARK_TEXT}</i>")
     lines.append("━━━━━━━━━━━━━━━━━━━━━━")
     return "\n".join(lines)
 
@@ -1155,6 +1178,8 @@ def format_result_full(result: dict, index: int = 1, total: int = 1, source: str
         lines.append("🍪 <b>Cookie:</b>")
         lines.append(f"<code>NetflixId={nf_id}</code>")
 
+    lines.append("")
+    lines.append(f"<i>{WATERMARK_TEXT}</i>")
     lines.append("━━━━━━━━━━━━━━━━━━━━━━")
     return "\n".join(lines)
 
@@ -1181,6 +1206,7 @@ def format_error_card(result: dict, index: int = 1, total: int = 1, source: str 
     if nf_id:
         snippet = nf_id[:35] + "…" if len(nf_id) > 35 else nf_id
         lines.append(f"🍪 Cookie: <code>{snippet}</code>")
+    lines.append(f"<i>{WATERMARK_TEXT}</i>")
     lines.append("━━━━━━━━━━━━━━━━━━━━━━")
     return "\n".join(lines)
 
@@ -1201,7 +1227,6 @@ def format_result(result: dict, index: int = 1, total: int = 1, source: str = ""
 # ---------------------------------------------------------------------------
 # Separador de cookies y lector ZIP
 # ---------------------------------------------------------------------------
-
 _HIT_BLOCK_COOKIE_RE = re.compile(r'[•\-*]?\s*[Cc]ookies?\s*[:\|]+\s*\S{20,}')
 _HIT_SEPARATOR_RE  = re.compile(r'(?m)^[\u2500\u2550\-=─═]{8,}\s*$')
 
@@ -1309,9 +1334,8 @@ def _score_account(result: dict) -> tuple:
 
 
 # ---------------------------------------------------------------------------
-# Generador y empaquetador ZIP de hits (Con Validación Estricta)
+# Generador y empaquetador ZIP de hits (Limpio y con formato oficial)
 # ---------------------------------------------------------------------------
-
 async def send_hits_zip(update: Update, hits: list[tuple[dict, str, str]]) -> None:
     today = date.today().isoformat()
     exp = "9999999999"
@@ -1337,8 +1361,6 @@ async def send_hits_zip(update: Update, hits: list[tuple[dict, str, str]]) -> No
     def _account_file(i: int, total: int, result: dict, source: str) -> str:
         email   = result.get("email")        or f"account_{i}"
         name    = result.get("name")         or "Account Owner"
-        pwd     = result.get("password")     or ""
-        phone   = result.get("phone")        or ""
         country = result.get("country")      or "Desconocido"
         plan    = result.get("plan_name")    or "Desconocido"
         quality = result.get("quality")      or "Desconocido"
@@ -1352,7 +1374,7 @@ async def send_hits_zip(update: Update, hits: list[tuple[dict, str, str]]) -> No
         nf_sec  = result.get("secure_netflix_id") or ""
         nft     = result.get("nftoken")           or {}
 
-        # Enlace oficial puro con Bgiqv...
+        # Enlace oficial con sesión activa idéntico al bot de referencia
         real_t = extract_bgiqv_token(nft, nf_id)
         pc_lnk = f"https://netflix.com/?nftoken={real_t}"
         mob_lnk = f"https://netflix.com/unsupported?nftoken={real_t}&redirect=true&referrer=oauth_2_via_browser%3Dtrue"
@@ -1390,6 +1412,8 @@ async def send_hits_zip(update: Update, hits: list[tuple[dict, str, str]]) -> No
         if nf_sec:
             lines.append(f".netflix.com\tTRUE\t/\tTRUE\t{exp}\tSecureNetflixId\t{nf_sec}")
         lines.append(sep)
+        lines.append(f"Checked by {WATERMARK_TEXT}")
+        lines.append(sep)
         return "\n".join(lines)
 
     buf = io.BytesIO()
@@ -1409,7 +1433,7 @@ async def send_hits_zip(update: Update, hits: list[tuple[dict, str, str]]) -> No
                 summary_lines.append(f"♻️ Duplicados Purgan  : {dupes_removed}")
             summary_lines += [
                 "==================================================",
-                "Cada archivo contiene enlaces activos y sesiones listas.",
+                f"Checked by {WATERMARK_TEXT}",
                 "==================================================",
             ]
             zf.writestr("_SUMMARY.txt", _safe_encode("\n".join(summary_lines)))
@@ -1465,9 +1489,8 @@ async def send_hits_zip(update: Update, hits: list[tuple[dict, str, str]]) -> No
 
 
 # ---------------------------------------------------------------------------
-# Procesamiento central 5G de verificación masiva
+# Procesamiento 5G con Función Dinámica de Carga en Tiempo Real
 # ---------------------------------------------------------------------------
-
 async def process_cookies(update: Update, status_msg, cookie_text: str, source: str = "") -> None:
     sets = split_cookies_from_text(cookie_text)
     if not sets:
@@ -1514,6 +1537,10 @@ async def process_cookie_sets(update: Update, status_msg, cookie_sets: list[tupl
     if uid:
         _USER_SESSION[uid] = session_id
 
+    # Símbolos de animación de carga
+    spinner_frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+    frame_idx = 0
+
     for batch_start in range(0, total, BULK_CONCURRENCY):
         if session_id in _CANCEL_SESSIONS:
             _CANCEL_SESSIONS.discard(session_id)
@@ -1556,7 +1583,9 @@ async def process_cookie_sets(update: Update, status_msg, cookie_sets: list[tupl
                 # Verificación estricta individual: requiere token válido en vivo
                 tok = result.get("netflix_id") or extract_core_netflix_id(cs)
                 nft_res = get_live_nftoken(cs, tok)
-                if nft_res and nft_res.get("success"):
+                ms = str(result.get("membership_status") or "").upper()
+
+                if nft_res and nft_res.get("success") and "FORMER" not in ms and "NEVER" not in ms and not result.get("is_on_hold"):
                     hits += 1
                     result["nftoken"] = nft_res
                     real_tok = extract_bgiqv_token(nft_res, tok)
@@ -1568,27 +1597,38 @@ async def process_cookie_sets(update: Update, status_msg, cookie_sets: list[tupl
                         pass
                 else:
                     invalids += 1
-                    txt = format_result({"status": "invalid", "message": "Cookie caída / sin suscripción activa."}, idx, total, source=src, user_id=uid)
+                    txt = format_result({"status": "invalid", "message": "Cookie expirada / suscripción cancelada."}, idx, total, source=src, user_id=uid)
                     await update.message.reply_text(txt, parse_mode=ParseMode.HTML)
 
+        # Función de Carga en Tiempo Real (Live 5G Dashboard)
         if is_bulk:
             now_time = time.monotonic()
             done_so_far = min(batch_start + len(batch), total)
-            if (now_time - last_edit_time >= 3.5) or (done_so_far == total):
+            if (now_time - last_edit_time >= 3.0) or (done_so_far == total):
                 last_edit_time = now_time
                 elapsed = now_time - t_start
-                speed = done_so_far / elapsed * 60 if elapsed > 1 and done_so_far > 0 else 0
+                speed = done_so_far / elapsed if elapsed > 0 else 0
+                frame = spinner_frames[frame_idx % len(spinner_frames)]
+                frame_idx += 1
                 temp_hits = len(raw_hits_list)
+                pct = int(100 * done_so_far / total)
+
+                loading_text = (
+                    f"⚡ <b>" + to_sans_bold_italic("BILL CYPHER | CHECKER 5G") + f"</b> {frame}\n"
+                    "━━━━━━━━━━━━━━━━━━━━━━\n"
+                    f"📊 <b>Progreso:</b> {make_progress_bar(done_so_far, total)} {pct}%\n"
+                    f"🔄 <b>Procesando:</b> <code>{done_so_far} / {total}</code> cuentas\n"
+                    f"🚀 <b>Velocidad:</b> <code>{speed:.2f} cuentas/seg</code>\n\n"
+                    f"● 🌟 <b>Hits Detectados:</b> <code>{temp_hits}</code>\n"
+                    f"● ❌ <b>Inválidas:</b> <code>{invalids}</code>\n"
+                    f"● ⏸️ <b>En espera:</b> <code>{on_hold}</code>\n"
+                    f"● 🔓 <b>Free (Sin plan):</b> <code>{frees}</code>\n"
+                    "━━━━━━━━━━━━━━━━━━━━━━\n"
+                    f"⏳ <i>{WATERMARK_TEXT}</i>"
+                )
                 try:
                     await status_msg.edit_text(
-                        "⚡ <b>" + to_sans_bold_italic("BILL CYPHER | VERIFICANDO 5G") + "</b>\n"
-                        "━━━━━━━━━━━━━━━━━━━━━━\n"
-                        f"📊 <b>Progreso:</b> {make_progress_bar(done_so_far, total)} {done_so_far}/{total}\n"
-                        f"🚀 <b>Velocidad:</b> {speed:.1f} acc/min\n\n"
-                        f"● <b>Hits Detectados:</b> {temp_hits}  ·  <b>Inválidas:</b> {invalids}\n"
-                        f"● <b>En espera:</b> {on_hold}  ·  <b>Free:</b> {frees}\n"
-                        "━━━━━━━━━━━━━━━━━━━━━━\n"
-                        "⏳ <i>Procesando cuentas a máxima velocidad 5G...</i>",
+                        loading_text,
                         parse_mode=ParseMode.HTML,
                         reply_markup=_cancel_keyboard(session_id),
                     )
@@ -1596,15 +1636,15 @@ async def process_cookie_sets(update: Update, status_msg, cookie_sets: list[tupl
                     pass
 
     # =======================================================================
-    # FILTRO ESTRICTO DE HITS: Cero falsos positivos o cuentas sin enlace
+    # PURGA ESTRICTA: Cero falsos positivos o cuentas sin enlace
     # =======================================================================
     verified_hits_list = []
     if is_bulk and raw_hits_list:
         try:
             await status_msg.edit_text(
-                "⚡ <b>" + to_sans_bold_italic("BILL CYPHER | PURGANDO CUENTAS") + "</b>\n"
+                "⚡ <b>" + to_sans_bold_italic("BILL CYPHER | PURGANDO CUENTAS") + "</b> 🔄\n"
                 "━━━━━━━━━━━━━━━━━━━━━━\n"
-                f"🔍 <i>Validando sesión real de los {len(raw_hits_list)} hits detectados...</i>",
+                f"🔍 <i>Validando que cada uno de los {len(raw_hits_list)} hits tenga membresía y enlaces activos...</i>",
                 parse_mode=ParseMode.HTML
             )
         except Exception:
@@ -1614,11 +1654,11 @@ async def process_cookie_sets(update: Update, status_msg, cookie_sets: list[tupl
             res, src, raw = item
             tok = res.get("netflix_id") or extract_core_netflix_id(raw)
             token_data = await loop.run_in_executor(_EXECUTOR, lambda: get_live_nftoken(raw, tok))
-            
-            # FILTRO DEFINITIVO: Solo pasa si genera el token Bgiqv y la membresía no está vencida
+
+            # Solo sobrevive si genera token Bgiqv y la cuenta tiene membresía activa al día
             if token_data and token_data.get("success"):
                 ms = str(res.get("membership_status") or "").upper()
-                if "FORMER" in ms or "NEVER" in ms:
+                if "FORMER" in ms or "NEVER" in ms or res.get("is_on_hold"):
                     return None
                 res["nftoken"] = token_data
                 return (res, src, raw)
@@ -1635,7 +1675,7 @@ async def process_cookie_sets(update: Update, status_msg, cookie_sets: list[tupl
     on_hold = sum(1 for r, _, _ in verified_hits_list if normalize_status(r.get("status"), r) == "on_hold")
 
     elapsed = time.monotonic() - t_start
-    speed   = total / elapsed * 60 if elapsed > 0 else 0
+    final_speed = total / elapsed if elapsed > 0 else 0
     mins, secs = divmod(int(elapsed), 60)
     time_str = f"{mins}m {secs}s" if mins else f"{secs}s"
 
@@ -1644,12 +1684,14 @@ async def process_cookie_sets(update: Update, status_msg, cookie_sets: list[tupl
 
     if is_bulk:
         premium_count = sum(1 for r, _, _ in verified_hits_list if "premium" in (r.get("plan_name") or "").lower())
+        standard_count = sum(1 for r, _, _ in verified_hits_list if "standard" in (r.get("plan_name") or "").lower())
+        basic_count = sum(1 for r, _, _ in verified_hits_list if "basic" in (r.get("plan_name") or "").lower() or "base" in (r.get("plan_name") or "").lower())
+
         try:
             await status_msg.edit_text(
-                "⚡ <b>" + to_sans_bold_italic("BILL CYPHER | COMPLETADO 5G") + "</b>\n"
+                "⚡ <b>" + to_sans_bold_italic("PROCESO FINALIZADO") + "</b> ✅\n"
                 "━━━━━━━━━━━━━━━━━━━━━━\n"
-                f"✅ <i>Verificación masiva completada con éxito</i>\n"
-                f"⏱️ <b>Tiempo:</b> {time_str}  ·  🚀 <b>Velocidad:</b> {speed:.1f} acc/min\n"
+                f"⏱️ <b>Tiempo Total:</b> {time_str}  ·  🚀 <b>Velocidad:</b> {final_speed:.2f} cuentas/seg\n"
                 "━━━━━━━━━━━━━━━━━━━━━━",
                 parse_mode=ParseMode.HTML,
                 reply_markup=None,
@@ -1657,19 +1699,23 @@ async def process_cookie_sets(update: Update, status_msg, cookie_sets: list[tupl
         except Exception:
             pass
 
-        await update.message.reply_text(
-            f"📊 <b>Resumen Masivo — Resultados</b>\n"
+        final_summary = (
+            "📊 <b>Estadísticas Finales:</b>\n"
             "━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"  ✅ Hits (Live con Enlaces) » <b>{hits}</b> (🌟 Premium: {premium_count})\n"
-            f"  ❌ Muertas / Expiradas     » <b>{invalids}</b>\n"
-            f"  ⏸️ En espera (On Hold)     » <b>{on_hold}</b>\n"
-            f"  🔓 Free (Sin plan)         » <b>{frees}</b>\n"
+            f"● 📦 <b>Total Cuentas :</b> <code>{total}</code>\n"
+            f"● ✅ <b>Cuentas Válidas :</b> <code>{hits}</code>\n"
+            f"    ⭐ Premium : <code>{premium_count}</code>\n"
+            f"    📺 Estándar : <code>{standard_count}</code>\n"
+            f"    📱 Básico : <code>{basic_count}</code>\n"
+            f"● ❌ <b>Cuentas Falladas :</b> <code>{invalids}</code>\n"
+            f"    🔴 Expirado / Sin plan : <code>{invalids}</code>\n"
+            f"● ⏸️ <b>En espera (On Hold) :</b> <code>{on_hold}</code>\n"
             "━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"  📦 Total comprobado        » <b>{total}</b>\n"
-            f"  ⏱️ Tiempo total            » <b>{time_str}</b>\n"
-            f"  🚀 Velocidad media         » <b>{speed:.1f} acc/min</b>",
-            parse_mode=ParseMode.HTML,
+            f"⏱️ <b>Tiempo Total :</b> <code>{time_str}</code>\n"
+            f"🚀 <b>Velocidad :</b> <code>{final_speed:.2f} cuentas/seg</code>\n"
+            f"<i>{WATERMARK_TEXT}</i>"
         )
+        await update.message.reply_text(final_summary, parse_mode=ParseMode.HTML)
 
         if verified_hits_list:
             delivery = _get_delivery(uid)
@@ -1705,7 +1751,7 @@ async def process_cookie_sets(update: Update, status_msg, cookie_sets: list[tupl
                 except Exception:
                     pass
         else:
-            await update.message.reply_text("📭 No se encontraron hits válidos con enlaces funcionales en este lote.")
+            await update.message.reply_text("📭 No se encontraron hits válidos con suscripción activa en este lote.")
 
     try:
         await status_msg.delete()
@@ -1716,7 +1762,6 @@ async def process_cookie_sets(update: Update, status_msg, cookie_sets: list[tupl
 # ---------------------------------------------------------------------------
 # Handlers de comandos e interactividad del panel
 # ---------------------------------------------------------------------------
-
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     uid = update.effective_user.id if update.effective_user else 0
     if uid:
@@ -1977,7 +2022,8 @@ async def panel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             "━━━━━━━━━━━━━━━━━━━━━━\n"
             f"🍪 <b>" + to_sans_bold_italic("Cookie (Toca para copiar):") + f"</b>\n<code>{cookie_disp}</code>\n\n"
             "<i>Presiona un botón para ingresar o activar tu TV:</i>\n"
-            "<i>💡 Si tu navegador ya tenía una sesión abierta, usa pestaña incógnito para ver este perfil directo.</i>"
+            "<i>💡 Si tu navegador ya tenía una sesión abierta, usa pestaña incógnito para ver este perfil directo.</i>\n\n"
+            f"<i>{WATERMARK_TEXT}</i>"
         )
         kb = build_official_login_keyboard(real_token)
         try:
@@ -2151,7 +2197,6 @@ async def setbanner_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 # ---------------------------------------------------------------------------
 # Gestión de Créditos, Mantenimiento y Auto-Sincronización
 # ---------------------------------------------------------------------------
-
 async def setcredits_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     uid = update.effective_user.id if update.effective_user else 0
     if not is_admin(uid):
@@ -2313,7 +2358,7 @@ async def maintenance_command(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 
 # ===========================================================================
-# 10. TELEMETRÍA Y ALERTAS AUTOMÁTICAS (@didierJC)
+# 11. TELEMETRÍA Y ALERTAS AUTOMÁTICAS (@didierJC)
 # ===========================================================================
 _LAST_ALERT_TIME: dict[str, float] = {}
 
@@ -2375,7 +2420,7 @@ async def testerror_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
 
 # ===========================================================================
-# 11. RESPALDO Y NUBE TELEGRAM (AUTO-SYNC ANTI-WIPE)
+# 12. RESPALDO Y NUBE TELEGRAM (AUTO-SYNC ANTI-WIPE)
 # ===========================================================================
 async def _cloud_auto_save(app: Application) -> None:
     try:
@@ -2487,7 +2532,6 @@ async def restore_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 # ---------------------------------------------------------------------------
 # Difusión / Notificación (Con Escape HTML Estricto)
 # ---------------------------------------------------------------------------
-
 async def broadcast_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     uid = update.effective_user.id if update.effective_user else 0
     if not is_admin(uid):
@@ -2548,7 +2592,6 @@ async def broadcast_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 # ---------------------------------------------------------------------------
 # Cambio de contraseña (Beta)
 # ---------------------------------------------------------------------------
-
 def _extract_netflix_id(text: str) -> str:
     raw = text.strip().strip('"').strip("'")
     if raw.startswith("[") or raw.startswith("{"):
@@ -2658,7 +2701,6 @@ async def _handle_changepw_input(update: Update, uid: int, text: str) -> None:
 # ---------------------------------------------------------------------------
 # Gestor de proxies y administración
 # ---------------------------------------------------------------------------
-
 async def cancel_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     uid = update.effective_user.id if update.effective_user else 0
     if uid in _CHANGEPW_STATE:
@@ -2780,7 +2822,6 @@ async def proxy_admin_callback(update: Update, context: ContextTypes.DEFAULT_TYP
 # ---------------------------------------------------------------------------
 # Procesamiento de documentos y texto entrante
 # ---------------------------------------------------------------------------
-
 async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     doc: Document = update.message.document
     uid = update.effective_user.id if update.effective_user else None
@@ -3008,7 +3049,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 # ---------------------------------------------------------------------------
 # Watchdog
 # ---------------------------------------------------------------------------
-
 async def _session_watchdog() -> None:
     while True:
         await asyncio.sleep(60)
@@ -3022,7 +3062,6 @@ async def _session_watchdog() -> None:
 # ---------------------------------------------------------------------------
 # Manejador de errores global con reporte automático a @didierJC
 # ---------------------------------------------------------------------------
-
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
     err = context.error
 
@@ -3053,7 +3092,6 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
 # ---------------------------------------------------------------------------
 # Punto de entrada (main)
 # ---------------------------------------------------------------------------
-
 def main() -> None:
     if not BOT_TOKEN:
         raise ValueError("TELEGRAM_BOT_TOKEN is not set.")
@@ -3084,16 +3122,16 @@ def main() -> None:
     app.add_handler(CommandHandler("basic",         basic_command))
     app.add_handler(CommandHandler("settings",      settings_command))
     app.add_handler(CommandHandler("changepw",      changepw_command))
-    app.add_handler(CommandHandler("cancel",     cancel_command))
-    app.add_handler(CommandHandler("proxy",      proxy_command))
+    app.add_handler(CommandHandler("cancel",        cancel_command))
+    app.add_handler(CommandHandler("proxy",         proxy_command))
     app.add_handler(CommandHandler(["broadcast", "notif"], broadcast_command))
-    app.add_handler(CommandHandler("users",      users_command))
-    app.add_handler(CommandHandler("setbanner",  setbanner_command))
-    app.add_handler(CommandHandler("addvault",   addvault_command))
-    app.add_handler(CommandHandler("clearvault", clearvault_command))
-    app.add_handler(CommandHandler("setcredits", setcredits_command))
-    app.add_handler(CommandHandler("backup",     backup_command))
-    app.add_handler(CommandHandler("restore",    restore_command))
+    app.add_handler(CommandHandler("users",         users_command))
+    app.add_handler(CommandHandler("setbanner",     setbanner_command))
+    app.add_handler(CommandHandler("addvault",      addvault_command))
+    app.add_handler(CommandHandler("clearvault",    clearvault_command))
+    app.add_handler(CommandHandler("setcredits",    setcredits_command))
+    app.add_handler(CommandHandler("backup",        backup_command))
+    app.add_handler(CommandHandler("restore",       restore_command))
     app.add_handler(CommandHandler(["mantenimiento", "maintenance"], maintenance_command))
     app.add_handler(CommandHandler("testerror",     testerror_command))
 
