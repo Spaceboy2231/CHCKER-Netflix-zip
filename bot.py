@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """
 BILL CYPHER CHK NF — Edition 5G Turbo Definitive
-• Funciones ordenadas correctamente (Cero NameError)
+• Todas las funciones y comandos ordenados correctamente (Cero NameError)
 • Purga atómica de baúl: Cero repetición de cuentas en GEN COOKIE
 • Verificación estricta de streaming activo (Cero "Reinicia tu membresía")
 • Sesiones Thread-Local 100% aisladas (Cero cruce de perfiles)
 • Monitor de carga animado avanzado con fases en tiempo real
-• Nuevo diseño de panel principal compacto optimizado para banner multimedia
+• Panel principal compacto optimizado para banner multimedia
 • Enlaces oficiales con parámetros web (PC / Mobile / TV8)
 • Auto-restauración en arranque desde la nube de Telegram (Anti-Wipe)
 • Alertas automáticas de error a @didierJC
@@ -571,7 +571,7 @@ def build_official_login_keyboard(raw_token: str) -> InlineKeyboardMarkup:
             InlineKeyboardButton("📺 𝙏𝙑 ↗️", url=tv_url),
         ],
         [
-            InlineKeyboardButton("🔄 𝙍𝙀𝙂𝙀𝙉 𝘾𝙊𝙊𝙆𝙄𝙀", callback_data="panel:gencookie"),
+            InlineKeyboardButton("🔄 𝙍\u200b𝙀\u200b𝙂\u200b𝙀\u200b𝙉\u200b \u200b𝘾\u200b𝙊\u200b𝙊\u200b𝙆\u200b𝙄\u200b𝙀", callback_data="panel:gencookie"),
             InlineKeyboardButton("🔙 𝙋𝙖𝙣𝙚𝙡", callback_data="panel:back"),
         ]
     ]
@@ -1718,20 +1718,6 @@ async def process_cookie_sets(update: Update, status_msg, cookie_sets: list[tupl
 # ---------------------------------------------------------------------------
 # Handlers de comandos e interactividad del panel
 # ---------------------------------------------------------------------------
-async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    uid = update.effective_user.id if update.effective_user else 0
-    if uid:
-        stats_tracker.record_user(uid)
-        _record_user_id(uid)
-
-    if is_maintenance() and not is_admin(uid):
-        await update.message.reply_text(MAINTENANCE_TEXT, parse_mode=ParseMode.HTML)
-        return
-
-    text = _main_panel_text(uid)
-    markup = _main_panel_markup(uid)
-    await _send_banner_panel(update, text, markup)
-
 async def panel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     uid = query.from_user.id if query.from_user else 0
@@ -2006,164 +1992,10 @@ async def panel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         except Exception:
             await query.message.reply_text(txt, parse_mode=ParseMode.HTML, reply_markup=kb)
 
-# ---------------------------------------------------------------------------
-# Comandos de soporte general (help, info, mode, users, etc.)
-# ---------------------------------------------------------------------------
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if update.effective_user:
-        _record_user_id(update.effective_user.id)
-    await update.message.reply_text(_help_text(), parse_mode=ParseMode.HTML)
 
-async def info_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    uid = update.effective_user.id if update.effective_user else 0
-    if uid:
-        _record_user_id(uid)
-    await update.message.reply_text(_info_text(uid), parse_mode=ParseMode.HTML)
-
-async def mode_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    uid = update.effective_user.id if update.effective_user else 0
-    if uid:
-        _record_user_id(uid)
-    current = _get_mode(uid)
-    await update.message.reply_text(
-        f"⚙️ <b>Modo de salida actual:</b> <b>{'Información completa' if current == 'full' else 'Básico'}</b>\n\n"
-        "Elige tu modo preferido:",
-        parse_mode=ParseMode.HTML,
-        reply_markup=InlineKeyboardMarkup([
-            [
-                InlineKeyboardButton("📋 Información completa", callback_data=f"setmode:{uid}:full"),
-                InlineKeyboardButton("📄 Básico", callback_data=f"setmode:{uid}:basic"),
-            ]
-        ]),
-    )
-
-async def fullinfo_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    uid = update.effective_user.id if update.effective_user else 0
-    if uid:
-        _record_user_id(uid)
-    _USER_MODE[uid] = "full"
-    await update.message.reply_text("✅ Modo de salida establecido en <b>Información completa</b>.", parse_mode=ParseMode.HTML)
-
-async def basic_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    uid = update.effective_user.id if update.effective_user else 0
-    if uid:
-        _record_user_id(uid)
-    _USER_MODE[uid] = "basic"
-    await update.message.reply_text("✅ Modo de salida establecido en <b>Básico</b>.", parse_mode=ParseMode.HTML)
-
-async def settings_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    uid = update.effective_user.id if update.effective_user else 0
-    if uid:
-        _record_user_id(uid)
-    await update.message.reply_text(_settings_text(uid), parse_mode=ParseMode.HTML, reply_markup=_settings_markup(uid))
-
-async def users_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    uid = update.effective_user.id if update.effective_user else 0
-    if not is_admin(uid):
-        await update.message.reply_text("⛔ <b>Solo el propietario.</b>", parse_mode=ParseMode.HTML)
-        return
-
-    if not _USERS_FILE.exists():
-        await update.message.reply_text("⚠️ No hay usuarios registrados todavía.")
-        return
-
-    uids = [u.strip() for u in _USERS_FILE.read_text(encoding="utf-8").splitlines() if u.strip().isdigit()]
-    total = len(uids)
-
-    if total == 0:
-        await update.message.reply_text("⚠️ No hay usuarios registrados en el archivo.")
-        return
-
-    await update.message.reply_text(
-        "👥 <b>Base de Datos de Usuarios</b>\n"
-        "━━━━━━━━━━━━━━━━━━━━━━\n"
-        f"• <b>Total registrados:</b> <code>{total}</code> usuarios únicos\n"
-        "━━━━━━━━━━━━━━━━━━━━━━",
-        parse_mode=ParseMode.HTML,
-    )
-
-    with open(_USERS_FILE, "rb") as f:
-        await update.message.reply_document(
-            document=f,
-            filename="users.txt",
-            caption=f"📄 Lista con los {total} IDs registrados",
-        )
-
-async def setbanner_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    uid = update.effective_user.id if update.effective_user else 0
-    if not is_admin(uid):
-        await update.message.reply_text("⛔ <b>Solo el propietario.</b>", parse_mode=ParseMode.HTML)
-        return
-
-    msg = update.message
-    target = msg.reply_to_message if msg.reply_to_message else msg
-
-    file_id = None
-    if target.video:
-        file_id = target.video.file_id
-    elif target.animation:
-        file_id = target.animation.file_id
-    elif target.photo:
-        file_id = target.photo[-1].file_id
-    elif target.document and (target.document.mime_type or "").startswith("video/"):
-        file_id = target.document.file_id
-
-    if not file_id:
-        await update.message.reply_text(
-            "🎬 <b>Cómo configurar el video de cabecera:</b>\n\n"
-            "1. Envía el video aquí y escribe de pie de foto <code>/setbanner</code>\n"
-            "o\n"
-            "2. Responde a un video previamente enviado con <code>/setbanner</code>.",
-            parse_mode=ParseMode.HTML,
-        )
-        return
-
-    _BANNER_FILE.write_text(file_id, encoding="utf-8")
-    await update.message.reply_text("🎬 <b>¡Video de cabecera configurado con éxito!</b>", parse_mode=ParseMode.HTML)
-
-
-# ---------------------------------------------------------------------------
-# Watchdog y Manejador de Errores
-# ---------------------------------------------------------------------------
-async def _session_watchdog() -> None:
-    while True:
-        await asyncio.sleep(60)
-        now = time.time()
-        stuck = [uid for uid, ts in list(_ACTIVE_USERS.items()) if now - ts > SESSION_TIMEOUT_SEC]
-        for uid in stuck:
-            _ACTIVE_USERS.pop(uid, None)
-            _USER_SESSION.pop(uid, None)
-
-async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
-    err = context.error
-
-    if isinstance(err, (Conflict, RetryAfter, TimedOut, NetworkError, Forbidden)):
-        return
-
-    if isinstance(err, BadRequest):
-        logger.warning("Telegram BadRequest: %s", err)
-        return
-
-    tb_list = traceback.format_exception(None, err, err.__traceback__)
-    tb_string = "".join(tb_list)
-
-    logger.error("Excepción no controlada: %s", err, exc_info=context.error)
-
-    if isinstance(update, Update) and update.effective_user:
-        _ACTIVE_USERS.pop(update.effective_user.id, None)
-        _USER_SESSION.pop(update.effective_user.id, None)
-
-    await send_admin_error_report(
-        bot=context.bot,
-        title=type(err).__name__,
-        details=tb_string if tb_string else str(err),
-        update=update if isinstance(update, Update) else None,
-    )
-
-
-# ---------------------------------------------------------------------------
+# ===========================================================================
 # Punto de entrada (main)
-# ---------------------------------------------------------------------------
+# ===========================================================================
 def main() -> None:
     if not BOT_TOKEN:
         raise ValueError("TELEGRAM_BOT_TOKEN is not set.")
