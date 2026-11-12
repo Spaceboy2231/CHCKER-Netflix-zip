@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """
 BILL CYPHER CHK NF — Edition 5G Turbo Definitive
+• Funciones ordenadas correctamente (Cero NameError)
 • Purga atómica de baúl: Cero repetición de cuentas en GEN COOKIE
-• Verificación estricta de streaming activo (Cero "Reinicia tu membresía" / "Update payment")
+• Verificación estricta de streaming activo (Cero "Reinicia tu membresía")
 • Sesiones Thread-Local 100% aisladas (Cero cruce de perfiles)
 • Monitor de carga animado avanzado con fases en tiempo real
 • Nuevo diseño de panel principal compacto optimizado para banner multimedia
@@ -2104,6 +2105,122 @@ async def cancel_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await update.message.reply_text("❌ Importación cancelada.")
         return
     await update.message.reply_text("No hay operaciones activas para cancelar.")
+
+
+# ---------------------------------------------------------------------------
+# Comandos de ayuda, configuración y administración
+# ---------------------------------------------------------------------------
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if update.effective_user:
+        _record_user_id(update.effective_user.id)
+    await update.message.reply_text(_help_text(), parse_mode=ParseMode.HTML)
+
+async def info_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    uid = update.effective_user.id if update.effective_user else 0
+    if uid:
+        _record_user_id(uid)
+    await update.message.reply_text(_info_text(uid), parse_mode=ParseMode.HTML)
+
+async def mode_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    uid = update.effective_user.id if update.effective_user else 0
+    if uid:
+        _record_user_id(uid)
+    current = _get_mode(uid)
+    await update.message.reply_text(
+        f"⚙️ <b>Modo de salida actual:</b> <b>{'Información completa' if current == 'full' else 'Básico'}</b>\n\n"
+        "Elige tu modo preferido:",
+        parse_mode=ParseMode.HTML,
+        reply_markup=InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("📋 Información completa", callback_data=f"setmode:{uid}:full"),
+                InlineKeyboardButton("📄 Básico", callback_data=f"setmode:{uid}:basic"),
+            ]
+        ]),
+    )
+
+async def fullinfo_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    uid = update.effective_user.id if update.effective_user else 0
+    if uid:
+        _record_user_id(uid)
+    _USER_MODE[uid] = "full"
+    await update.message.reply_text("✅ Modo de salida establecido en <b>Información completa</b>.", parse_mode=ParseMode.HTML)
+
+async def basic_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    uid = update.effective_user.id if update.effective_user else 0
+    if uid:
+        _record_user_id(uid)
+    _USER_MODE[uid] = "basic"
+    await update.message.reply_text("✅ Modo de salida establecido en <b>Básico</b>.", parse_mode=ParseMode.HTML)
+
+async def settings_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    uid = update.effective_user.id if update.effective_user else 0
+    if uid:
+        _record_user_id(uid)
+    await update.message.reply_text(_settings_text(uid), parse_mode=ParseMode.HTML, reply_markup=_settings_markup(uid))
+
+async def users_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    uid = update.effective_user.id if update.effective_user else 0
+    if not is_admin(uid):
+        await update.message.reply_text("⛔ <b>Solo el propietario.</b>", parse_mode=ParseMode.HTML)
+        return
+
+    if not _USERS_FILE.exists():
+        await update.message.reply_text("⚠️ No hay usuarios registrados todavía.")
+        return
+
+    uids = [u.strip() for u in _USERS_FILE.read_text(encoding="utf-8").splitlines() if u.strip().isdigit()]
+    total = len(uids)
+
+    if total == 0:
+        await update.message.reply_text("⚠️ No hay usuarios registrados en el archivo.")
+        return
+
+    await update.message.reply_text(
+        "👥 <b>Base de Datos de Usuarios</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"• <b>Total registrados:</b> <code>{total}</code> usuarios únicos\n"
+        "━━━━━━━━━━━━━━━━━━━━━━",
+        parse_mode=ParseMode.HTML,
+    )
+
+    with open(_USERS_FILE, "rb") as f:
+        await update.message.reply_document(
+            document=f,
+            filename="users.txt",
+            caption=f"📄 Lista con los {total} IDs registrados",
+        )
+
+async def setbanner_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    uid = update.effective_user.id if update.effective_user else 0
+    if not is_admin(uid):
+        await update.message.reply_text("⛔ <b>Solo el propietario.</b>", parse_mode=ParseMode.HTML)
+        return
+
+    msg = update.message
+    target = msg.reply_to_message if msg.reply_to_message else msg
+
+    file_id = None
+    if target.video:
+        file_id = target.video.file_id
+    elif target.animation:
+        file_id = target.animation.file_id
+    elif target.photo:
+        file_id = target.photo[-1].file_id
+    elif target.document and (target.document.mime_type or "").startswith("video/"):
+        file_id = target.document.file_id
+
+    if not file_id:
+        await update.message.reply_text(
+            "🎬 <b>Cómo configurar el video de cabecera:</b>\n\n"
+            "1. Envía el video aquí y escribe de pie de foto <code>/setbanner</code>\n"
+            "o\n"
+            "2. Responde a un video previamente enviado con <code>/setbanner</code>.",
+            parse_mode=ParseMode.HTML,
+        )
+        return
+
+    _BANNER_FILE.write_text(file_id, encoding="utf-8")
+    await update.message.reply_text("🎬 <b>¡Video de cabecera configurado con éxito!</b>", parse_mode=ParseMode.HTML)
 
 
 # ---------------------------------------------------------------------------
