@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 """
 BILL CYPHER CHK NF — Edition 5G Turbo Definitive
-• Límite estratégico: 3 créditos diarios gratuitos (Oliveidy recommendation)
-• Sistema interactivo de donación de cookies con recompensa y aviso a @didierJC
-• Monitor de carga animado 5G con fases en tiempo real (porcentaje limpio)
-• Panel ultra compacto optimizado para banner multimedia
+• Validación en vivo en GEN COOKIE (Cero cuentas sin membresía / Finish sign-up)
+• Animación avanzada de carga en tiempo real para el checker masivo
 • Enlaces oficiales con parámetros web (PC / Mobile / TV8)
+• ZIP limpio sin emojis internos y con marca de agua @didierJC
 • Auto-restauración en arranque desde la nube de Telegram (Anti-Wipe)
 • Alertas automáticas de error a @didierJC
 """
@@ -214,7 +213,7 @@ MAINTENANCE_TEXT = (
 
 
 # ===========================================================================
-# 6. SISTEMA DE CRÉDITOS (ESTRATEGIA 3 DIARIOS / REEMBOLSO AUTOMÁTICO)
+# 6. SISTEMA DE CRÉDITOS (3 DIARIOS / REEMBOLSO AUTOMÁTICO)
 # ===========================================================================
 DAILY_FREE_CREDITS: int = 3
 _CREDITS_FILE = Path("credits.json")
@@ -324,7 +323,6 @@ def refund_credit(uid: int) -> None:
     _save_credits(data)
 
 def add_reward_credit(uid: int, amount: int = 1) -> None:
-    """Otorga créditos bonificados por donar cuentas válidas al baúl."""
     data = _load_credits()
     user_data = data.setdefault(str(uid), {"is_premium": False})
     if user_data.get("is_premium"):
@@ -466,7 +464,7 @@ def extract_all_cookies_from_bytes(raw_bytes: bytes, filename: str = "") -> list
                     except Exception:
                         continue
         except Exception as e:
-            logger.warning(f"Error leyendo ZIP: %s", e)
+            logger.warning(f"Error leyendo ZIP: {e}")
     else:
         text = raw_bytes.decode("utf-8", errors="replace")
         extracted.extend(extract_cookies_from_text_block(text))
@@ -525,7 +523,6 @@ def extract_bgiqv_token(nft_dict: dict, fallback_token: str) -> str:
     return fallback_token
 
 def verify_streaming_active(nftoken: str) -> bool:
-    """Verifica en tiempo real que la cuenta NO esté en 'Reinicia tu membresía' ni pida actualizar pago."""
     if not nftoken or len(nftoken) < 20:
         return False
     try:
@@ -571,7 +568,7 @@ def build_official_login_keyboard(raw_token: str) -> InlineKeyboardMarkup:
             InlineKeyboardButton("📺 𝙏𝙑 ↗️", url=tv_url),
         ],
         [
-            InlineKeyboardButton("🔄 𝙍𝙀𝙂𝙀𝙉 𝘾𝙊𝙊𝙆𝙄𝙀", callback_data="panel:gencookie"),
+            InlineKeyboardButton("🔄 𝙍𝙀𝙂𝙀𝙉 𝘾OOKIE", callback_data="panel:gencookie"),
             InlineKeyboardButton("🔙 𝙋𝙖𝙣𝙚𝙡", callback_data="panel:back"),
         ]
     ]
@@ -2011,7 +2008,6 @@ async def panel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 if not tok:
                     continue
 
-                # CHEQUEO EN VIVO: Extrae todos los datos reales directamente de la API de Netflix
                 chk_res = await loop.run_in_executor(
                     _EXECUTOR,
                     lambda: safe_check_cookie_clean(candidate_str, generate_token=True)
@@ -2023,7 +2019,6 @@ async def panel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 is_payment_issue = chk_res.get("is_on_hold") or ("payment" in issues_str or "pago" in issues_str or "suspend" in issues_str)
                 nft_res = chk_res.get("nftoken") or {}
 
-                # FILTRO ESTRICTO: Solo entrega si la sesión está al día, sin fallo de pago y con streaming activo
                 if st == "hit" and not is_payment_issue and "FORMER" not in ms and "NEVER" not in ms and nft_res.get("success"):
                     real_tok = extract_bgiqv_token(nft_res, tok)
                     is_streaming_ok = await loop.run_in_executor(_EXECUTOR, lambda: verify_streaming_active(real_tok))
@@ -2088,701 +2083,6 @@ async def panel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         except Exception:
             await query.message.reply_text(txt, parse_mode=ParseMode.HTML, reply_markup=kb)
 
-async def cancel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    query = update.callback_query
-    await query.answer("Cancelando…")
-    try:
-        msg_id = int(query.data.split(":")[1])
-        _CANCEL_SESSIONS.add(msg_id)
-    except Exception:
-        pass
-
-async def mode_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    query = update.callback_query
-    try:
-        user_id = int(query.data.split(":")[1])
-        new_mode = _toggle_mode(user_id)
-        await query.answer(f"Modo cambiado a {'Información completa' if new_mode == 'full' else 'Básico'} ✅")
-    except Exception:
-        await query.answer("No se pudo cambiar el modo.")
-
-async def setmode_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    query = update.callback_query
-    try:
-        _, uid_str, new_mode = query.data.split(":")
-        uid = int(uid_str)
-        _USER_MODE[uid] = new_mode
-        label = "Información completa" if new_mode == "full" else "Básico"
-        await query.answer(f"Formato establecido en {label} ✅")
-        await _edit_panel_message(query, _settings_text(uid), _settings_markup(uid))
-    except Exception:
-        await query.answer("Error al configurar el modo.")
-
-async def setdelivery_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    query = update.callback_query
-    try:
-        _, uid_str, new_delivery = query.data.split(":")
-        uid = int(uid_str)
-        _set_delivery(uid, new_delivery)
-        label = "Card-by-Card 💬" if new_delivery == "cards" else "ZIP 📦"
-        await query.answer(f"Modo de entrega establecido en {label} ✅")
-        await _edit_panel_message(query, _settings_text(uid), _settings_markup(uid))
-    except Exception:
-        await query.answer("Error al configurar entrega.")
-
-async def closesettings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    query = update.callback_query
-    await query.answer()
-    try:
-        await query.message.delete()
-    except Exception:
-        pass
-
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if update.effective_user:
-        _record_user_id(update.effective_user.id)
-    await update.message.reply_text(_help_text(), parse_mode=ParseMode.HTML)
-
-async def info_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    uid = update.effective_user.id if update.effective_user else 0
-    if uid:
-        _record_user_id(uid)
-    await update.message.reply_text(_info_text(uid), parse_mode=ParseMode.HTML)
-
-async def mode_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    uid = update.effective_user.id if update.effective_user else 0
-    if uid:
-        _record_user_id(uid)
-    current = _get_mode(uid)
-    await update.message.reply_text(
-        f"⚙️ <b>Modo de salida actual:</b> <b>{'Información completa' if current == 'full' else 'Básico'}</b>\n\n"
-        "Elige tu modo preferido:",
-        parse_mode=ParseMode.HTML,
-        reply_markup=InlineKeyboardMarkup([
-            [
-                InlineKeyboardButton("📋 Información completa", callback_data=f"setmode:{uid}:full"),
-                InlineKeyboardButton("📄 Básico", callback_data=f"setmode:{uid}:basic"),
-            ]
-        ]),
-    )
-
-async def fullinfo_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    uid = update.effective_user.id if update.effective_user else 0
-    if uid:
-        _record_user_id(uid)
-    _USER_MODE[uid] = "full"
-    await update.message.reply_text("✅ Modo de salida establecido en <b>Información completa</b>.", parse_mode=ParseMode.HTML)
-
-async def basic_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    uid = update.effective_user.id if update.effective_user else 0
-    if uid:
-        _record_user_id(uid)
-    _USER_MODE[uid] = "basic"
-    await update.message.reply_text("✅ Modo de salida establecido en <b>Básico</b>.", parse_mode=ParseMode.HTML)
-
-async def settings_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    uid = update.effective_user.id if update.effective_user else 0
-    if uid:
-        _record_user_id(uid)
-    await update.message.reply_text(_settings_text(uid), parse_mode=ParseMode.HTML, reply_markup=_settings_markup(uid))
-
-async def users_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    uid = update.effective_user.id if update.effective_user else 0
-    if not is_admin(uid):
-        await update.message.reply_text("⛔ <b>Solo el propietario.</b>", parse_mode=ParseMode.HTML)
-        return
-
-    if not _USERS_FILE.exists():
-        await update.message.reply_text("⚠️ No hay usuarios registrados todavía.")
-        return
-
-    uids = [u.strip() for u in _USERS_FILE.read_text(encoding="utf-8").splitlines() if u.strip().isdigit()]
-    total = len(uids)
-
-    if total == 0:
-        await update.message.reply_text("⚠️ No hay usuarios registrados en el archivo.")
-        return
-
-    await update.message.reply_text(
-        "👥 <b>Base de Datos de Usuarios</b>\n"
-        "━━━━━━━━━━━━━━━━━━━━━━\n"
-        f"• <b>Total registrados:</b> <code>{total}</code> usuarios únicos\n"
-        "━━━━━━━━━━━━━━━━━━━━━━",
-        parse_mode=ParseMode.HTML,
-    )
-
-    with open(_USERS_FILE, "rb") as f:
-        await update.message.reply_document(
-            document=f,
-            filename="users.txt",
-            caption=f"📄 Lista con los {total} IDs registrados",
-        )
-
-async def setbanner_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    uid = update.effective_user.id if update.effective_user else 0
-    if not is_admin(uid):
-        await update.message.reply_text("⛔ <b>Solo el propietario.</b>", parse_mode=ParseMode.HTML)
-        return
-
-    msg = update.message
-    target = msg.reply_to_message if msg.reply_to_message else msg
-
-    file_id = None
-    if target.video:
-        file_id = target.video.file_id
-    elif target.animation:
-        file_id = target.animation.file_id
-    elif target.photo:
-        file_id = target.photo[-1].file_id
-    elif target.document and (target.document.mime_type or "").startswith("video/"):
-        file_id = target.document.file_id
-
-    if not file_id:
-        await update.message.reply_text(
-            "🎬 <b>Cómo configurar el video de cabecera:</b>\n\n"
-            "1. Envía el video aquí y escribe de pie de foto <code>/setbanner</code>\n"
-            "o\n"
-            "2. Responde a un video previamente enviado con <code>/setbanner</code>.",
-            parse_mode=ParseMode.HTML,
-        )
-        return
-
-    _BANNER_FILE.write_text(file_id, encoding="utf-8")
-    await update.message.reply_text("🎬 <b>¡Video de cabecera configurado con éxito!</b>", parse_mode=ParseMode.HTML)
-
-
-# ---------------------------------------------------------------------------
-# Gestión de Créditos, Donaciones y Mantenimiento
-# ---------------------------------------------------------------------------
-async def donar_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Permite a los usuarios donar cuentas al baúl a cambio de créditos."""
-    uid = update.effective_user.id if update.effective_user else 0
-    _DONATE_USERS.add(uid)
-    await update.message.reply_text(
-        "🎁 <b>" + to_sans_bold_italic("DONAR COOKIES DE NETFLIX") + "</b> 🍿\n"
-        "━━━━━━━━━━━━━━━━━━━━━━\n"
-        "Envía la cookie en texto o adjunta un archivo <code>.txt</code> que deseas donar al baúl.\n\n"
-        "💎 <b>Recompensa automática:</b>\n"
-        "<i>Por cada cookie válida (Live con suscripción activa) que dones, recibirás <b>+1 activación extra</b> al instante.</i>\n\n"
-        "Envía /cancel en cualquier momento si deseas cancelar.",
-        parse_mode=ParseMode.HTML,
-    )
-
-async def setcredits_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    uid = update.effective_user.id if update.effective_user else 0
-    if not is_admin(uid):
-        await update.message.reply_text("⛔ <b>Solo el propietario.</b>", parse_mode=ParseMode.HTML)
-        return
-
-    if len(context.args) < 2:
-        await update.message.reply_text(
-            "⚠️ <b>Uso de gestión de créditos:</b>\n\n"
-            "<code>/setcredits &lt;ID_usuario&gt; &lt;cantidad | unlimited | reset&gt;</code>\n\n"
-            "<b>Ejemplos:</b>\n"
-            "• <code>/setcredits 123456789 20</code> (Otorga 20 créditos Premium)\n"
-            "• <code>/setcredits 123456789 unlimited</code> (Créditos ilimitados)\n"
-            f"• <code>/setcredits 123456789 reset</code> (Regresa a usuario normal con {DAILY_FREE_CREDITS} diarios)",
-            parse_mode=ParseMode.HTML
-        )
-        return
-
-    target_id = context.args[0].strip()
-    amount_str = context.args[1].strip().lower()
-
-    data = _load_credits()
-    user_data = data.setdefault(target_id, {})
-
-    if amount_str in ("unlimited", "ilimitado", "inf"):
-        user_data["is_premium"] = True
-        user_data["credits"] = "unlimited"
-        resp = f"⭐ <b>Usuario <code>{target_id}</code> actualizado:</b> Créditos ILIMITADOS asignados."
-    elif amount_str in ("reset", "normal", "0"):
-        user_data["is_premium"] = False
-        user_data["credits"] = 0
-        user_data["used_today"] = 0
-        resp = f"👤 <b>Usuario <code>{target_id}</code> restablecido:</b> Cuenta Normal ({DAILY_FREE_CREDITS} créditos diarios)."
-    elif amount_str.isdigit():
-        val = int(amount_str)
-        user_data["is_premium"] = True
-        user_data["credits"] = val
-        resp = f"⭐ <b>Usuario <code>{target_id}</code> actualizado:</b> <code>{val}</code> créditos Premium asignados."
-    else:
-        await update.message.reply_text("❌ Valor inválido. Usa un número entero, <code>unlimited</code> o <code>reset</code>.")
-        return
-
-    data[target_id] = user_data
-    _save_credits(data)
-    await update.message.reply_text(resp, parse_mode=ParseMode.HTML)
-    await _cloud_auto_save(context.application)
-
-async def addvault_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    uid = update.effective_user.id if update.effective_user else 0
-    if not is_admin(uid):
-        await update.message.reply_text("⛔ <b>Solo el propietario puede agregar cookies al baúl.</b>", parse_mode=ParseMode.HTML)
-        return
-
-    msg = update.message
-    target = msg.reply_to_message if msg.reply_to_message else msg
-
-    if target.document:
-        doc = target.document
-        fname = doc.file_name or "archivo"
-        try:
-            tg_file = await doc.get_file()
-            raw_bytes = await tg_file.download_as_bytearray()
-            extracted = extract_all_cookies_from_bytes(bytes(raw_bytes), filename=fname)
-
-            if not extracted:
-                await msg.reply_text("⚠️ No se encontraron cookies de Netflix válidas en el archivo.", parse_mode=ParseMode.HTML)
-                return
-
-            vault = _load_vault()
-            existing_tokens = {extract_core_netflix_id(c) for c in vault if extract_core_netflix_id(c)}
-            added = 0
-
-            for c in extracted:
-                tok = extract_core_netflix_id(c)
-                if tok and tok not in existing_tokens:
-                    vault.append(c.strip())
-                    existing_tokens.add(tok)
-                    added += 1
-                elif not tok and c.strip() not in vault:
-                    vault.append(c.strip())
-                    added += 1
-
-            _save_vault(vault)
-            await msg.reply_text(
-                f"✅ <b>¡Cookies importadas al baúl con éxito!</b>\n"
-                "━━━━━━━━━━━━━━━━━━━━━━\n"
-                f"• 📦 <b>Cuentas únicas añadidas:</b> <code>{added}</code>\n"
-                f"• 🔒 <b>Duplicados descartados:</b> <code>{len(extracted) - added}</code>\n"
-                f"• 🗄️ <b>Stock total verificado:</b> <code>{len(vault)}</code>",
-                parse_mode=ParseMode.HTML
-            )
-            await _cloud_auto_save(context.application)
-            return
-        except Exception as e:
-            await msg.reply_text(f"⚠️ Error procesando archivo: {e}")
-            return
-
-    text = ""
-    if context.args:
-        text = " ".join(context.args)
-    elif target.text:
-        text = target.text
-    elif target.caption:
-        text = target.caption
-
-    if not text:
-        await msg.reply_text(
-            "📦 <b>Cómo agregar cookies al baúl:</b>\n\n"
-            "1. Envía un archivo <code>.zip</code> generado por el checker con pie de foto <code>/addvault</code>\n"
-            "2. O escribe: <code>/addvault &lt;pega tus cookies aquí&gt;</code>\n"
-            "3. O responde a un archivo de resultados con <code>/addvault</code>.",
-            parse_mode=ParseMode.HTML
-        )
-        return
-
-    extracted = extract_cookies_from_text_block(text)
-    if not extracted:
-        await msg.reply_text("⚠️ No se detectaron cookies válidas en el texto.", parse_mode=ParseMode.HTML)
-        return
-
-    vault = _load_vault()
-    existing_tokens = {extract_core_netflix_id(c) for c in vault if extract_core_netflix_id(c)}
-    added = 0
-
-    for c in extracted:
-        tok = extract_core_netflix_id(c)
-        if tok and tok not in existing_tokens:
-            vault.append(c.strip())
-            existing_tokens.add(tok)
-            added += 1
-        elif not tok and c.strip() not in vault:
-            vault.append(c.strip())
-            added += 1
-
-    _save_vault(vault)
-    await msg.reply_text(
-        f"✅ <b>¡Cookies agregadas al baúl con éxito!</b>\n"
-        "━━━━━━━━━━━━━━━━━━━━━━\n"
-        f"• 📥 <b>Únicas añadidas:</b> <code>{added}</code>\n"
-        f"• 📦 <b>Stock total real:</b> <code>{len(vault)}</code>",
-        parse_mode=ParseMode.HTML
-    )
-    await _cloud_auto_save(context.application)
-
-async def clearvault_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    uid = update.effective_user.id if update.effective_user else 0
-    if not is_admin(uid):
-        await update.message.reply_text("⛔ <b>Solo el propietario.</b>", parse_mode=ParseMode.HTML)
-        return
-    _save_vault([])
-    await update.message.reply_text("🗑 <b>El baúl de cookies ha sido vaciado.</b>", parse_mode=ParseMode.HTML)
-    await _cloud_auto_save(context.application)
-
-async def maintenance_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    uid = update.effective_user.id if update.effective_user else 0
-    if not is_admin(uid):
-        await update.message.reply_text("⛔ <b>Solo el propietario.</b>", parse_mode=ParseMode.HTML)
-        return
-
-    new_state = not is_maintenance()
-    set_maintenance(new_state)
-
-    msg = (
-        f"🔴 <b>Mantenimiento ACTIVADO.</b>\nLos usuarios comunes recibirán aviso de mantenimiento al intentar usar el bot."
-        if new_state else
-        f"🟢 <b>Mantenimiento DESACTIVADO.</b>\nEl bot vuelve a estar disponible para todos."
-    )
-    await update.message.reply_text(msg, parse_mode=ParseMode.HTML)
-
-
-# ===========================================================================
-# 11. TELEMETRÍA Y ALERTAS AUTOMÁTICAS (@didierJC)
-# ===========================================================================
-_LAST_ALERT_TIME: dict[str, float] = {}
-
-async def send_admin_error_report(bot, title: str, details: str, update: Update | None = None) -> None:
-    try:
-        now = time.time()
-        error_key = f"{title}_{details[:40]}"
-        if now - _LAST_ALERT_TIME.get(error_key, 0) < 10:
-            return
-        _LAST_ALERT_TIME[error_key] = now
-
-        user_info = "Sistema / Tarea interna"
-        chat_id = "N/A"
-        raw_action = "N/A"
-
-        if update and update.effective_user:
-            u = update.effective_user
-            user_info = f"@{u.username}" if u.username else f"{u.first_name}"
-            chat_id = str(u.id)
-
-        if update:
-            if update.message and update.message.text:
-                raw_action = update.message.text[:50]
-            elif update.callback_query and update.callback_query.data:
-                raw_action = f"Botón: {update.callback_query.data}"
-
-        clean_title = html.escape(str(title))
-        clean_details = html.escape(str(details)[:800])
-        clean_action = html.escape(str(raw_action))
-
-        report_msg = (
-            "🚨 <b>ALERTA DE ERROR EN EL BOT</b>\n"
-            "━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"● ⚠️ <b>Tipo:</b> <code>{clean_title}</code>\n"
-            f"● 👤 <b>Usuario:</b> {user_info} (<code>{chat_id}</code>)\n"
-            f"● 🎯 <b>Acción:</b> <code>{clean_action}</code>\n"
-            f"● ⏱️ <b>Fecha:</b> <code>{time.strftime('%Y-%m-%d %H:%M:%S')}</code>\n"
-            "━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"📋 <b>Detalle del fallo:</b>\n"
-            f"<pre>{clean_details}</pre>\n"
-            "━━━━━━━━━━━━━━━━━━━━━━"
-        )
-
-        await bot.send_message(
-            chat_id=OWNER_ID,
-            text=report_msg,
-            parse_mode=ParseMode.HTML,
-        )
-    except Exception as exc:
-        logger.error(f"Fallo enviando reporte de error al admin: {exc}")
-
-async def testerror_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    uid = update.effective_user.id if update.effective_user else 0
-    if not is_admin(uid):
-        return
-    await update.message.reply_text("🧪 <i>Simulando excepción de prueba...</i>", parse_mode=ParseMode.HTML)
-    raise ValueError("Prueba de alerta automática a @didierJC: El sistema de reporte está operativo.")
-
-
-# ===========================================================================
-# 12. RESPALDO Y NUBE TELEGRAM (SIN SOBREESCRIBIR STOCK ACTUAL)
-# ===========================================================================
-async def _cloud_auto_save(app: Application) -> None:
-    try:
-        vault = _load_vault()
-        credits_data = _load_credits()
-        users_list = _USERS_FILE.read_text(encoding="utf-8").splitlines() if _USERS_FILE.exists() else []
-
-        payload = {
-            "version": "5G-Turbo",
-            "date": date.today().isoformat(),
-            "timestamp": time.time(),
-            "vault": vault,
-            "credits": credits_data,
-            "users": users_list,
-        }
-        buf = io.BytesIO(json.dumps(payload, ensure_ascii=False).encode("utf-8"))
-        buf.name = "database_sync.json"
-
-        sent_msg = await app.bot.send_document(
-            chat_id=OWNER_ID,
-            document=buf,
-            caption=f"#DATABASE_SYNC_CLOUD 💾 Stock Actual: {len(vault)} cuentas",
-            disable_notification=True,
-        )
-        try:
-            await app.bot.pin_chat_message(chat_id=OWNER_ID, message_id=sent_msg.message_id, disable_notification=True)
-        except Exception:
-            pass
-    except Exception as e:
-        logger.debug(f"Cloud auto save error: {e}")
-
-async def backup_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    uid = update.effective_user.id if update.effective_user else 0
-    if not is_admin(uid):
-        await update.message.reply_text("⛔ <b>Solo el propietario.</b>", parse_mode=ParseMode.HTML)
-        return
-
-    vault = _load_vault()
-    credits_data = _load_credits()
-    users_list = _USERS_FILE.read_text(encoding="utf-8").splitlines() if _USERS_FILE.exists() else []
-
-    payload = {
-        "version": "5G-Turbo",
-        "date": date.today().isoformat(),
-        "timestamp": time.time(),
-        "vault": vault,
-        "credits": credits_data,
-        "users": users_list,
-    }
-
-    buf = io.BytesIO(json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8"))
-    buf.name = f"backup_bill_{date.today().isoformat()}.json"
-
-    await update.message.reply_document(
-        document=buf,
-        caption=(
-            "💾 <b>COPIA DE SEGURIDAD GENERADA</b>\n"
-            "━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"• 📦 <b>Cuentas en baúl:</b> <code>{len(vault)}</code>\n"
-            f"• 👥 <b>Usuarios con saldo:</b> <code>{len(credits_data)}</code>\n\n"
-            "<i>💡 Si actualizas en Infrlo, solo responde a este archivo con <code>/restore</code>.</i>"
-        ),
-        parse_mode=ParseMode.HTML,
-    )
-
-async def restore_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    uid = update.effective_user.id if update.effective_user else 0
-    if not is_admin(uid):
-        await update.message.reply_text("⛔ <b>Solo el propietario.</b>", parse_mode=ParseMode.HTML)
-        return
-
-    msg = update.message
-    target = msg.reply_to_message if msg.reply_to_message else msg
-
-    if not target.document or not (target.document.file_name or "").endswith(".json"):
-        await msg.reply_text(
-            "⚠️ <b>Cómo restaurar:</b>\n"
-            "Responde a un archivo de copia <code>.json</code> enviado previamente con <code>/restore</code>.",
-            parse_mode=ParseMode.HTML,
-        )
-        return
-
-    try:
-        tg_file = await target.document.get_file()
-        raw_bytes = await tg_file.download_as_bytearray()
-        data = json.loads(raw_bytes.decode("utf-8", errors="replace"))
-
-        restored_vault = data.get("vault", [])
-        restored_credits = data.get("credits", {})
-        restored_users = data.get("users", [])
-
-        if isinstance(restored_vault, list):
-            _save_vault(restored_vault)
-        if isinstance(restored_credits, dict):
-            _save_credits(restored_credits)
-        if isinstance(restored_users, list) and restored_users:
-            _USERS_FILE.write_text("\n".join(restored_users) + "\n", encoding="utf-8")
-
-        await msg.reply_text(
-            "✅ <b>¡RESTAURACIÓN COMPLETADA CON ÉXITO!</b>\n"
-            "━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"• 📦 <b>Cuentas restauradas:</b> <code>{len(restored_vault)}</code>\n"
-            f"• 👥 <b>Registros de créditos:</b> <code>{len(restored_credits)}</code>\n\n"
-            "<i>Todo ha quedado sincronizado y activo.</i>",
-            parse_mode=ParseMode.HTML,
-        )
-    except Exception as e:
-        await msg.reply_text(f"❌ Error al restaurar respaldo: {e}")
-
-
-# ---------------------------------------------------------------------------
-# Difusión / Notificación (Con Escape HTML Estricto)
-# ---------------------------------------------------------------------------
-async def broadcast_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    uid = update.effective_user.id if update.effective_user else 0
-    if not is_admin(uid):
-        await update.message.reply_text("⛔ <b>Solo el propietario.</b>", parse_mode=ParseMode.HTML)
-        return
-
-    if not context.args:
-        await update.message.reply_text("📢 Usa: <code>/broadcast Tu mensaje aquí</code>", parse_mode=ParseMode.HTML)
-        return
-
-    raw_text = update.message.text.split(maxsplit=1)[1]
-    clean_text = html.escape(raw_text)
-
-    if not _USERS_FILE.exists():
-        await update.message.reply_text("⚠️ No hay usuarios registrados.")
-        return
-
-    uids = [u.strip() for u in _USERS_FILE.read_text(encoding="utf-8").splitlines() if u.strip().isdigit()]
-    total_users = len(uids)
-
-    if total_users == 0:
-        await update.message.reply_text("⚠️ No hay usuarios registrados todavía.")
-        return
-
-    status_msg = await update.message.reply_text(f"⏳ Enviando a {total_users} usuario(s)…", parse_mode=ParseMode.HTML)
-    sent = 0
-    blocked = 0
-
-    formatted_broadcast = (
-        "📢 <b>" + to_sans_bold_italic("NOTIFICACION DE BILL CYPHER") + "</b>\n"
-        "━━━━━━━━━━━━━━━━━━━━━━\n\n"
-        f"{clean_text}\n\n"
-        "━━━━━━━━━━━━━━━━━━━━━━"
-    )
-
-    for target_uid in uids:
-        try:
-            await context.bot.send_message(
-                chat_id=int(target_uid),
-                text=formatted_broadcast,
-                parse_mode=ParseMode.HTML,
-            )
-            sent += 1
-            await asyncio.sleep(0.04)
-        except Exception:
-            blocked += 1
-
-    await status_msg.edit_text(
-        "✅ <b>Difusión finalizada</b>\n"
-        "━━━━━━━━━━━━━━━━━━━━━━\n"
-        f"• 📤 <b>Enviados con éxito:</b> {sent}\n"
-        f"• 🚫 <b>Bloqueados / Fallidos:</b> {blocked}\n"
-        "━━━━━━━━━━━━━━━━━━━━━━",
-        parse_mode=ParseMode.HTML,
-    )
-
-
-# ---------------------------------------------------------------------------
-# Cambio de contraseña (Beta)
-# ---------------------------------------------------------------------------
-def _extract_netflix_id(text: str) -> str:
-    raw = text.strip().strip('"').strip("'")
-    if raw.startswith("[") or raw.startswith("{"):
-        try:
-            data = json.loads(raw)
-            cookies = data if isinstance(data, list) else [data]
-            for c in cookies:
-                if isinstance(c, dict) and c.get("name") == "NetflixId":
-                    return (c.get("value") or "").strip()
-        except Exception:
-            pass
-
-    if "NetflixId=" in raw:
-        after = raw.split("NetflixId=", 1)[1]
-        val = after.split(";")[0].split('"')[0].split("'")[0].split("\n")[0].split("\r")[0].strip()
-        if val:
-            return val
-
-    if len(raw) >= 20 and "\n" not in raw and " " not in raw:
-        return raw
-    return ""
-
-async def changepw_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    uid = update.effective_user.id if update.effective_user else 0
-    if uid:
-        _record_user_id(uid)
-    _CHANGEPW_STATE[uid] = {"step": "netflix_id"}
-    await update.message.reply_text(
-        "🔐 <b>Cambiar Contraseña</b> <i>[BETA]</i>\n"
-        "━━━━━━━━━━━━━━━━━━━━━━\n\n"
-        "Paso 1 de 3 — Introduce el valor de la cookie <b>NetflixId</b> de la cuenta:\n\n"
-        "Envía /cancel en cualquier momento para abortar.",
-        parse_mode=ParseMode.HTML,
-    )
-
-async def _handle_changepw_input(update: Update, uid: int, text: str) -> None:
-    state = _CHANGEPW_STATE.get(uid)
-    if not state:
-        return
-
-    step = state.get("step")
-    if text.strip().lower() in ("/cancel", "cancel"):
-        _CHANGEPW_STATE.pop(uid, None)
-        await update.message.reply_text("❌ <b>Cambio de contraseña cancelado.</b>", parse_mode=ParseMode.HTML)
-        return
-
-    if step == "netflix_id":
-        netflix_id = _extract_netflix_id(text)
-        if not netflix_id or len(netflix_id) < 20:
-            await update.message.reply_text("⚠️ NetflixId inválido. Inténtalo de nuevo o usa /cancel.", parse_mode=ParseMode.HTML)
-            return
-        state["netflix_id"] = netflix_id
-        state["step"]       = "old_pw"
-        await update.message.reply_text("✅ NetflixId recibido.\n\nPaso 2 de 3 — Envía la <b>contraseña actual</b>:", parse_mode=ParseMode.HTML)
-        return
-
-    if step == "old_pw":
-        if len(text.strip()) < 4:
-            await update.message.reply_text("⚠️ Contraseña demasiado corta.", parse_mode=ParseMode.HTML)
-            return
-        state["old_pw"] = text.strip()
-        state["step"]   = "new_pw"
-        await update.message.reply_text("✅ Contraseña actual guardada.\n\nPaso 3 de 3 — Envía la <b>nueva contraseña</b>:", parse_mode=ParseMode.HTML)
-        return
-
-    if step == "new_pw":
-        new_pw = text.strip()
-        if len(new_pw) < 8:
-            await update.message.reply_text("⚠️ La nueva contraseña debe tener al menos 8 caracteres.", parse_mode=ParseMode.HTML)
-            return
-        state["new_pw"] = new_pw
-        state["step"]   = "confirm"
-        await update.message.reply_text(
-            f"🔒 <b>Confirmar cambio</b>\n\nNueva contraseña: <code>{new_pw}</code>\n\nResponde <b>SÍ</b> para proceder o /cancel.",
-            parse_mode=ParseMode.HTML,
-        )
-        return
-
-    if step == "confirm":
-        if text.strip().upper() not in ("SÍ", "SI", "YES"):
-            await update.message.reply_text("❌ Envía <b>SÍ</b> para continuar o /cancel.", parse_mode=ParseMode.HTML)
-            return
-
-        netflix_id = state.get("netflix_id", "")
-        old_pw     = state.get("old_pw", "")
-        new_pw     = state.get("new_pw", "")
-        _CHANGEPW_STATE.pop(uid, None)
-
-        status_msg = await update.message.reply_text("⏳ Cambiando contraseña en Netflix…", parse_mode=ParseMode.HTML)
-        loop = asyncio.get_event_loop()
-        try:
-            from password_changer import change_netflix_password
-            result = await loop.run_in_executor(None, lambda: change_netflix_password(netflix_id, old_pw, new_pw))
-        except Exception as exc:
-            await status_msg.edit_text(f"⚠️ <b>Error inesperado:</b> <code>{exc}</code>", parse_mode=ParseMode.HTML)
-            return
-
-        if result["success"]:
-            await status_msg.edit_text(
-                f"✅ <b>¡Contraseña cambiada con éxito!</b>\n━━━━━━━━━━━━━━━━━━━━━━\n🔑 Nueva contraseña: <code>{new_pw}</code>",
-                parse_mode=ParseMode.HTML,
-            )
-        else:
-            await status_msg.edit_text(f"❌ <b>Error:</b> {result['message']}", parse_mode=ParseMode.HTML)
-
-
-# ---------------------------------------------------------------------------
-# Gestor de proxies y administración
-# ---------------------------------------------------------------------------
 async def cancel_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     uid = update.effective_user.id if update.effective_user else 0
     if uid in _DONATE_USERS:
@@ -2802,107 +2102,6 @@ async def cancel_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await update.message.reply_text("❌ Importación cancelada.")
         return
     await update.message.reply_text("No hay operaciones activas para cancelar.")
-
-def _proxy_panel_text() -> str:
-    from proxy_manager import proxy_manager as pm
-    status = pm.status_text()
-    sources = pm.list_sources()
-    total = pm.count
-    lines = [
-        "🛡️ <b>Gestor de Proxies</b>",
-        "━━━━━━━━━━━━━━━━━━━━━━",
-        f"Status: {status}",
-    ]
-    if total:
-        lines.append(f"📦 <b>{total}</b> proxies almacenados")
-    else:
-        lines.append("<i>No hay proxies guardados aún.</i>")
-    if sources:
-        lines.append("\n<b>Fuentes automáticas:</b>")
-        for i, s in enumerate(sources):
-            short = s[:50] + "…" if len(s) > 50 else s
-            lines.append(f"  <code>{i+1}. {short}</code>")
-    lines.append("━━━━━━━━━━━━━━━━━━━━━━")
-    return "\n".join(lines)
-
-def _proxy_panel_markup(pm) -> InlineKeyboardMarkup:
-    toggle_label = "🔴 Desactivar" if pm.enabled else "🟢 Activar"
-    cpw_label = "🔴 Proxy CambiarPW: OFF" if not pm.changepw_proxy_enabled else "🟢 Proxy CambiarPW: ON"
-    rows = [
-        [
-            InlineKeyboardButton(toggle_label,          callback_data="proxy:toggle"),
-            InlineKeyboardButton("➕ Añadir proxy",     callback_data="proxy:add"),
-        ],
-        [
-            InlineKeyboardButton("📥 URL de origen",    callback_data="proxy:importurl"),
-            InlineKeyboardButton("🔄 Refrescar ahora",  callback_data="proxy:refreshsources"),
-        ],
-        [InlineKeyboardButton(cpw_label, callback_data="proxy:togglechangepw")],
-    ]
-    if pm.count:
-        rows.append([
-            InlineKeyboardButton("📄 Descargar lista", callback_data="proxy:downloadlist"),
-            InlineKeyboardButton("🗑 Limpiar todo",     callback_data="proxy:clear"),
-        ])
-    rows.append([
-        InlineKeyboardButton("🔙 Volver al Panel", callback_data="panel:back"),
-        InlineKeyboardButton("🔄 Actualizar", callback_data="proxy:refresh"),
-    ])
-    return InlineKeyboardMarkup(rows)
-
-async def proxy_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    uid = update.effective_user.id if update.effective_user else 0
-    if not is_admin(uid):
-        await update.message.reply_text("⛔ <b>Solo el propietario.</b>", parse_mode=ParseMode.HTML)
-        return
-    from proxy_manager import proxy_manager as pm
-    await update.message.reply_text(_proxy_panel_text(), parse_mode=ParseMode.HTML, reply_markup=_proxy_panel_markup(pm))
-
-async def proxy_admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    query = update.callback_query
-    uid = query.from_user.id if query.from_user else 0
-    if not is_admin(uid):
-        await query.answer("⛔ Solo el propietario.", show_alert=True)
-        return
-    await query.answer()
-
-    from proxy_manager import proxy_manager as pm
-    action = query.data
-
-    if action == "proxy:toggle":
-        pm.toggle()
-    elif action == "proxy:add":
-        _PROXY_ADD_STATE.add(uid)
-        await query.message.reply_text("📝 Envía la línea de proxy (host:puerto o host:puerto:user:pass):", parse_mode=ParseMode.HTML)
-        return
-    elif action == "proxy:importurl":
-        _PROXY_SOURCE_STATE.add(uid)
-        await query.message.reply_text("🌐 Envía la URL pública de proxies:", parse_mode=ParseMode.HTML)
-        return
-    elif action == "proxy:refreshsources":
-        sources = pm.list_sources()
-        if not sources:
-            await query.answer("No hay fuentes guardadas.", show_alert=True)
-            return
-        added, skipped, errors = pm.refresh_all_sources()
-        await query.message.reply_text(f"✅ Refrescado. Añadidos: {added}, Omitidos: {skipped}", parse_mode=ParseMode.HTML)
-    elif action == "proxy:downloadlist":
-        proxies = pm.list_proxies()
-        if not proxies:
-            await query.answer("No hay proxies guardados.", show_alert=True)
-            return
-        await query.message.reply_document(document=io.BytesIO("\n".join(proxies).encode()), filename="proxies.txt")
-        return
-    elif action == "proxy:clear":
-        pm.clear_proxies()
-    elif action == "proxy:togglechangepw":
-        new_val = pm.toggle_changepw_proxy()
-        await query.answer(f"Proxy cambiar contraseña: {'ON' if new_val else 'OFF'}")
-
-    try:
-        await query.message.edit_text(_proxy_panel_text(), parse_mode=ParseMode.HTML, reply_markup=_proxy_panel_markup(pm))
-    except Exception:
-        pass
 
 
 # ---------------------------------------------------------------------------
@@ -2961,7 +2160,6 @@ async def _process_donation(update: Update, context: ContextTypes.DEFAULT_TYPE, 
             parse_mode=ParseMode.HTML,
         )
 
-        # Notificación al propietario
         u_label = f"@{update.effective_user.username}" if update.effective_user.username else update.effective_user.first_name
         try:
             await context.bot.send_message(
@@ -3040,7 +2238,6 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await update.message.reply_text("⚠️ Error al descargar el archivo.")
         return
 
-    # Si el usuario estaba en modo donación
     if uid and uid in _DONATE_USERS:
         with open(tmp_path, "rb") as f:
             raw_b = f.read()
@@ -3051,7 +2248,6 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await _process_donation(update, context, raw_b.decode("utf-8", errors="replace"))
         return
 
-    # Si es un checkeo normal, comprueba créditos
     if not consume_credit(uid):
         try:
             os.unlink(tmp_path)
@@ -3159,24 +2355,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 
     if uid and uid in _CHANGEPW_STATE:
         await _handle_changepw_input(update, uid, text)
-        return
-
-    if uid and uid in _PROXY_ADD_STATE:
-        _PROXY_ADD_STATE.discard(uid)
-        from proxy_manager import proxy_manager as pm
-        ok, res = pm.add_proxy_raw(text.strip())
-        await update.message.reply_text(f"✅ {res}" if ok else f"❌ {res}", parse_mode=ParseMode.HTML)
-        return
-
-    if uid and uid in _PROXY_SOURCE_STATE:
-        _PROXY_SOURCE_STATE.discard(uid)
-        from proxy_manager import proxy_manager as pm
-        src_ok, src_msg = pm.add_source(text.strip())
-        if src_ok:
-            added, skipped, err = pm.fetch_from_url(text.strip())
-            await update.message.reply_text(f"✅ Importado: {added} proxies.", parse_mode=ParseMode.HTML)
-        else:
-            await update.message.reply_text(f"❌ {src_msg}", parse_mode=ParseMode.HTML)
         return
 
     if len(text) < 10 or text.startswith("/"):
