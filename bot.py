@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """
 BILL CYPHER CHK NF — Edition 5G Turbo Definitive
-• Validación en vivo en GEN COOKIE (Cero cuentas sin membresía / Finish sign-up)
-• Animación avanzada de carga en tiempo real para el checker masivo
+• Purga atómica de baúl: Cero repetición de cuentas en GEN COOKIE
+• Verificación estricta de streaming activo (Cero "Reinicia tu membresía" / "Update payment")
+• Sesiones Thread-Local 100% aisladas (Cero cruce de perfiles)
+• Monitor de carga animado avanzado con fases en tiempo real
+• Nuevo diseño de panel principal compacto optimizado para banner multimedia
 • Enlaces oficiales con parámetros web (PC / Mobile / TV8)
-• ZIP limpio sin emojis internos y con marca de agua @didierJC
 • Auto-restauración en arranque desde la nube de Telegram (Anti-Wipe)
 • Alertas automáticas de error a @didierJC
 """
@@ -568,7 +570,7 @@ def build_official_login_keyboard(raw_token: str) -> InlineKeyboardMarkup:
             InlineKeyboardButton("📺 𝙏𝙑 ↗️", url=tv_url),
         ],
         [
-            InlineKeyboardButton("🔄 𝙍𝙀𝙂𝙀𝙉 𝘾OOKIE", callback_data="panel:gencookie"),
+            InlineKeyboardButton("🔄 𝙍𝙀𝙂𝙀𝙉 𝘾𝙊𝙊𝙆𝙄𝙀", callback_data="panel:gencookie"),
             InlineKeyboardButton("🔙 𝙋𝙖𝙣𝙚𝙡", callback_data="panel:back"),
         ]
     ]
