@@ -571,7 +571,7 @@ def build_official_login_keyboard(raw_token: str) -> InlineKeyboardMarkup:
             InlineKeyboardButton("📺 𝙏𝙑 ↗️", url=tv_url),
         ],
         [
-            InlineKeyboardButton("🔄 𝙍\u200b𝙀𝙂𝙀𝙉 𝘾𝙊𝙊𝙆𝙄𝙀", callback_data="panel:gencookie"),
+            InlineKeyboardButton("🔄 𝙍𝙀𝙂𝙀𝙉 𝘾𝙊𝙊𝙆𝙄𝙀", callback_data="panel:gencookie"),
             InlineKeyboardButton("🔙 𝙋𝙖𝙣𝙚𝙡", callback_data="panel:back"),
         ]
     ]
@@ -745,7 +745,7 @@ def _set_delivery(user_id: int, mode: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Panel Principal Compacto (Baja Altura - Con Emojis Animados del Pack)
+# Panel Principal Compacto (Baja Altura - Optimizado para Banner con Emojis Reales)
 # ---------------------------------------------------------------------------
 def _main_panel_text(uid: int) -> str:
     mode_lbl = "Full" if _get_mode(uid) == "full" else "Básico"
@@ -753,7 +753,7 @@ def _main_panel_text(uid: int) -> str:
 
     cred_info = get_user_credits_info(uid)
     if cred_info["type"] == "owner":
-        role_lbl = '<emoji id="5084979757905347540">👑</emoji> Propietario'
+        role_lbl = '<emoji id="5084979757905347540">✅</emoji> Propietario'
     elif cred_info["type"] == "premium":
         role_lbl = '<emoji id="5085022089103016925">⚡️</emoji> Premium'
     else:
@@ -765,7 +765,7 @@ def _main_panel_text(uid: int) -> str:
     return (
         '👁️‍🗨️ <b>' + to_sans_bold_italic("BILL CYPHER CHK NF") + '</b> <emoji id="5085022089103016925">⚡️</emoji> 𝟱𝗚\n'
         "━━━━━━━━━━━━━━━━━━━━━━\n"
-        f'<emoji id="5084979757905347540">👑</emoji> <b>Rol:</b> {role_lbl} │ <emoji id="5084923566848213749">🐾</emoji> <b>Créditos:</b> <code>{cred_info["credits"]}</code>\n'
+        f'<emoji id="5084979757905347540">✅</emoji> <b>Rol:</b> {role_lbl} │ <emoji id="5084923566848213749">🐾</emoji> <b>Créditos:</b> <code>{cred_info["credits"]}</code>\n'
         f'<emoji id="5116380246626534280">🛸</emoji> <b>Stock:</b> <code>{vault_count} cuentas</code> │ ⚙️ <b>Ajustes:</b> {mode_lbl} · {dlv_lbl}\n'
         f'🟢 <b>Estado:</b> {state_lbl}\n'
         "━━━━━━━━━━━━━━━━━━━━━━\n"
