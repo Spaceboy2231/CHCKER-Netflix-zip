@@ -753,23 +753,23 @@ def _main_panel_text(uid: int) -> str:
 
     cred_info = get_user_credits_info(uid)
     if cred_info["type"] == "owner":
-        role_lbl = '<emoji id="5368324170671202286">👑</emoji> Propietario'
+        role_lbl = '<emoji id="5431580227220556758">👑</emoji> Propietario'
     elif cred_info["type"] == "premium":
-        role_lbl = '<emoji id="5368324170671202286">⭐</emoji> Premium'
+        role_lbl = '<emoji id="5431580227220556758">⭐</emoji> Premium'
     else:
-        role_lbl = '👤 Usuario'
+        role_lbl = '<emoji id="5431602951934484050">👤</emoji> Usuario'
 
-    state_lbl = "🔴 Mantenimiento" if is_maintenance() else 'Online <emoji id="5368324170671202286">⚡</emoji> 5G'
+    state_lbl = "🔴 Mantenimiento" if is_maintenance() else 'Online <emoji id="5431569424706536302">⚡</emoji> 5G'
     vault_count = len(_load_vault())
 
     return (
-        '👁️‍🗨️ <b>' + to_sans_bold_italic("BILL CYPHER CHK NF") + '</b> <emoji id="5368324170671202286">⚡</emoji> 𝟱𝗚\n'
+        '👁️‍🗨️ <b>' + to_sans_bold_italic("BILL CYPHER CHK NF") + '</b> <emoji id="5431569424706536302">⚡</emoji> 𝟱𝗚\n'
         "━━━━━━━━━━━━━━━━━━━━━━\n"
-        f'<emoji id="5368324170671202286">👑</emoji> <b>Rol:</b> {role_lbl} │ <emoji id="5368324170671202286">💎</emoji> <b>Créditos:</b> <code>{cred_info["credits"]}</code>\n'
-        f'<emoji id="5368324170671202286">📦</emoji> <b>Stock:</b> <code>{vault_count} cuentas</code> │ ⚙️ <b>Ajustes:</b> {mode_lbl} · {dlv_lbl}\n'
+        f'<emoji id="5431580227220556758">👑</emoji> <b>Rol:</b> {role_lbl} │ <emoji id="5431575801311029193">💎</emoji> <b>Créditos:</b> <code>{cred_info["credits"]}</code>\n'
+        f'<emoji id="5431578276189569769">📦</emoji> <b>Stock:</b> <code>{vault_count} cuentas</code> │ ⚙️ <b>Ajustes:</b> {mode_lbl} · {dlv_lbl}\n'
         f'🟢 <b>Estado:</b> {state_lbl}\n'
         "━━━━━━━━━━━━━━━━━━━━━━\n"
-        '<emoji id="5368324170671202286">⚡</emoji> <i>Envía tu archivo o genera una cuenta abajo:</i>'
+        '<emoji id="5431569424706536302">⚡</emoji> <i>Envía tu archivo o genera una cuenta abajo:</i>'
     )
 
 def _main_panel_markup(uid: int) -> InlineKeyboardMarkup:
@@ -2354,7 +2354,7 @@ async def addvault_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             await msg.reply_text(
                 f"✅ <b>¡Cookies importadas al baúl con éxito!</b>\n"
                 "━━━━━━━━━━━━━━━━━━━━━━\n"
-                f"• 📦 <b>Cuentas únicas añadas:</b> <code>{added}</code>\n"
+                f"• 📦 <b>Cuentas únicas añadidas:</b> <code>{added}</code>\n"
                 f"• 🔒 <b>Duplicados descartados:</b> <code>{len(extracted) - added}</code>\n"
                 f"• 🗄️ <b>Stock total verificado:</b> <code>{len(vault)}</code>",
                 parse_mode=ParseMode.HTML
@@ -3303,7 +3303,7 @@ def main() -> None:
     app.add_handler(CommandHandler("users",         users_command))
     app.add_handler(CommandHandler("setbanner",     setbanner_command))
     app.add_handler(CommandHandler("addvault",      addvault_command))
-.add_handler(CommandHandler("clearvault",    clearvault_command))
+    app.add_handler(CommandHandler("clearvault",    clearvault_command))
     app.add_handler(CommandHandler("setcredits",    setcredits_command))
     app.add_handler(CommandHandler("backup",        backup_command))
     app.add_handler(CommandHandler("restore",       restore_command))
@@ -3314,7 +3314,7 @@ def main() -> None:
     # Callbacks interactivos
     app.add_handler(CallbackQueryHandler(panel_callback,         pattern=r"^panel:"))
     app.add_handler(CallbackQueryHandler(proxy_admin_callback,  pattern=r"^proxy:"))
-    app.add_handler(CallbackQueryHandler(CallbackQueryHandler(cancel_callback,       pattern=r"^cancel:"))
+    app.add_handler(CallbackQueryHandler(cancel_callback,       pattern=r"^cancel:"))
     app.add_handler(CallbackQueryHandler(mode_callback,         pattern=r"^mode:"))
     app.add_handler(CallbackQueryHandler(setmode_callback,      pattern=r"^setmode:"))
     app.add_handler(CallbackQueryHandler(setdelivery_callback,  pattern=r"^setdelivery:"))
