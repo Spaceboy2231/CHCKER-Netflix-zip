@@ -745,7 +745,7 @@ def _set_delivery(user_id: int, mode: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Panel Principal Compacto (Baja Altura - Optimizado para Banner)
+# Panel Principal Compacto (Baja Altura - Optimizado para Banner Multimedia)
 # ---------------------------------------------------------------------------
 def _main_panel_text(uid: int) -> str:
     mode_lbl = "Full" if _get_mode(uid) == "full" else "Básico"
@@ -3314,6 +3314,7 @@ def main() -> None:
     # Callbacks interactivos
     app.add_handler(CallbackQueryHandler(panel_callback,         pattern=r"^panel:"))
     app.add_handler(CallbackQueryHandler(proxy_admin_callback,  pattern=r"^proxy:"))
+    app.add_handler(CallbackQueryHandler(CallbackQueryHandler,  pattern=r"^cancel:"))
     app.add_handler(CallbackQueryHandler(cancel_callback,       pattern=r"^cancel:"))
     app.add_handler(CallbackQueryHandler(mode_callback,         pattern=r"^mode:"))
     app.add_handler(CallbackQueryHandler(setmode_callback,      pattern=r"^setmode:"))
