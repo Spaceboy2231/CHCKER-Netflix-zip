@@ -72,6 +72,7 @@ for _noisy in ("httpx", "telegram", "apscheduler", "httpcore"):
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.WARNING)
 
+# Lee directamente la variable principal que ya tienes configurada en Infrlo
 BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN") or os.environ.get("BOT_TOKEN") or ""
 PORT = int(os.environ.get("PORT", 5000))
 
@@ -571,7 +572,7 @@ def build_official_login_keyboard(raw_token: str) -> InlineKeyboardMarkup:
             InlineKeyboardButton("📺 𝙏𝙑 ↗️", url=tv_url),
         ],
         [
-            InlineKeyboardButton("🔄 𝙍𝙀𝙂𝙀𝙉 𝘾𝙊𝙊𝙆𝙄𝙀", callback_data="panel:gencookie"),
+            InlineKeyboardButton("🔄 𝙍𝙀𝙂𝙀N 𝘾𝙊𝙊𝙆𝙄𝙀", callback_data="panel:gencookie"),
             InlineKeyboardButton("🔙 𝙋𝙖𝙣𝙚𝙡", callback_data="panel:back"),
         ]
     ]
@@ -2958,7 +2959,7 @@ async def _process_donation(update: Update, context: ContextTypes.DEFAULT_TYPE, 
             f"● 🍿 <b>Cuentas agregadas al baúl:</b> <code>{donated_count}</code>\n"
             f"● 💎 <b>Recompensa otorgada:</b> <code>+{donated_count} activaciones</code>\n\n"
             "<i>¡Muchas gracias por apoyar a la comunidad!</i>",
-            parse_mode=ParseMode.HTML,
+            parse_Mode=ParseMode.HTML,
         )
 
         # Notificación al propietario
