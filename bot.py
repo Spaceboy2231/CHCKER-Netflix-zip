@@ -72,7 +72,6 @@ for _noisy in ("httpx", "telegram", "apscheduler", "httpcore"):
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.WARNING)
 
-# Lee directamente la variable principal que ya tienes configurada en Infrlo
 BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN") or os.environ.get("BOT_TOKEN") or ""
 PORT = int(os.environ.get("PORT", 5000))
 
@@ -572,7 +571,7 @@ def build_official_login_keyboard(raw_token: str) -> InlineKeyboardMarkup:
             InlineKeyboardButton("📺 𝙏𝙑 ↗️", url=tv_url),
         ],
         [
-            InlineKeyboardButton("🔄 𝙍𝙀𝙂𝙀N 𝘾𝙊𝙊𝙆𝙄𝙀", callback_data="panel:gencookie"),
+            InlineKeyboardButton("🔄 𝙍𝙀𝙂𝙀𝙉 𝘾𝙊𝙊𝙆𝙄𝙀", callback_data="panel:gencookie"),
             InlineKeyboardButton("🔙 𝙋𝙖𝙣𝙚𝙡", callback_data="panel:back"),
         ]
     ]
@@ -746,7 +745,7 @@ def _set_delivery(user_id: int, mode: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Panel Principal Compacto (Baja Altura - Optimizado para Banner)
+# Panel Principal Compacto (Baja Altura - Optimizado para Banner con Emojis Reales)
 # ---------------------------------------------------------------------------
 def _main_panel_text(uid: int) -> str:
     mode_lbl = "Full" if _get_mode(uid) == "full" else "Básico"
@@ -754,23 +753,23 @@ def _main_panel_text(uid: int) -> str:
 
     cred_info = get_user_credits_info(uid)
     if cred_info["type"] == "owner":
-        role_lbl = '<emoji id="5431580227220556758">👑</emoji> Propietario'
+        role_lbl = '<emoji id="5084979757905347540">✅</emoji> Propietario'
     elif cred_info["type"] == "premium":
-        role_lbl = '<emoji id="5431580227220556758">⭐</emoji> Premium'
+        role_lbl = '<emoji id="5085022089103016925">⚡️</emoji> Premium'
     else:
-        role_lbl = '<emoji id="5431602951934484050">👤</emoji> Usuario'
+        role_lbl = '<emoji id="5116582462276764538">👤</emoji> Usuario'
 
-    state_lbl = "🔴 Mantenimiento" if is_maintenance() else 'Online <emoji id="5431569424706536302">⚡</emoji> 5G'
+    state_lbl = "🔴 Mantenimiento" if is_maintenance() else 'Online <emoji id="5085022089103016925">⚡️</emoji> 5G'
     vault_count = len(_load_vault())
 
     return (
-        '👁️‍🗨️ <b>' + to_sans_bold_italic("BILL CYPHER CHK NF") + '</b> <emoji id="5431569424706536302">⚡</emoji> 𝟱𝗚\n'
+        '👁️‍🗨️ <b>' + to_sans_bold_italic("BILL CYPHER CHK NF") + '</b> <emoji id="5085022089103016925">⚡️</emoji> 𝟱𝗚\n'
         "━━━━━━━━━━━━━━━━━━━━━━\n"
-        f'<emoji id="5431580227220556758">👑</emoji> <b>Rol:</b> {role_lbl} │ <emoji id="5431575801311029193">💎</emoji> <b>Créditos:</b> <code>{cred_info["credits"]}</code>\n'
-        f'<emoji id="5431578276189569769">📦</emoji> <b>Stock:</b> <code>{vault_count} cuentas</code> │ ⚙️ <b>Ajustes:</b> {mode_lbl} · {dlv_lbl}\n'
+        f'<emoji id="5084979757905347540">✅</emoji> <b>Rol:</b> {role_lbl} │ <emoji id="5084923566848213749">🐾</emoji> <b>Créditos:</b> <code>{cred_info["credits"]}</code>\n'
+        f'<emoji id="5116380246626534280">🛸</emoji> <b>Stock:</b> <code>{vault_count} cuentas</code> │ ⚙️ <b>Ajustes:</b> {mode_lbl} · {dlv_lbl}\n'
         f'🟢 <b>Estado:</b> {state_lbl}\n'
         "━━━━━━━━━━━━━━━━━━━━━━\n"
-        '<emoji id="5431569424706536302">⚡</emoji> <i>Envía tu archivo o genera una cuenta abajo:</i>'
+        '<emoji id="5085022089103016925">⚡️</emoji> <i>Envía tu archivo o genera una cuenta abajo:</i>'
     )
 
 def _main_panel_markup(uid: int) -> InlineKeyboardMarkup:
@@ -2959,7 +2958,7 @@ async def _process_donation(update: Update, context: ContextTypes.DEFAULT_TYPE, 
             f"● 🍿 <b>Cuentas agregadas al baúl:</b> <code>{donated_count}</code>\n"
             f"● 💎 <b>Recompensa otorgada:</b> <code>+{donated_count} activaciones</code>\n\n"
             "<i>¡Muchas gracias por apoyar a la comunidad!</i>",
-            parse_Mode=ParseMode.HTML,
+            parse_mode=ParseMode.HTML,
         )
 
         # Notificación al propietario
@@ -3360,12 +3359,7 @@ def main() -> None:
             BotCommand("donar",    "Donar cookies al baúl (+1 crédito)"),
             BotCommand("settings", "Configurar formato y entrega"),
             BotCommand("mode",     "Cambiar modo (Básico / Full)"),
-            BotCommand("basic",    "Activar modo básico"),
-            BotCommand("fullinfo", "Activar información completa"),
-            BotCommand("info",     "Estadísticas en tiempo real"),
-            BotCommand("help",     "Formatos de cookies soportados"),
-            BotCommand("changepw", "Cambiar contraseña de cuenta"),
-            BotCommand("cancel",   "Cancelar operación en curso"),
+            BotCommand("general",  "Panel principal"),
         ]
         await application.bot.set_my_commands(user_commands, scope=BotCommandScopeDefault())
 
@@ -3395,5 +3389,5 @@ def main() -> None:
     app.run_polling(drop_pending_updates=True, allowed_updates=["message", "callback_query"])
 
 
-if __name__ == "__main__":
+if __name__ == "main":
     main()
