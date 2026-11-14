@@ -745,7 +745,7 @@ def _set_delivery(user_id: int, mode: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Panel Principal Compacto (Baja Altura - Estilo Kaori con Emojis Animados)
+# Panel Principal Compacto (Estilo Kaori con Emojis Animados Integrados)
 # ---------------------------------------------------------------------------
 def _main_panel_text(uid: int) -> str:
     mode_lbl = "Full" if _get_mode(uid) == "full" else "Básico"
@@ -757,7 +757,7 @@ def _main_panel_text(uid: int) -> str:
     elif cred_info["type"] == "premium":
         role_lbl = '<tg-emoji emoji-id="5085022089103016925">⚡️</tg-emoji> Premium'
     else:
-        role_lbl = "👤 Usuario"
+        role_lbl = '<tg-emoji emoji-id="5116582462276764538">👤</tg-emoji> Usuario'
 
     state_lbl = "🔴 Mantenimiento" if is_maintenance() else 'Online <tg-emoji emoji-id="5085022089103016925">⚡️</tg-emoji> 5G'
     vault_count = len(_load_vault())
@@ -766,8 +766,8 @@ def _main_panel_text(uid: int) -> str:
         "👁️‍🗨️ <b>" + to_sans_bold_italic("BILL CYPHER CHK NF") + '</b> <tg-emoji emoji-id="5085022089103016925">⚡️</tg-emoji> 𝟱𝗚\n'
         "━━━━━━━━━━━━━━━━━━━━━━\n"
         f'<tg-emoji emoji-id="5084979757905347540">👑</tg-emoji> <b>Rol:</b> {role_lbl} │ <tg-emoji emoji-id="5084923566848213749">🐾</tg-emoji> <b>Créditos:</b> <code>{cred_info["credits"]}</code>\n'
-        f'📦 <b>Stock:</b> <code>{vault_count} cuentas</code> │ ⚙️ <b>Ajustes:</b> {mode_lbl} · {dlv_lbl}\n'
-        f"🟢 <b>Estado:</b> {state_lbl}\n"
+        f'<tg-emoji emoji-id="5118686540985271080">💼</tg-emoji> <b>Stock:</b> <code>{vault_count} cuentas</code> │ <tg-emoji emoji-id="4904936030232117798">⚙️</tg-emoji> <b>Ajustes:</b> {mode_lbl} · {dlv_lbl}\n'
+        f'<tg-emoji emoji-id="4915791289489818259">✅</tg-emoji> <b>Estado:</b> {state_lbl}\n'
         "━━━━━━━━━━━━━━━━━━━━━━\n"
         '<tg-emoji emoji-id="5085022089103016925">⚡️</tg-emoji> <i>Envía tu archivo o genera una cuenta abajo:</i>'
     )
@@ -791,21 +791,21 @@ def _main_panel_markup(uid: int) -> InlineKeyboardMarkup:
             ]
         ]
 
-    # BOTONERA LIMPIA Y SIMÉTRICA (ESTILO KAORI)
+    # BOTONERA LIMPIA, SIMÉTRICA Y CON ANIMACIONES EN LOS BOTONES (ESTILO KAORI)
     rows = [
         [
-            InlineKeyboardButton("⚡ " + to_sans_bold_italic("GEN COOKIE") + " 🍿", callback_data="panel:gencookie"),
+            InlineKeyboardButton('<tg-emoji emoji-id="5085022089103016925">⚡️</tg-emoji> ' + to_sans_bold_italic("GEN COOKIE") + ' <tg-emoji emoji-id="5134186747244053395">🍷</tg-emoji>', callback_data="panel:gencookie"),
         ],
         [
-            InlineKeyboardButton("🎁 Donar Cookies", callback_data="panel:donate"),
-            InlineKeyboardButton("📊 Estadísticas", callback_data="panel:info"),
+            InlineKeyboardButton('<tg-emoji emoji-id="5084974483685507801">💜</tg-emoji> Donar Cookies', callback_data="panel:donate"),
+            InlineKeyboardButton('<tg-emoji emoji-id="5121007227779416740">📶</tg-emoji> Estadísticas', callback_data="panel:info"),
         ],
         [
-            InlineKeyboardButton("⚙️ Configuración", callback_data="panel:settings"),
-            InlineKeyboardButton("📖 Formatos", callback_data="panel:help"),
+            InlineKeyboardButton('<tg-emoji emoji-id="4904936030232117798">⚙️</tg-emoji> Configuración', callback_data="panel:settings"),
+            InlineKeyboardButton('<tg-emoji emoji-id="5116468787377341336">💬</tg-emoji> Formatos', callback_data="panel:help"),
         ],
         [
-            InlineKeyboardButton("🔐 Cambiar PW [Beta]", callback_data="panel:changepw"),
+            InlineKeyboardButton('<tg-emoji emoji-id="4904500559203009298">🔒</tg-emoji> Cambiar PW [Beta]', callback_data="panel:changepw"),
         ],
         *admin_buttons,
     ]
