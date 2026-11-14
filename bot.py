@@ -749,7 +749,7 @@ def _set_delivery(user_id: int, mode: str) -> None:
 # ---------------------------------------------------------------------------
 def _main_panel_text(uid: int) -> str:
     mode_lbl = "Full" if _get_mode(uid) == "full" else "Básico"
-    dlv_lbl  = "Cards 💬" if _get_delivery(uid) == "cards" else "ZIP 📦"
+    dlv_lbl  = f'Cards <tg-emoji emoji-id="5116468787377341336">💬</tg-emoji>' if _get_delivery(uid) == "cards" else f'ZIP <tg-emoji emoji-id="5118686540985271080">📦</tg-emoji>'
 
     cred_info = get_user_credits_info(uid)
     if cred_info["type"] == "owner":
