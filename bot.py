@@ -81,7 +81,7 @@ PORT = int(os.environ.get("PORT", 5000))
 OWNER_ID: int = 5320997298
 OWNER_USER: str = "didierJC"
 OWNER_URL: str = f"https://t.me/{OWNER_USER}"
-WATERMARK_TEXT: str = '<tg-emoji emoji-id="5084979757905347540">👑</tg-emoji> Checked by: @didierJC | BILL CYPHER CHK NF'
+WATERMARK_TEXT: str = "👑 Checked by: @didierJC | BILL CYPHER CHK NF"
 
 def is_admin(uid: int) -> bool:
     return bool(uid and uid == OWNER_ID)
@@ -206,7 +206,7 @@ def set_maintenance(enabled: bool) -> None:
         logger.warning(f"Error guardando maintenance: {e}")
 
 MAINTENANCE_TEXT = (
-    '<tg-emoji emoji-id="5115853119839011973">⚠️</tg-emoji> <b>' + to_sans_bold_italic("BOT EN MANTENIMIENTO") + "</b>\n"
+    "🛠️ <b>" + to_sans_bold_italic("BOT EN MANTENIMIENTO") + "</b>\n"
     "━━━━━━━━━━━━━━━━━━━━━━\n"
     "El bot se encuentra actualmente en mantenimiento para actualizar stock y aplicar mejoras.\n\n"
     "⏳ <i>Por favor, espera a que el propietario finalice las actualizaciones para volver a usarlo.</i>"
@@ -235,7 +235,7 @@ def _save_credits(data: dict) -> None:
 
 def get_user_credits_info(uid: int) -> dict:
     if is_admin(uid):
-        return {"type": "owner", "credits": 'Ilimitado <tg-emoji emoji-id="5084979757905347540">👑</tg-emoji>', "can_use": True}
+        return {"type": "owner", "credits": "Ilimitado 👑", "can_use": True}
 
     data = _load_credits()
     user_data = data.get(str(uid), {})
@@ -243,13 +243,13 @@ def get_user_credits_info(uid: int) -> dict:
 
     if user_data.get("is_premium"):
         creds = user_data.get("credits", "unlimited")
-        if creds == 'unlimited':
-            return {"type": "premium", "credits": 'Ilimitado <tg-emoji emoji-id="5116163917713769254">⭐️</tg-emoji>', "can_use": True}
+        if creds == "unlimited":
+            return {"type": "premium", "credits": "Ilimitado ⭐", "can_use": True}
         try:
             c_val = int(creds)
         except ValueError:
             c_val = 0
-        return {"type": "premium", "credits": f'{c_val} restantes <tg-emoji emoji-id="5116163917713769254">⭐️</tg-emoji>', "can_use": c_val > 0, "balance": c_val}
+        return {"type": "premium", "credits": f"{c_val} restantes ⭐", "can_use": c_val > 0, "balance": c_val}
 
     last_date = user_data.get("last_date", "")
     used_today = user_data.get("used_today", 0)
@@ -341,10 +341,10 @@ def add_reward_credit(uid: int, amount: int = 1) -> None:
     _save_credits(data)
 
 OUT_OF_CREDITS_TEXT = (
-    '<tg-emoji emoji-id="5115853119839011973">⚠️</tg-emoji> <b>¡Créditos diarios agotados!</b>\n'
+    "⚠️ <b>¡Créditos diarios agotados!</b>\n"
     "━━━━━━━━━━━━━━━━━━━━━━\n"
     f"Has alcanzado el límite de <b>{DAILY_FREE_CREDITS} activaciones gratuitas por hoy</b>.\n\n"
-    '<tg-emoji emoji-id="5116648080787112958">💰</tg-emoji> <i>Para activar acceso Premium o créditos ilimitados, contacta al propietario:</i>\n'
+    "💎 <i>Para activar acceso Premium o créditos ilimitados, contacta al propietario:</i>\n"
     "━━━━━━━━━━━━━━━━━━━━━━"
 )
 
@@ -718,7 +718,7 @@ def _validate_cookie_text(text: str) -> tuple[bool, str]:
         lines = [l.strip() for l in text.splitlines() if l.strip()]
         sample = lines[0][:80] if lines else text[:80]
         return False, (
-            '<tg-emoji emoji-id="5115853119839011973">⚠️</tg-emoji> <b>No se encontraron cookies de Netflix.</b>\n\n'
+            "❌ <b>No se encontraron cookies de Netflix.</b>\n\n"
             "Se requiere cookie <code>NetflixId</code> o <code>SecureNetflixId</code>.\n\n"
             f"<i>El contenido empieza con:</i> <code>{sample}</code>"
         )
@@ -938,18 +938,18 @@ def _info_text(uid: int) -> str:
     active       = len(_ACTIVE_USERS)
 
     return (
-        '<tg-emoji emoji-id="5121007227779416740">📶</tg-emoji> <b>Estadísticas en Tiempo Real</b>\n'
+        "📊 <b>Estadísticas en Tiempo Real</b>\n"
         "━━━━━━━━━━━━━━━━━━━━━━\n\n"
-        f'<tg-emoji emoji-id="5123230779593196220">⏰</tg-emoji> <b>Uptime:</b> {uptime}\n'
-        f'<tg-emoji emoji-id="5118686540985271080">💼</tg-emoji> <b>Total Chequeado:</b> {total_checks}\n'
-        f'<tg-emoji emoji-id="4915791289489818259">✅</tg-emoji> <b>Hits Activos:</b> {hits} ({hit_rate}%)\n'
-        f'<tg-emoji emoji-id="5116590266232341370">💤</tg-emoji> <b>En Espera:</b> {on_hold}\n'
-        f'<tg-emoji emoji-id="5116382939571028928">🆓</tg-emoji> <b>Cuentas Free:</b> {frees}\n'
-        f'<tg-emoji emoji-id="5116151848855667552">🚫</tg-emoji> <b>Inválidas:</b> {invalids}\n'
-        f'<tg-emoji emoji-id="5115853119839011973">⚠️</tg-emoji> <b>Errores:</b> {errors}\n'
-        f'<tg-emoji emoji-id="5116582462276764538">👤</tg-emoji> <b>Usuarios Únicos:</b> {users}\n'
-        f'<tg-emoji emoji-id="4902524693858222969">⚡️</tg-emoji> <b>Procesos Activos:</b> {active}\n'
-        f'<tg-emoji emoji-id="5085022089103016925">⚡️</tg-emoji> <b>Velocidad:</b> {cpm} checks/min\n'
+        f"⏱️ <b>Uptime:</b> {uptime}\n"
+        f"📦 <b>Total Chequeado:</b> {total_checks}\n"
+        f"✅ <b>Hits Activos:</b> {hits} ({hit_rate}%)\n"
+        f"⏸️ <b>En Espera:</b> {on_hold}\n"
+        f"🔓 <b>Cuentas Free:</b> {frees}\n"
+        f"❌ <b>Inválidas:</b> {invalids}\n"
+        f"⚠️ <b>Errores:</b> {errors}\n"
+        f"👤 <b>Usuarios Únicos:</b> {users}\n"
+        f"🔄 <b>Procesos Activos:</b> {active}\n"
+        f"🚀 <b>Velocidad:</b> {cpm} checks/min\n"
         "━━━━━━━━━━━━━━━━━━━━━━"
     )
 
@@ -993,39 +993,39 @@ def _plan_title(plan_name: str, status: str) -> str:
     p = (plan_name or "").lower()
     st = normalize_status(status)
     if st == "free":
-        return '<tg-emoji emoji-id="5116382939571028928">🆓</tg-emoji> FREE ACCOUNT (Sin Suscripción)'
+        return "🔓 FREE ACCOUNT (Sin Suscripción)"
     if st == "on_hold":
-        return '<tg-emoji emoji-id="5116590266232341370">💤</tg-emoji> CUENTA EN ESPERA (On Hold)'
+        return "⏸️ CUENTA EN ESPERA (On Hold)"
     if "premium" in p:
-        return '<tg-emoji emoji-id="5116163917713769254">⭐️</tg-emoji> CUENTA PREMIUM 4K'
+        return "🌟 CUENTA PREMIUM 4K"
     if "standard" in p and "ads" in p:
-        return '<tg-emoji emoji-id="5118744200921219799">🎥</tg-emoji> STANDARD CON ANUNCIOS'
+        return "📺 STANDARD CON ANUNCIOS"
     if "standard" in p:
-        return '<tg-emoji emoji-id="5116163917713769254">⭐️</tg-emoji> CUENTA STANDARD'
+        return "⭐ CUENTA STANDARD"
     if "basic" in p or "base" in p:
-        return '<tg-emoji emoji-id="5116582462276764538">👤</tg-emoji> CUENTA BÁSICA'
+        return "📱 CUENTA BÁSICA"
     if "mobile" in p:
-        return '<tg-emoji emoji-id="5116175844837950263">🎮</tg-emoji> CUENTA MÓVIL'
+        return "📱 CUENTA MÓVIL"
     if st == "hit":
-        return '<tg-emoji emoji-id="4915791289489818259">✅</tg-emoji> CUENTA VÁLIDA (LIVE)'
-    return '<tg-emoji emoji-id="5116151848855667552">🚫</tg-emoji> CUENTA INVÁLIDA (DEAD)'
+        return "✅ CUENTA VÁLIDA (LIVE)"
+    return "❌ CUENTA INVÁLIDA (DEAD)"
 
 def _status_line(status: str, plan: str) -> str:
     p_lower = (plan or "").lower()
     st = normalize_status(status)
     if st == "hit":
         if "premium" in p_lower:
-            return '<tg-emoji emoji-id="5116414868357907335">🔥</tg-emoji> <b>Status:</b> Válido (Live) — Premium 4K <tg-emoji emoji-id="4915791289489818259">✅</tg-emoji>'
+            return "🔥 <b>Status:</b> Válido (Live) — Premium 4K ✅"
         if "standard" in p_lower:
-            return '<tg-emoji emoji-id="5116414868357907335">🔥</tg-emoji> <b>Status:</b> Válido (Live) — Standard <tg-emoji emoji-id="4915791289489818259">✅</tg-emoji>'
+            return "🔥 <b>Status:</b> Válido (Live) — Standard ✅"
         if "basic" in p_lower:
-            return '<tg-emoji emoji-id="5116414868357907335">🔥</tg-emoji> <b>Status:</b> Válido (Live) — Básica <tg-emoji emoji-id="4915791289489818259">✅</tg-emoji>'
-        return '<tg-emoji emoji-id="5116414868357907335">🔥</tg-emoji> <b>Status:</b> Válido (Live) <tg-emoji emoji-id="4915791289489818259">✅</tg-emoji>'
+            return "🔥 <b>Status:</b> Válido (Live) — Básica ✅"
+        return "🔥 <b>Status:</b> Válido (Live) ✅"
     if st == "free":
-        return '<tg-emoji emoji-id="5116382939571028928">🆓</tg-emoji> <b>Status:</b> Sin membresía activa'
+        return "🔓 <b>Status:</b> Sin membresía activa"
     if st == "on_hold":
-        return '<tg-emoji emoji-id="5116590266232341370">💤</tg-emoji> <b>Status:</b> En espera (Fallo de pago)'
-    return '<tg-emoji emoji-id="5116151848855667552">🚫</tg-emoji> <b>Status:</b> Muerta (Dead / Inválida)'
+        return "⏸️ <b>Status:</b> En espera (Fallo de pago)"
+    return "❌ <b>Status:</b> Muerta (Dead / Inválida)"
 
 def _build_card_line(result: dict) -> str:
     ct = result.get("card_type") or ""
@@ -1070,11 +1070,11 @@ def format_result_basic(result: dict, index: int = 1, total: int = 1, source: st
     counter = f"  #{index}/{total}" if total > 1 else ""
 
     lines = [
-        f'<tg-emoji emoji-id="5118744200921219799">🎥</tg-emoji> <b>{title}{counter}</b>',
+        f"🎬 <b>{title}{counter}</b>",
         "━━━━━━━━━━━━━━━━━━━━━━",
         _status_line(status, plan),
         "",
-        '<tg-emoji emoji-id="5116582462276764538">👤</tg-emoji> <b>Account</b>',
+        "👤 <b>Account</b>",
     ]
     if name:
         lines.append(f"  • Name: {name}")
@@ -1085,7 +1085,7 @@ def format_result_basic(result: dict, index: int = 1, total: int = 1, source: st
         lines.append(f"  • Phone: {phone}")
 
     lines.append("")
-    lines.append('<tg-emoji emoji-id="4904500559203009298">🔒</tg-emoji> <b>Subscription</b>')
+    lines.append("📋 <b>Subscription</b>")
     lines.append(f"  • País: {_country_display(country)}")
     lines.append(f"  • Plan: {plan or 'Desconocido'}")
     lines.append(f"  • Calidad: {quality} · {streams} screens")
@@ -1100,10 +1100,10 @@ def format_result_basic(result: dict, index: int = 1, total: int = 1, source: st
 
     lines.append("")
     if nf_id:
-        lines.append(f'<tg-emoji emoji-id="5134145167665660725">🍪</tg-emoji> <code>NetflixId={nf_id}</code>\n')
+        lines.append(f"🍪 <code>NetflixId={nf_id}</code>\n")
 
     if issues:
-        lines.append('<tg-emoji emoji-id="5115853119839011973">⚠️</tg-emoji> <b>Problemas de la cuenta</b>')
+        lines.append("⚠️ <b>Problemas de la cuenta</b>")
         for issue in issues:
             lines.append(f"  🔴 {issue}")
         lines.append("")
@@ -1143,14 +1143,14 @@ def format_result_full(result: dict, index: int = 1, total: int = 1, source: str
     counter = f"  #{index}/{total}" if total > 1 else ""
 
     lines = [
-        f'<tg-emoji emoji-id="5118744200921219799">🎥</tg-emoji> <b>{title}{counter}</b>',
+        f"🎬 <b>{title}{counter}</b>",
         "━━━━━━━━━━━━━━━━━━━━━━",
     ]
     if source:
         lines.append(f"📁 <b>Origen:</b> <code>{source}</code>")
     lines.append(_status_line(status, plan))
     lines.append("")
-    lines.append('<tg-emoji emoji-id="5116582462276764538">👤</tg-emoji> <b>Detalles de la cuenta:</b>')
+    lines.append("👤 <b>Detalles de la cuenta:</b>")
     if name:
         lines.append(f"  • Name: {name}")
     lines.append(f"  • Email: <code>{email}</code>")
@@ -1192,13 +1192,13 @@ def format_result_full(result: dict, index: int = 1, total: int = 1, source: str
     issues = result.get("account_issues") or []
     if issues:
         lines.append("")
-        lines.append('<tg-emoji emoji-id="5115853119839011973">⚠️</tg-emoji> <b>Alertas de la cuenta:</b>')
+        lines.append("⚠️ <b>Alertas de la cuenta:</b>")
         for issue in issues:
             lines.append(f"  🔴 {issue}")
 
     lines.append("")
     if nf_id:
-        lines.append('<tg-emoji emoji-id="5134145167665660725">🍪</tg-emoji> <b>Cookie:</b>')
+        lines.append("🍪 <b>Cookie:</b>")
         lines.append(f"<code>NetflixId={nf_id}</code>")
 
     lines.append("")
@@ -1213,10 +1213,10 @@ def format_error_card(result: dict, index: int = 1, total: int = 1, source: str 
     counter = f"  #{index}/{total}" if total > 1 else ""
 
     if status == "invalid":
-        header = f'<tg-emoji emoji-id="5116151848855667552">🚫</tg-emoji> <b>DEAD / INVÁLIDA{counter}</b>'
+        header = f"❌ <b>DEAD / INVÁLIDA{counter}</b>"
         reason = message or "La cookie ha caducado o no es válida."
     else:
-        header = f'<tg-emoji emoji-id="5115853119839011973">⚠️</tg-emoji> <b>ERROR{counter}</b>'
+        header = f"⚠️ <b>ERROR{counter}</b>"
         reason = message or "Error de conexión o timeout."
 
     lines = [
@@ -1228,7 +1228,7 @@ def format_error_card(result: dict, index: int = 1, total: int = 1, source: str 
     lines.append(f"• Motivo: <i>{reason}</i>")
     if nf_id:
         snippet = nf_id[:35] + "…" if len(nf_id) > 35 else nf_id
-        lines.append(f'<tg-emoji emoji-id="5134145167665660725">🍪</tg-emoji> Cookie: <code>{snippet}</code>')
+        lines.append(f"🍪 Cookie: <code>{snippet}</code>")
     lines.append(f"<i>{WATERMARK_TEXT}</i>")
     lines.append("━━━━━━━━━━━━━━━━━━━━━━")
     return "\n".join(lines)
@@ -1248,7 +1248,7 @@ def format_result(result: dict, index: int = 1, total: int = 1, source: str = ""
 
 
 # ---------------------------------------------------------------------------
-# Separador de cookies y lector ZIP
+# Separador de cookies y lector ZIP (Robusto contra Document_invalid)
 # ---------------------------------------------------------------------------
 _HIT_BLOCK_COOKIE_RE = re.compile(r'[•\-*]?\s*[Cc]ookies?\s*[:\|]+\s*\S{20,}')
 _HIT_SEPARATOR_RE  = re.compile(r'(?m)^[\u2500\u2550\-=─═]{8,}\s*$')
@@ -1357,7 +1357,7 @@ def _score_account(result: dict) -> tuple:
 
 
 # ---------------------------------------------------------------------------
-# Generador y empaquetador ZIP de hits (Formato limpio sin emojis internos)
+# Generador y empaquetador ZIP de hits con archivos individuales
 # ---------------------------------------------------------------------------
 async def send_hits_zip(update: Update, hits: list[tuple[dict, str, str]]) -> None:
     today = date.today().isoformat()
@@ -1381,7 +1381,7 @@ async def send_hits_zip(update: Update, hits: list[tuple[dict, str, str]]) -> No
     def _safe_encode(text: str) -> bytes:
         return str(text).encode("utf-8", errors="replace")
 
-    def _account_file(i: int, total: int, result: dict, source: str) -> str:
+    def _account_file(i: int, total: int, result: dict, source: str, raw_cookie: str) -> str:
         email   = result.get("email")        or f"account_{i}"
         name    = result.get("name")         or "Account Owner"
         country = result.get("country")      or "Desconocido"
@@ -1426,13 +1426,16 @@ async def send_hits_zip(update: Update, hits: list[tuple[dict, str, str]]) -> No
             f"[+] Mobile Web   : {mob_lnk}",
             f"[+] TV Code      : {tv_lnk}",
             sep,
-            "COOKIES (Netscape HTTP Cookie File)",
+            "COOKIES (Netscape HTTP Cookie File / Raw)",
             sep,
         ]
-        if nf_id:
-            lines.append(f".netflix.com\tTRUE\t/\tTRUE\t{exp}\tNetflixId\t{nf_id}")
-        if nf_sec:
-            lines.append(f".netflix.com\tTRUE\t/\tTRUE\t{exp}\tSecureNetflixId\t{nf_sec}")
+        if raw_cookie and len(raw_cookie) > 20:
+            lines.append(raw_cookie)
+        else:
+            if nf_id:
+                lines.append(f".netflix.com\tTRUE\t/\tTRUE\t{exp}\tNetflixId\t{nf_id}")
+            if nf_sec:
+                lines.append(f".netflix.com\tTRUE\t/\tTRUE\t{exp}\tSecureNetflixId\t{nf_sec}")
         lines.append(sep)
         lines.append(f"Checked by {WATERMARK_TEXT}")
         lines.append(sep)
@@ -1460,22 +1463,22 @@ async def send_hits_zip(update: Update, hits: list[tuple[dict, str, str]]) -> No
             ]
             zf.writestr("_SUMMARY.txt", _safe_encode("\n".join(summary_lines)))
 
-            for i, (result, src, _) in enumerate(premium, 1):
+            for i, (result, src, raw_c) in enumerate(premium, 1):
                 email   = result.get("email") or f"account_{i}"
                 safe    = re.sub(r'[^\w@._-]', '_', str(email))[:35]
                 plan    = re.sub(r'[^\w ]', '', str(result.get("plan_name") or "Premium"))[:20].strip()
                 c_code  = _flag(result.get("country") or "") or "XX"
                 fname   = f"Premium Resultados/{i:02d}_{c_code}_{safe}_{plan}.txt"
-                content_bytes = _safe_encode(_account_file(i, len(premium), result, src))
+                content_bytes = _safe_encode(_account_file(i, len(premium), result, src, raw_c))
                 zf.writestr(fname, content_bytes)
 
-            for i, (result, src, _) in enumerate(normal, 1):
+            for i, (result, src, raw_c) in enumerate(normal, 1):
                 email   = result.get("email") or f"account_{i}"
                 safe    = re.sub(r'[^\w@._-]', '_', str(email))[:35]
                 plan    = re.sub(r'[^\w ]', '', str(result.get("plan_name") or "Hit"))[:20].strip()
                 c_code  = _flag(result.get("country") or "") or "XX"
                 fname   = f"Normal Resultados/{i:02d}_{c_code}_{safe}_{plan}.txt"
-                content_bytes = _safe_encode(_account_file(i, len(normal), result, src))
+                content_bytes = _safe_encode(_account_file(i, len(normal), result, src, raw_c))
                 zf.writestr(fname, content_bytes)
 
     except Exception as _zip_err:
@@ -1487,11 +1490,11 @@ async def send_hits_zip(update: Update, hits: list[tuple[dict, str, str]]) -> No
     zip_name = f"Netflix-Resultados-{total_hits}x-{rand2}.zip"
 
     caption_parts = [
-        f'📦 <b>Netflix-Resultados-{total_hits}x-{rand2}.zip</b>',
+        f"📦 <b>Netflix-Resultados-{total_hits}x-{rand2}.zip</b>",
         "━━━━━━━━━━━━━━━━━━━━━━",
-        f'  <tg-emoji emoji-id="5116163917713769254">⭐️</tg-emoji> Premium Resultados  »  <b>{len(premium)}</b>',
-        f'  <tg-emoji emoji-id="4915791289489818259">✅</tg-emoji> Normal Resultados   »  <b>{len(normal)}</b>',
-        f'  <tg-emoji emoji-id="5121007227779416740">📶</tg-emoji> Total               »  <b>{total_hits}</b>',
+        f"  🌟 Premium Resultados  »  <b>{len(premium)}</b>",
+        f"  ✅ Normal Resultados   »  <b>{len(normal)}</b>",
+        f"  📊 Total               »  <b>{total_hits}</b>",
     ]
     if dupes_removed > 0:
         caption_parts.append(f"  ♻️ Duplicados eliminados »  <b>{dupes_removed}</b>")
@@ -1529,19 +1532,19 @@ async def process_cookies(update: Update, status_msg, cookie_text: str, source: 
 
     if len(sets) == 1:
         await status_msg.edit_text(
-            '<tg-emoji emoji-id="5085022089103016925">⚡️</tg-emoji> <b>' + to_sans_bold_italic("BILL CYPHER | CHECKING") + '</b> <tg-emoji emoji-id="5134186747244053395">🍷</tg-emoji>\n'
+            "⚡ <b>" + to_sans_bold_italic("BILL CYPHER | CHECKING") + "</b>\n"
             "━━━━━━━━━━━━━━━━━━━━━━\n"
-            '<tg-emoji emoji-id="5123230779593196220">⏰</tg-emoji> <b>Cuenta:</b> 1 detectada\n'
-            '<tg-emoji emoji-id="4902524693858222969">⚡️</tg-emoji> <b>Estado:</b> <i>Conectando a Netflix API...</i>\n'
+            "🍪 <b>Cuenta:</b> 1 detectada\n"
+            "🔄 <b>Estado:</b> <i>Conectando a Netflix API...</i>\n"
             "━━━━━━━━━━━━━━━━━━━━━━",
             parse_mode=ParseMode.HTML,
         )
     else:
         await status_msg.edit_text(
-            '<tg-emoji emoji-id="5085022089103016925">⚡️</tg-emoji> <b>' + to_sans_bold_italic("BILL CYPHER | CHECKING 5G") + '</b> <tg-emoji emoji-id="5134186747244053395">🍷</tg-emoji>\n'
+            "⚡ <b>" + to_sans_bold_italic("BILL CYPHER | CHECKING 5G") + "</b>\n"
             "━━━━━━━━━━━━━━━━━━━━━━\n"
-            f'<tg-emoji emoji-id="5118686540985271080">💼</tg-emoji> <b>Lote detectado:</b> {len(sets)} cuentas\n'
-            '<tg-emoji emoji-id="4902524693858222969">⚡️</tg-emoji> <b>Estado:</b> <i>Iniciando verificación masiva 5G...</i>\n'
+            f"📦 <b>Lote detectado:</b> {len(sets)} cuentas\n"
+            "🔄 <b>Estado:</b> <i>Iniciando verificación masiva 5G...</i>\n"
             "━━━━━━━━━━━━━━━━━━━━━━",
             parse_mode=ParseMode.HTML,
         )
@@ -1635,7 +1638,7 @@ async def process_cookie_sets(update: Update, status_msg, cookie_sets: list[tupl
                     txt = format_result({"status": "invalid", "message": "Cookie expirada / fallo de pago."}, idx, total, source=src, user_id=uid)
                     await update.message.reply_text(txt, parse_mode=ParseMode.HTML)
 
-        # Monitor de carga animado en tiempo real con fases (con Emojis Animados Oficiales)
+        # Monitor de carga animado en tiempo real con fases (porcentaje limpio)
         if is_bulk:
             now_time = time.monotonic()
             done_so_far = min(batch_start + len(batch), total)
@@ -1648,18 +1651,18 @@ async def process_cookie_sets(update: Update, status_msg, cookie_sets: list[tupl
                 temp_hits = len(raw_hits_list)
 
                 loading_text = (
-                    f'<tg-emoji emoji-id="5085022089103016925">⚡️</tg-emoji> <b>' + to_sans_bold_italic("BILL CYPHER | CHECKER 5G") + f'</b> <tg-emoji emoji-id="5134186747244053395">🍷</tg-emoji>\n'
+                    f"⚡ <b>" + to_sans_bold_italic("BILL CYPHER | CHECKER 5G") + f"</b> {phase_icon}\n"
                     "━━━━━━━━━━━━━━━━━━━━━━\n"
-                    f'<tg-emoji emoji-id="5121007227779416740">📶</tg-emoji> <b>Progreso:</b> {make_progress_bar(done_so_far, total)}\n'
-                    f'<tg-emoji emoji-id="5123230779593196220">⏰</tg-emoji> <b>Procesando:</b> <code>{done_so_far} / {total}</code> cuentas\n'
-                    f'<tg-emoji emoji-id="4902524693858222969">⚡️</tg-emoji> <b>Velocidad:</b> <code>{speed:.2f} cuentas/seg</code>\n'
-                    f'<tg-emoji emoji-id="4906943755644306322">🌐</tg-emoji> <b>Fase:</b> <i>{phase_title}</i>\n\n'
-                    f'● <tg-emoji emoji-id="5116163917713769254">⭐️</tg-emoji> <b>Hits Detectados:</b> <code>{temp_hits}</code>\n'
-                    f'● <tg-emoji emoji-id="5116151848855667552">🚫</tg-emoji> <b>Inválidas:</b> <code>{invalids}</code>\n'
-                    f'● <tg-emoji emoji-id="5116590266232341370">💤</tg-emoji> <b>En espera:</b> <code>{on_hold}</code>\n'
-                    f'● <tg-emoji emoji-id="5116382939571028928">🆓</tg-emoji> <b>Free (Sin plan):</b> <code>{frees}</code>\n'
+                    f"📊 <b>Progreso:</b> {make_progress_bar(done_so_far, total)}\n"
+                    f"🔄 <b>Procesando:</b> <code>{done_so_far} / {total}</code> cuentas\n"
+                    f"🚀 <b>Velocidad:</b> <code>{speed:.2f} cuentas/seg</code>\n"
+                    f"🌐 <b>Fase:</b> <i>{phase_title}</i>\n\n"
+                    f"● 🌟 <b>Hits Detectados:</b> <code>{temp_hits}</code>\n"
+                    f"● ❌ <b>Inválidas:</b> <code>{invalids}</code>\n"
+                    f"● ⏸️ <b>En espera:</b> <code>{on_hold}</code>\n"
+                    f"● 🔓 <b>Free (Sin plan):</b> <code>{frees}</code>\n"
                     "━━━━━━━━━━━━━━━━━━━━━━\n"
-                    f'<tg-emoji emoji-id="5084979757905347540">👑</tg-emoji> <i>{WATERMARK_TEXT}</i>'
+                    f"⏳ <i>{WATERMARK_TEXT}</i>"
                 )
                 try:
                     await status_msg.edit_text(
@@ -1677,7 +1680,7 @@ async def process_cookie_sets(update: Update, status_msg, cookie_sets: list[tupl
     if is_bulk and raw_hits_list:
         try:
             await status_msg.edit_text(
-                '<tg-emoji emoji-id="5085022089103016925">⚡️</tg-emoji> <b>' + to_sans_bold_italic("BILL CYPHER | PURGANDO CUENTAS") + '</b> <tg-emoji emoji-id="4902524693858222969">⚡️</tg-emoji>\n'
+                "⚡ <b>" + to_sans_bold_italic("BILL CYPHER | PURGANDO CUENTAS") + "</b> 🔄\n"
                 "━━━━━━━━━━━━━━━━━━━━━━\n"
                 f"🔍 <i>Validando sesión real de los {len(raw_hits_list)} hits detectados...</i>",
                 parse_mode=ParseMode.HTML
@@ -1727,9 +1730,9 @@ async def process_cookie_sets(update: Update, status_msg, cookie_sets: list[tupl
 
         try:
             await status_msg.edit_text(
-                '<tg-emoji emoji-id="5085022089103016925">⚡️</tg-emoji> <b>' + to_sans_bold_italic("PROCESO FINALIZADO") + '</b> <tg-emoji emoji-id="4915791289489818259">✅</tg-emoji>\n'
+                "⚡ <b>" + to_sans_bold_italic("PROCESO FINALIZADO") + "</b> ✅\n"
                 "━━━━━━━━━━━━━━━━━━━━━━\n"
-                f'<tg-emoji emoji-id="5123230779593196220">⏰</tg-emoji> <b>Tiempo Total:</b> {time_str}  ·  <tg-emoji emoji-id="4902524693858222969">⚡️</tg-emoji> <b>Velocidad:</b> {final_speed:.2f} cuentas/seg\n'
+                f"⏱️ <b>Tiempo Total:</b> {time_str}  ·  🚀 <b>Velocidad:</b> {final_speed:.2f} cuentas/seg\n"
                 "━━━━━━━━━━━━━━━━━━━━━━",
                 parse_mode=ParseMode.HTML,
                 reply_markup=None,
@@ -1738,20 +1741,20 @@ async def process_cookie_sets(update: Update, status_msg, cookie_sets: list[tupl
             pass
 
         final_summary = (
-            '<tg-emoji emoji-id="5121007227779416740">📶</tg-emoji> <b>Estadísticas Finales:</b>\n'
+            "📊 <b>Estadísticas Finales:</b>\n"
             "━━━━━━━━━━━━━━━━━━━━━━\n"
-            f'● <tg-emoji emoji-id="5118686540985271080">💼</tg-emoji> <b>Total Cuentas :</b> <code>{total}</code>\n'
-            f'● <tg-emoji emoji-id="4915791289489818259">✅</tg-emoji> <b>Cuentas Válidas :</b> <code>{hits}</code>\n'
-            f'    <tg-emoji emoji-id="5116163917713769254">⭐️</tg-emoji> Premium : <code>{premium_count}</code>\n'
-            f'    <tg-emoji emoji-id="5118744200921219799">🎥</tg-emoji> Estándar : <code>{standard_count}</code>\n'
-            f'    <tg-emoji emoji-id="5116582462276764538">👤</tg-emoji> Básico : <code>{basic_count}</code>\n'
-            f'● <tg-emoji emoji-id="5116151848855667552">🚫</tg-emoji> <b>Cuentas Falladas :</b> <code>{invalids}</code>\n'
-            f'    <tg-emoji emoji-id="5115853119839011973">⚠️</tg-emoji> Expirado / Sin plan / Fallo pago : <code>{invalids}</code>\n'
-            f'● <tg-emoji emoji-id="5116590266232341370">💤</tg-emoji> <b>En espera (On Hold) :</b> <code>{on_hold}</code>\n'
+            f"● 📦 <b>Total Cuentas :</b> <code>{total}</code>\n"
+            f"● ✅ <b>Cuentas Válidas :</b> <code>{hits}</code>\n"
+            f"    ⭐ Premium : <code>{premium_count}</code>\n"
+            f"    📺 Estándar : <code>{standard_count}</code>\n"
+            f"    📱 Básico : <code>{basic_count}</code>\n"
+            f"● ❌ <b>Cuentas Falladas :</b> <code>{invalids}</code>\n"
+            f"    🔴 Expirado / Sin plan / Fallo pago : <code>{invalids}</code>\n"
+            f"● ⏸️ <b>En espera (On Hold) :</b> <code>{on_hold}</code>\n"
             "━━━━━━━━━━━━━━━━━━━━━━\n"
-            f'<tg-emoji emoji-id="5123230779593196220">⏰</tg-emoji> <b>Tiempo Total :</b> <code>{time_str}</code>\n'
-            f'<tg-emoji emoji-id="4902524693858222969">⚡️</tg-emoji> <b>Velocidad :</b> <code>{final_speed:.2f} cuentas/seg</code>\n'
-            f'<i>{WATERMARK_TEXT}</i>'
+            f"⏱️ <b>Tiempo Total :</b> <code>{time_str}</code>\n"
+            f"🚀 <b>Velocidad :</b> <code>{final_speed:.2f} cuentas/seg</code>\n"
+            f"<i>{WATERMARK_TEXT}</i>"
         )
         await update.message.reply_text(final_summary, parse_mode=ParseMode.HTML)
 
@@ -1782,7 +1785,7 @@ async def process_cookie_sets(update: Update, status_msg, cookie_sets: list[tupl
                     real_best_tok = extract_bgiqv_token(best_result.get("nftoken", {}), best_tok)
                     best_kb = build_official_login_keyboard(real_best_tok)
                     full_best = (
-                        '<tg-emoji emoji-id="5116163917713769254">⭐️</tg-emoji> <b>Mejor Cuenta del Lote (100% Verificada)</b>\n'
+                        "🏆 <b>Mejor Cuenta del Lote (100% Verificada)</b>\n"
                         "━━━━━━━━━━━━━━━━━━━━━━\n" + best_txt
                     )
                     await update.message.reply_text(full_best, parse_mode=ParseMode.HTML, reply_markup=best_kb)
@@ -2954,7 +2957,6 @@ async def _process_donation(update: Update, context: ContextTypes.DEFAULT_TYPE, 
         add_reward_credit(uid, donated_count)
         asyncio.create_task(_cloud_auto_save(context.application))
 
-        await status_msg.exit_text() # syntax correction context
         await status_msg.edit_text(
             f"🎉 <b>¡DONACIÓN EXITOSA!</b>\n"
             "━━━━━━━━━━━━━━━━━━━━━━\n"
@@ -3030,7 +3032,7 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
     for attempt in range(3):
         try:
-            tg_file = await doc.get_file()
+            tg_file = await doc.get_file(read_timeout=30, write_timeout=30)
             with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
                 await tg_file.download_to_drive(tmp.name)
                 tmp_path = tmp.name
@@ -3040,7 +3042,7 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
     if tmp_path is None:
         refund_credit(uid)
-        await update.message.reply_text("⚠️ Error al descargar el archivo.")
+        await update.message.reply_text("⚠️ Error al descargar el archivo de Telegram (Document_invalid).")
         return
 
     # Si el usuario estaba en modo donación
