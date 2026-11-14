@@ -4,7 +4,7 @@ BILL CYPHER CHK NF — Edition 5G Turbo Definitive
 • Límite estratégico: 3 créditos diarios gratuitos (Oliveidy recommendation)
 • Sistema interactivo de donación de cookies con recompensa y aviso a @didierJC
 • Monitor de carga animado 5G con fases en tiempo real (porcentaje limpio)
-• Panel ultra compacto optimizado para banner multimedia
+• Panel ultra compacto optimizado para banner multimedia con Emojis Animados
 • Enlaces oficiales con parámetros web (PC / Mobile / TV8)
 • Auto-restauración en arranque desde la nube de Telegram (Anti-Wipe)
 • Alertas automáticas de error a @didierJC
@@ -571,7 +571,7 @@ def build_official_login_keyboard(raw_token: str) -> InlineKeyboardMarkup:
             InlineKeyboardButton("📺 𝙏𝙑 ↗️", url=tv_url),
         ],
         [
-            InlineKeyboardButton("🔄 𝙍𝙀𝙂𝙀𝙉 𝘾OOKIE", callback_data="panel:gencookie"),
+            InlineKeyboardButton("🔄 𝙍𝙀𝙂𝙀𝙉 𝘾𝙊𝙊𝙆𝙄𝙀", callback_data="panel:gencookie"),
             InlineKeyboardButton("🔙 𝙋𝙖𝙣𝙚𝙡", callback_data="panel:back"),
         ]
     ]
@@ -745,7 +745,7 @@ def _set_delivery(user_id: int, mode: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Panel Principal Compacto (Baja Altura - Organizado estilo Kaori)
+# Panel Principal Compacto (Baja Altura - Estilo Kaori con Emojis Animados)
 # ---------------------------------------------------------------------------
 def _main_panel_text(uid: int) -> str:
     mode_lbl = "Full" if _get_mode(uid) == "full" else "Básico"
@@ -753,23 +753,23 @@ def _main_panel_text(uid: int) -> str:
 
     cred_info = get_user_credits_info(uid)
     if cred_info["type"] == "owner":
-        role_lbl = "👑 Propietario"
+        role_lbl = '<tg-emoji emoji-id="5084979757905347540">👑</tg-emoji> Propietario'
     elif cred_info["type"] == "premium":
-        role_lbl = "⭐ Premium"
+        role_lbl = '<tg-emoji emoji-id="5085022089103016925">⚡️</tg-emoji> Premium'
     else:
         role_lbl = "👤 Usuario"
 
-    state_lbl = "🔴 Mantenimiento" if is_maintenance() else "Online ⚡ 5G"
+    state_lbl = "🔴 Mantenimiento" if is_maintenance() else 'Online <tg-emoji emoji-id="5085022089103016925">⚡️</tg-emoji> 5G'
     vault_count = len(_load_vault())
 
     return (
-        "👁️‍🗨️ <b>" + to_sans_bold_italic("BILL CYPHER CHK NF") + "</b> ⚡ 𝟱𝗚\n"
+        "👁️‍🗨️ <b>" + to_sans_bold_italic("BILL CYPHER CHK NF") + '</b> <tg-emoji emoji-id="5085022089103016925">⚡️</tg-emoji> 𝟱𝗚\n'
         "━━━━━━━━━━━━━━━━━━━━━━\n"
-        f"👑 <b>Rol:</b> {role_lbl} │ 💎 <b>Créditos:</b> <code>{cred_info['credits']}</code>\n"
-        f"📦 <b>Stock:</b> <code>{vault_count} cuentas</code> │ ⚙️ <b>Ajustes:</b> {mode_lbl} · {dlv_lbl}\n"
+        f'<tg-emoji emoji-id="5084979757905347540">👑</tg-emoji> <b>Rol:</b> {role_lbl} │ <tg-emoji emoji-id="5084923566848213749">🐾</tg-emoji> <b>Créditos:</b> <code>{cred_info["credits"]}</code>\n'
+        f'📦 <b>Stock:</b> <code>{vault_count} cuentas</code> │ ⚙️ <b>Ajustes:</b> {mode_lbl} · {dlv_lbl}\n'
         f"🟢 <b>Estado:</b> {state_lbl}\n"
         "━━━━━━━━━━━━━━━━━━━━━━\n"
-        "⚡ <i>Envía tu archivo o genera una cuenta abajo:</i>"
+        '<tg-emoji emoji-id="5085022089103016925">⚡️</tg-emoji> <i>Envía tu archivo o genera una cuenta abajo:</i>'
     )
 
 def _main_panel_markup(uid: int) -> InlineKeyboardMarkup:
@@ -1998,7 +1998,7 @@ async def panel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             vault = _load_vault()
             if not vault:
                 refund_credit(uid)
-                await status_msg.edit_text("📭 <b>¡Se agotaron las cookies en el baúl!</b>", parse_Mode=ParseMode.HTML)
+                await status_msg.edit_text("📭 <b>¡Se agotaron las cookies en el baúl!</b>", parse_mode=ParseMode.HTML)
                 return
 
             attempts = 0
