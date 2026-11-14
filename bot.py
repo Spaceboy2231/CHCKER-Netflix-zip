@@ -1530,19 +1530,19 @@ async def process_cookies(update: Update, status_msg, cookie_text: str, source: 
 
     if len(sets) == 1:
         await status_msg.edit_text(
-            "⚡ <b>" + to_sans_bold_italic("BILL CYPHER | CHECKING") + "</b>\n"
+            '<tg-emoji emoji-id="5085022089103016925">⚡️</tg-emoji> <b>' + to_sans_bold_italic("BILL CYPHER | CHECKING") + '</b> <tg-emoji emoji-id="5134186747244053395">🍷</tg-emoji>\n'
             "━━━━━━━━━━━━━━━━━━━━━━\n"
-            "🍪 <b>Cuenta:</b> 1 detectada\n"
-            "🔄 <b>Estado:</b> <i>Conectando a Netflix API...</i>\n"
+            '<tg-emoji emoji-id="5123230779593196220">⏰</tg-emoji> <b>Cuenta:</b> 1 detectada\n'
+            '<tg-emoji emoji-id="4902524693858222969">⚡️</tg-emoji> <b>Estado:</b> <i>Conectando a Netflix API...</i>\n'
             "━━━━━━━━━━━━━━━━━━━━━━",
             parse_mode=ParseMode.HTML,
         )
     else:
         await status_msg.edit_text(
-            "⚡ <b>" + to_sans_bold_italic("BILL CYPHER | CHECKING 5G") + "</b>\n"
+            '<tg-emoji emoji-id="5085022089103016925">⚡️</tg-emoji> <b>' + to_sans_bold_italic("BILL CYPHER | CHECKING 5G") + '</b> <tg-emoji emoji-id="5134186747244053395">🍷</tg-emoji>\n'
             "━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"📦 <b>Lote detectado:</b> {len(sets)} cuentas\n"
-            "🔄 <b>Estado:</b> <i>Iniciando verificación masiva 5G...</i>\n"
+            f'<tg-emoji emoji-id="5118686540985271080">💼</tg-emoji> <b>Lote detectado:</b> {len(sets)} cuentas\n'
+            '<tg-emoji emoji-id="4902524693858222969">⚡️</tg-emoji> <b>Estado:</b> <i>Iniciando verificación masiva 5G...</i>\n'
             "━━━━━━━━━━━━━━━━━━━━━━",
             parse_mode=ParseMode.HTML,
         )
@@ -1636,7 +1636,7 @@ async def process_cookie_sets(update: Update, status_msg, cookie_sets: list[tupl
                     txt = format_result({"status": "invalid", "message": "Cookie expirada / fallo de pago."}, idx, total, source=src, user_id=uid)
                     await update.message.reply_text(txt, parse_mode=ParseMode.HTML)
 
-        # Monitor de carga animado en tiempo real con fases (porcentaje limpio sin duplicación)
+        # Monitor de carga animado en tiempo real con fases (con Emojis Animados Premium)
         if is_bulk:
             now_time = time.monotonic()
             done_so_far = min(batch_start + len(batch), total)
@@ -1649,18 +1649,18 @@ async def process_cookie_sets(update: Update, status_msg, cookie_sets: list[tupl
                 temp_hits = len(raw_hits_list)
 
                 loading_text = (
-                    f"⚡ <b>" + to_sans_bold_italic("BILL CYPHER | CHECKER 5G") + f"</b> {phase_icon}\n"
+                    f'<tg-emoji emoji-id="5085022089103016925">⚡️</tg-emoji> <b>' + to_sans_bold_italic("BILL CYPHER | CHECKER 5G") + f'</b> <tg-emoji emoji-id="5134186747244053395">🍷</tg-emoji>\n'
                     "━━━━━━━━━━━━━━━━━━━━━━\n"
-                    f"📊 <b>Progreso:</b> {make_progress_bar(done_so_far, total)}\n"
-                    f"🔄 <b>Procesando:</b> <code>{done_so_far} / {total}</code> cuentas\n"
-                    f"🚀 <b>Velocidad:</b> <code>{speed:.2f} cuentas/seg</code>\n"
-                    f"🌐 <b>Fase:</b> <i>{phase_title}</i>\n\n"
-                    f"● 🌟 <b>Hits Detectados:</b> <code>{temp_hits}</code>\n"
-                    f"● ❌ <b>Inválidas:</b> <code>{invalids}</code>\n"
-                    f"● ⏸️ <b>En espera:</b> <code>{on_hold}</code>\n"
-                    f"● 🔓 <b>Free (Sin plan):</b> <code>{frees}</code>\n"
+                    f'<tg-emoji emoji-id="5121007227779416740">📶</tg-emoji> <b>Progreso:</b> {make_progress_bar(done_so_far, total)}\n'
+                    f'<tg-emoji emoji-id="5123230779593196220">⏰</tg-emoji> <b>Procesando:</b> <code>{done_so_far} / {total}</code> cuentas\n'
+                    f'<tg-emoji emoji-id="4902524693858222969">⚡️</tg-emoji> <b>Velocidad:</b> <code>{speed:.2f} cuentas/seg</code>\n'
+                    f'<tg-emoji emoji-id="4906943755644306322">🌐</tg-emoji> <b>Fase:</b> <i>{phase_title}</i>\n\n'
+                    f'● <tg-emoji emoji-id="5116163917713769254">⭐️</tg-emoji> <b>Hits Detectados:</b> <code>{temp_hits}</code>\n'
+                    f'● <tg-emoji emoji-id="5116151848855667552">🚫</tg-emoji> <b>Inválidas:</b> <code>{invalids}</code>\n'
+                    f'● <tg-emoji emoji-id="5116590266232341370">💤</tg-emoji> <b>En espera:</b> <code>{on_hold}</code>\n'
+                    f'● <tg-emoji emoji-id="5116382939571028928">🆓</tg-emoji> <b>Free (Sin plan):</b> <code>{frees}</code>\n'
                     "━━━━━━━━━━━━━━━━━━━━━━\n"
-                    f"⏳ <i>{WATERMARK_TEXT}</i>"
+                    f'<tg-emoji emoji-id="5084979757905347540">👑</tg-emoji> <i>{WATERMARK_TEXT}</i>'
                 )
                 try:
                     await status_msg.edit_text(
@@ -1678,7 +1678,7 @@ async def process_cookie_sets(update: Update, status_msg, cookie_sets: list[tupl
     if is_bulk and raw_hits_list:
         try:
             await status_msg.edit_text(
-                "⚡ <b>" + to_sans_bold_italic("BILL CYPHER | PURGANDO CUENTAS") + "</b> 🔄\n"
+                '⚡ <b>' + to_sans_bold_italic("BILL CYPHER | PURGANDO CUENTAS") + '</b> 🔄\n'
                 "━━━━━━━━━━━━━━━━━━━━━━\n"
                 f"🔍 <i>Validando sesión real de los {len(raw_hits_list)} hits detectados...</i>",
                 parse_mode=ParseMode.HTML
