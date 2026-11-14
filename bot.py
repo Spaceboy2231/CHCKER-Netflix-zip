@@ -3397,5 +3397,5 @@ def main() -> None:
     app.run_polling(drop_pending_updates=True, allowed_updates=["message", "callback_query"])
 
 
-If __name__ == "__main__":
+if __name__ == "__main__":
     main()
