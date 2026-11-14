@@ -763,13 +763,13 @@ def _main_panel_text(uid: int) -> str:
     vault_count = len(_load_vault())
 
     return (
-        '<tg-emoji emoji-id="5085022089103016925">⚡️</tg-emoji> <b>' + to_sans_bold_italic("BILL CYPHER CHK NF") + '</b> <tg-emoji emoji-id="5085022089103016925">⚡️</tg-emoji> 𝟱𝗚\n'
+        f'<tg-emoji emoji-id="5085022089103016925">⚡️</tg-emoji> <b>{to_sans_bold_italic("BILL CYPHER CHK NF")}</b> <tg-emoji emoji-id="5085022089103016925">⚡️</tg-emoji> 𝟱𝗚\n'
         "━━━━━━━━━━━━━━━━━━━━━━\n"
         f'<tg-emoji emoji-id="5084979757905347540">👑</tg-emoji> <b>Rol:</b> {role_lbl} │ <tg-emoji emoji-id="5084923566848213749">🐾</tg-emoji> <b>Créditos:</b> <code>{cred_info["credits"]}</code>\n'
         f'<tg-emoji emoji-id="5118686540985271080">💼</tg-emoji> <b>Stock:</b> <code>{vault_count} cuentas</code> │ <tg-emoji emoji-id="4904936030232117798">⚙️</tg-emoji> <b>Ajustes:</b> {mode_lbl} · {dlv_lbl}\n'
         f'<tg-emoji emoji-id="4915791289489818259">✅</tg-emoji> <b>Estado:</b> {state_lbl}\n'
         "━━━━━━━━━━━━━━━━━━━━━━\n"
-        '<tg-emoji emoji-id="5085022089103016925">⚡️</tg-emoji> <i>Envía tu archivo o genera una cuenta abajo:</i>'
+        f'<tg-emoji emoji-id="5085022089103016925">⚡️</tg-emoji> <i>Envía tu archivo o genera una cuenta abajo:</i>'
     )
 
 def _main_panel_markup(uid: int) -> InlineKeyboardMarkup:
