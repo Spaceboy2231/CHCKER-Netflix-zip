@@ -745,7 +745,7 @@ def _set_delivery(user_id: int, mode: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Panel Principal Compacto (Estilo Kaori con Emojis Animados Integrados)
+# Panel Principal Compacto (Estilo Kaori con Emojis Animados Oficiales)
 # ---------------------------------------------------------------------------
 def _main_panel_text(uid: int) -> str:
     mode_lbl = "Full" if _get_mode(uid) == "full" else "Básico"
@@ -791,7 +791,6 @@ def _main_panel_markup(uid: int) -> InlineKeyboardMarkup:
             ]
         ]
 
-    # BOTONERA LIMPIA, SIMÉTRICA Y COMPATIBLE
     rows = [
         [
             InlineKeyboardButton("⚡ GEN COOKIE 🍷", callback_data="panel:gencookie"),
@@ -1636,7 +1635,7 @@ async def process_cookie_sets(update: Update, status_msg, cookie_sets: list[tupl
                     txt = format_result({"status": "invalid", "message": "Cookie expirada / fallo de pago."}, idx, total, source=src, user_id=uid)
                     await update.message.reply_text(txt, parse_mode=ParseMode.HTML)
 
-        # Monitor de carga animado en tiempo real con fases (con Emojis Animados Premium)
+        # Monitor de carga animado en tiempo real con fases (con Emojis Animados Oficiales)
         if is_bulk:
             now_time = time.monotonic()
             done_so_far = min(batch_start + len(batch), total)
