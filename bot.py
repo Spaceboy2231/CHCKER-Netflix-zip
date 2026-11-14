@@ -81,7 +81,7 @@ PORT = int(os.environ.get("PORT", 5000))
 OWNER_ID: int = 5320997298
 OWNER_USER: str = "didierJC"
 OWNER_URL: str = f"https://t.me/{OWNER_USER}"
-WATERMARK_TEXT: str = "👑 Checked by: @didierJC | BILL CYPHER CHK NF"
+WATERMARK_TEXT: str = '<tg-emoji emoji-id="5084979757905347540">👑</tg-emoji> Checked by: @didierJC | BILL CYPHER CHK NF'
 
 def is_admin(uid: int) -> bool:
     return bool(uid and uid == OWNER_ID)
@@ -206,7 +206,7 @@ def set_maintenance(enabled: bool) -> None:
         logger.warning(f"Error guardando maintenance: {e}")
 
 MAINTENANCE_TEXT = (
-    "🛠️ <b>" + to_sans_bold_italic("BOT EN MANTENIMIENTO") + "</b>\n"
+    '<tg-emoji emoji-id="5115853119839011973">⚠️</tg-emoji> <b>' + to_sans_bold_italic("BOT EN MANTENIMIENTO") + "</b>\n"
     "━━━━━━━━━━━━━━━━━━━━━━\n"
     "El bot se encuentra actualmente en mantenimiento para actualizar stock y aplicar mejoras.\n\n"
     "⏳ <i>Por favor, espera a que el propietario finalice las actualizaciones para volver a usarlo.</i>"
@@ -235,7 +235,7 @@ def _save_credits(data: dict) -> None:
 
 def get_user_credits_info(uid: int) -> dict:
     if is_admin(uid):
-        return {"type": "owner", "credits": "Ilimitado 👑", "can_use": True}
+        return {"type": "owner", "credits": 'Ilimitado <tg-emoji emoji-id="5084979757905347540">👑</tg-emoji>', "can_use": True}
 
     data = _load_credits()
     user_data = data.get(str(uid), {})
@@ -244,12 +244,12 @@ def get_user_credits_info(uid: int) -> dict:
     if user_data.get("is_premium"):
         creds = user_data.get("credits", "unlimited")
         if creds == "unlimited":
-            return {"type": "premium", "credits": "Ilimitado ⭐", "can_use": True}
+            return {"type": "premium", "credits": 'Ilimitado <tg-emoji emoji-id="5116163917713769254">⭐️</tg-emoji>', "can_use": True}
         try:
             c_val = int(creds)
         except ValueError:
             c_val = 0
-        return {"type": "premium", "credits": f"{c_val} restantes ⭐", "can_use": c_val > 0, "balance": c_val}
+        return {"type": "premium", "credits": f'{c_val} restantes <tg-emoji emoji-id="5116163917713769254">⭐️</tg-emoji>', "can_use": c_val > 0, "balance": c_val}
 
     last_date = user_data.get("last_date", "")
     used_today = user_data.get("used_today", 0)
@@ -341,10 +341,10 @@ def add_reward_credit(uid: int, amount: int = 1) -> None:
     _save_credits(data)
 
 OUT_OF_CREDITS_TEXT = (
-    "⚠️ <b>¡Créditos diarios agotados!</b>\n"
+    '<tg-emoji emoji-id="5115853119839011973">⚠️</tg-emoji> <b>¡Créditos diarios agotados!</b>\n'
     "━━━━━━━━━━━━━━━━━━━━━━\n"
     f"Has alcanzado el límite de <b>{DAILY_FREE_CREDITS} activaciones gratuitas por hoy</b>.\n\n"
-    "💎 <i>Para activar acceso Premium o créditos ilimitados, contacta al propietario:</i>\n"
+    '<tg-emoji emoji-id="5116648080787112958">💰</tg-emoji> <i>Para activar acceso Premium o créditos ilimitados, contacta al propietario:</i>\n'
     "━━━━━━━━━━━━━━━━━━━━━━"
 )
 
@@ -766,7 +766,7 @@ def _main_panel_text(uid: int) -> str:
         f'<tg-emoji emoji-id="5085022089103016925">⚡️</tg-emoji> <b>{to_sans_bold_italic("BILL CYPHER CHK NF")}</b> <tg-emoji emoji-id="5085022089103016925">⚡️</tg-emoji> 𝟱𝗚\n'
         "━━━━━━━━━━━━━━━━━━━━━━\n"
         f'<tg-emoji emoji-id="5084979757905347540">👑</tg-emoji> <b>Rol:</b> {role_lbl} │ <tg-emoji emoji-id="5084923566848213749">🐾</tg-emoji> <b>Créditos:</b> <code>{cred_info["credits"]}</code>\n'
-        f'<tg-emoji emoji-id="5118686540985271080">💼</tg-emoji> <b>Stock:</b> <code>{vault_count} cuentas</code> │ <tg-emoji emoji-id="4904936030232117798">⚙️</tg-emoji> <b>Ajustes:</b> {mode_lbl} · {dlv_lbl}\n'
+        f'<tg-emoji emoji-id="5118686540985271080">📦</tg-emoji> <b>Stock:</b> <code>{vault_count} cuentas</code> │ <tg-emoji emoji-id="4904936030232117798">⚙️</tg-emoji> <b>Ajustes:</b> {mode_lbl} · {dlv_lbl}\n'
         f'<tg-emoji emoji-id="4915791289489818259">✅</tg-emoji> <b>Estado:</b> {state_lbl}\n'
         "━━━━━━━━━━━━━━━━━━━━━━\n"
         f'<tg-emoji emoji-id="5085022089103016925">⚡️</tg-emoji> <i>Envía tu archivo o genera una cuenta abajo:</i>'
@@ -2333,7 +2333,7 @@ async def addvault_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         doc = target.document
         fname = doc.file_name or "archivo"
         try:
-            tg_file = await doc.get_file()
+            tg_file = await doc.get_file(read_timeout=30, write_timeout=30)
             raw_bytes = await tg_file.download_as_bytearray()
             extracted = extract_all_cookies_from_bytes(bytes(raw_bytes), filename=fname)
 
