@@ -1357,7 +1357,7 @@ def _score_account(result: dict) -> tuple:
 
 
 # ---------------------------------------------------------------------------
-# Generador y empaquetador ZIP de hits con archivos individuales
+# Generador y empaquetador ZIP de hits con archivos individuales (Blindado contra Document_invalid)
 # ---------------------------------------------------------------------------
 async def send_hits_zip(update: Update, hits: list[tuple[dict, str, str]]) -> None:
     today = date.today().isoformat()
@@ -1441,11 +1441,11 @@ async def send_hits_zip(update: Update, hits: list[tuple[dict, str, str]]) -> No
         lines.append(sep)
         return "\n".join(lines)
 
-    buf = io.BytesIO()
     total_hits = len(deduped)
+    raw_buffer = io.BytesIO()
 
     try:
-        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        with zipfile.ZipFile(raw_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
             summary_lines = [
                 "==================================================",
                 f"      NETFLIX HITS SUMMARY — {today}",
@@ -1485,12 +1485,14 @@ async def send_hits_zip(update: Update, hits: list[tuple[dict, str, str]]) -> No
         logger.exception("send_hits_zip falló")
         raise RuntimeError(f"Fallo al empaquetar ZIP: {_zip_err}") from _zip_err
 
-    buf.seek(0)
-    rand2    = random.randint(10, 99)
-    zip_name = f"Netflix-Resultados-{total_hits}x-{rand2}.zip"
+    raw_buffer.seek(0)
+    file_bytes = raw_buffer.getvalue()
+    
+    final_buf = io.BytesIO(file_bytes)
+    final_buf.name = f"Netflix-Resultados-{total_hits}x-{random.randint(10, 99)}.zip"
 
     caption_parts = [
-        f"📦 <b>Netflix-Resultados-{total_hits}x-{rand2}.zip</b>",
+        f"📦 <b>{final_buf.name}</b>",
         "━━━━━━━━━━━━━━━━━━━━━━",
         f"  🌟 Premium Resultados  »  <b>{len(premium)}</b>",
         f"  ✅ Normal Resultados   »  <b>{len(normal)}</b>",
@@ -1506,8 +1508,8 @@ async def send_hits_zip(update: Update, hits: list[tuple[dict, str, str]]) -> No
     ]
 
     await update.message.reply_document(
-        document=buf,
-        filename=zip_name,
+        document=final_buf,
+        filename=final_buf.name,
         caption="\n".join(caption_parts),
         parse_mode=ParseMode.HTML,
     )
@@ -1532,7 +1534,7 @@ async def process_cookies(update: Update, status_msg, cookie_text: str, source: 
 
     if len(sets) == 1:
         await status_msg.edit_text(
-            f'<tg-emoji emoji-id="5085022089103016925">⚡️</tg-emoji> <b>' + to_sans_bold_italic("BILL CYPHER | CHECKING") + '</b> <tg-emoji emoji-id="5134186747244053395">🍷</tg-emoji>\n'
+            '<tg-emoji emoji-id="5085022089103016925">⚡️</tg-emoji> <b>' + to_sans_bold_italic("BILL CYPHER | CHECKING") + '</b> <tg-emoji emoji-id="5134186747244053395">🍷</tg-emoji>\n'
             "━━━━━━━━━━━━━━━━━━━━━━\n"
             '<tg-emoji emoji-id="5123230779593196220">⏰</tg-emoji> <b>Cuenta:</b> 1 detectada\n'
             '<tg-emoji emoji-id="4902524693858222969">⚡️</tg-emoji> <b>Estado:</b> <i>Conectando a Netflix API...</i>\n'
@@ -1541,7 +1543,7 @@ async def process_cookies(update: Update, status_msg, cookie_text: str, source: 
         )
     else:
         await status_msg.edit_text(
-            f'<tg-emoji emoji-id="5085022089103016925">⚡️</tg-emoji> <b>' + to_sans_bold_italic("BILL CYPHER | CHECKING 5G") + '</b> <tg-emoji emoji-id="5134186747244053395">🍷</tg-emoji>\n'
+            '<tg-emoji emoji-id="5085022089103016925">⚡️</tg-emoji> <b>' + to_sans_bold_italic("BILL CYPHER | CHECKING 5G") + '</b> <tg-emoji emoji-id="5134186747244053395">🍷</tg-emoji>\n'
             "━━━━━━━━━━━━━━━━━━━━━━\n"
             f'<tg-emoji emoji-id="5118686540985271080">💼</tg-emoji> <b>Lote detectado:</b> {len(sets)} cuentas\n'
             '<tg-emoji emoji-id="4902524693858222969">⚡️</tg-emoji> <b>Estado:</b> <i>Iniciando verificación masiva 5G...</i>\n'
@@ -1638,7 +1640,7 @@ async def process_cookie_sets(update: Update, status_msg, cookie_sets: list[tupl
                     txt = format_result({"status": "invalid", "message": "Cookie expirada / fallo de pago."}, idx, total, source=src, user_id=uid)
                     await update.message.reply_text(txt, parse_mode=ParseMode.HTML)
 
-        # Monitor de carga animado en tiempo real con fases (porcentaje limpio con emojis animados)
+        # Monitor de carga animado en tiempo real con fases (con Emojis Animados Oficiales)
         if is_bulk:
             now_time = time.monotonic()
             done_so_far = min(batch_start + len(batch), total)
