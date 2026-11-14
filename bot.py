@@ -571,7 +571,7 @@ def build_official_login_keyboard(raw_token: str) -> InlineKeyboardMarkup:
             InlineKeyboardButton("📺 𝙏𝙑 ↗️", url=tv_url),
         ],
         [
-            InlineKeyboardButton("🔄 𝙍𝙀𝙂𝙀𝙉 𝘾𝙊𝙊𝙆𝙄𝙀", callback_data="panel:gencookie"),
+            InlineKeyboardButton("🔄 𝙍𝙀𝙂𝙀𝙉 𝘾OOKIE", callback_data="panel:gencookie"),
             InlineKeyboardButton("🔙 𝙋𝙖𝙣𝙚𝙡", callback_data="panel:back"),
         ]
     ]
@@ -745,7 +745,7 @@ def _set_delivery(user_id: int, mode: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Panel Principal Compacto (Baja Altura - Optimizado para Banner Multimedia)
+# Panel Principal Compacto (Baja Altura - Organizado estilo Kaori)
 # ---------------------------------------------------------------------------
 def _main_panel_text(uid: int) -> str:
     mode_lbl = "Full" if _get_mode(uid) == "full" else "Básico"
@@ -791,18 +791,21 @@ def _main_panel_markup(uid: int) -> InlineKeyboardMarkup:
             ]
         ]
 
+    # BOTONERA LIMPIA Y SIMÉTRICA (ESTILO KAORI)
     rows = [
         [
             InlineKeyboardButton("⚡ " + to_sans_bold_italic("GEN COOKIE") + " 🍿", callback_data="panel:gencookie"),
-            InlineKeyboardButton("🎁 Donar Cookies 💎", callback_data="panel:donate"),
         ],
         [
-            InlineKeyboardButton("⚙️ Configuración", callback_data="panel:settings"),
+            InlineKeyboardButton("🎁 Donar Cookies", callback_data="panel:donate"),
             InlineKeyboardButton("📊 Estadísticas", callback_data="panel:info"),
         ],
         [
+            InlineKeyboardButton("⚙️ Configuración", callback_data="panel:settings"),
             InlineKeyboardButton("📖 Formatos", callback_data="panel:help"),
-            InlineKeyboardButton("🔐 Cambiar PW", callback_data="panel:changepw"),
+        ],
+        [
+            InlineKeyboardButton("🔐 Cambiar PW [Beta]", callback_data="panel:changepw"),
         ],
         *admin_buttons,
     ]
@@ -1995,7 +1998,7 @@ async def panel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             vault = _load_vault()
             if not vault:
                 refund_credit(uid)
-                await status_msg.edit_text("📭 <b>¡Se agotaron las cookies en el baúl!</b>", parse_mode=ParseMode.HTML)
+                await status_msg.edit_text("📭 <b>¡Se agotaron las cookies en el baúl!</b>", parse_Mode=ParseMode.HTML)
                 return
 
             attempts = 0
@@ -3314,7 +3317,6 @@ def main() -> None:
     # Callbacks interactivos
     app.add_handler(CallbackQueryHandler(panel_callback,         pattern=r"^panel:"))
     app.add_handler(CallbackQueryHandler(proxy_admin_callback,  pattern=r"^proxy:"))
-    app.add_handler(CallbackQueryHandler(CallbackQueryHandler,  pattern=r"^cancel:"))
     app.add_handler(CallbackQueryHandler(cancel_callback,       pattern=r"^cancel:"))
     app.add_handler(CallbackQueryHandler(mode_callback,         pattern=r"^mode:"))
     app.add_handler(CallbackQueryHandler(setmode_callback,      pattern=r"^setmode:"))
@@ -3395,5 +3397,5 @@ def main() -> None:
     app.run_polling(drop_pending_updates=True, allowed_updates=["message", "callback_query"])
 
 
-if __name__ == "__main__":
+If __name__ == "__main__":
     main()
