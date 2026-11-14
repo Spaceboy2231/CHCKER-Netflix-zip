@@ -571,7 +571,7 @@ def build_official_login_keyboard(raw_token: str) -> InlineKeyboardMarkup:
             InlineKeyboardButton("📺 𝙏𝙑 ↗️", url=tv_url),
         ],
         [
-            InlineKeyboardButton("🔄 𝙍𝙀𝙂𝙀𝙉 𝘾𝙊𝙊𝙆𝙄𝙀", callback_data="panel:gencookie"),
+            InlineKeyboardButton("🔄 𝙍\u200b𝙀𝙂𝙀𝙉 𝘾𝙊𝙊𝙆𝙄𝙀", callback_data="panel:gencookie"),
             InlineKeyboardButton("🔙 𝙋𝙖𝙣𝙚𝙡", callback_data="panel:back"),
         ]
     ]
@@ -763,7 +763,7 @@ def _main_panel_text(uid: int) -> str:
     vault_count = len(_load_vault())
 
     return (
-        "👁️‍🗨️ <b>" + to_sans_bold_italic("BILL CYPHER CHK NF") + '</b> <tg-emoji emoji-id="5085022089103016925">⚡️</tg-emoji> 𝟱𝗚\n'
+        '<tg-emoji emoji-id="5085022089103016925">⚡️</tg-emoji> <b>' + to_sans_bold_italic("BILL CYPHER CHK NF") + '</b> <tg-emoji emoji-id="5085022089103016925">⚡️</tg-emoji> 𝟱𝗚\n'
         "━━━━━━━━━━━━━━━━━━━━━━\n"
         f'<tg-emoji emoji-id="5084979757905347540">👑</tg-emoji> <b>Rol:</b> {role_lbl} │ <tg-emoji emoji-id="5084923566848213749">🐾</tg-emoji> <b>Créditos:</b> <code>{cred_info["credits"]}</code>\n'
         f'<tg-emoji emoji-id="5118686540985271080">💼</tg-emoji> <b>Stock:</b> <code>{vault_count} cuentas</code> │ <tg-emoji emoji-id="4904936030232117798">⚙️</tg-emoji> <b>Ajustes:</b> {mode_lbl} · {dlv_lbl}\n'
