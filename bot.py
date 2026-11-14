@@ -718,7 +718,7 @@ def _validate_cookie_text(text: str) -> tuple[bool, str]:
         lines = [l.strip() for l in text.splitlines() if l.strip()]
         sample = lines[0][:80] if lines else text[:80]
         return False, (
-            "❌ <b>No se encontraron cookies de Netflix.</b>\n\n"
+            '<tg-emoji emoji-id="5115853119839011973">⚠️</tg-emoji> <b>No se encontraron cookies de Netflix.</b>\n\n'
             "Se requiere cookie <code>NetflixId</code> o <code>SecureNetflixId</code>.\n\n"
             f"<i>El contenido empieza con:</i> <code>{sample}</code>"
         )
@@ -938,18 +938,18 @@ def _info_text(uid: int) -> str:
     active       = len(_ACTIVE_USERS)
 
     return (
-        "📊 <b>Estadísticas en Tiempo Real</b>\n"
+        f'<tg-emoji emoji-id="5121007227779416740">📶</tg-emoji> <b>Estadísticas en Tiempo Real</b>\n'
         "━━━━━━━━━━━━━━━━━━━━━━\n\n"
-        f"⏱️ <b>Uptime:</b> {uptime}\n"
-        f"📦 <b>Total Chequeado:</b> {total_checks}\n"
-        f"✅ <b>Hits Activos:</b> {hits} ({hit_rate}%)\n"
-        f"⏸️ <b>En Espera:</b> {on_hold}\n"
-        f"🔓 <b>Cuentas Free:</b> {frees}\n"
-        f"❌ <b>Inválidas:</b> {invalids}\n"
-        f"⚠️ <b>Errores:</b> {errors}\n"
-        f"👤 <b>Usuarios Únicos:</b> {users}\n"
-        f"🔄 <b>Procesos Activos:</b> {active}\n"
-        f"🚀 <b>Velocidad:</b> {cpm} checks/min\n"
+        f'<tg-emoji emoji-id="5123230779593196220">⏰</tg-emoji> <b>Uptime:</b> {uptime}\n'
+        f'<tg-emoji emoji-id="5118686540985271080">💼</tg-emoji> <b>Total Chequeado:</b> {total_checks}\n'
+        f'<tg-emoji emoji-id="4915791289489818259">✅</tg-emoji> <b>Hits Activos:</b> {hits} ({hit_rate}%)\n'
+        f'<tg-emoji emoji-id="5116590266232341370">💤</tg-emoji> <b>En Espera:</b> {on_hold}\n'
+        f'<tg-emoji emoji-id="5116382939571028928">🆓</tg-emoji> <b>Cuentas Free:</b> {frees}\n'
+        f'<tg-emoji emoji-id="5116151848855667552">🚫</tg-emoji> <b>Inválidas:</b> {invalids}\n'
+        f'<tg-emoji emoji-id="5115853119839011973">⚠️</tg-emoji> <b>Errores:</b> {errors}\n'
+        f'<tg-emoji emoji-id="5116582462276764538">👤</tg-emoji> <b>Usuarios Únicos:</b> {users}\n'
+        f'<tg-emoji emoji-id="4902524693858222969">⚡️</tg-emoji> <b>Procesos Activos:</b> {active}\n'
+        f'<tg-emoji emoji-id="5085022089103016925">⚡️</tg-emoji> <b>Velocidad:</b> {cpm} checks/min\n'
         "━━━━━━━━━━━━━━━━━━━━━━"
     )
 
