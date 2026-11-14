@@ -791,21 +791,21 @@ def _main_panel_markup(uid: int) -> InlineKeyboardMarkup:
             ]
         ]
 
-    # BOTONERA LIMPIA, SIMÉTRICA Y CON ANIMACIONES EN LOS BOTONES (ESTILO KAORI)
+    # BOTONERA LIMPIA, SIMÉTRICA Y COMPATIBLE
     rows = [
         [
-            InlineKeyboardButton('<tg-emoji emoji-id="5085022089103016925">⚡️</tg-emoji> ' + to_sans_bold_italic("GEN COOKIE") + ' <tg-emoji emoji-id="5134186747244053395">🍷</tg-emoji>', callback_data="panel:gencookie"),
+            InlineKeyboardButton("⚡ GEN COOKIE 🍷", callback_data="panel:gencookie"),
         ],
         [
-            InlineKeyboardButton('<tg-emoji emoji-id="5084974483685507801">💜</tg-emoji> Donar Cookies', callback_data="panel:donate"),
-            InlineKeyboardButton('<tg-emoji emoji-id="5121007227779416740">📶</tg-emoji> Estadísticas', callback_data="panel:info"),
+            InlineKeyboardButton("💜 Donar Cookies", callback_data="panel:donate"),
+            InlineKeyboardButton("📶 Estadísticas", callback_data="panel:info"),
         ],
         [
-            InlineKeyboardButton('<tg-emoji emoji-id="4904936030232117798">⚙️</tg-emoji> Configuración', callback_data="panel:settings"),
-            InlineKeyboardButton('<tg-emoji emoji-id="5116468787377341336">💬</tg-emoji> Formatos', callback_data="panel:help"),
+            InlineKeyboardButton("⚙️ Configuración", callback_data="panel:settings"),
+            InlineKeyboardButton("💬 Formatos", callback_data="panel:help"),
         ],
         [
-            InlineKeyboardButton('<tg-emoji emoji-id="4904500559203009298">🔒</tg-emoji> Cambiar PW [Beta]', callback_data="panel:changepw"),
+            InlineKeyboardButton("🔒 Cambiar PW [Beta]", callback_data="panel:changepw"),
         ],
         *admin_buttons,
     ]
