@@ -566,7 +566,7 @@ def build_official_login_keyboard(raw_token: str) -> InlineKeyboardMarkup:
 
     buttons = [
         [
-            InlineKeyboardButton("🖥️ 𝙋𝘾 ↗️", url=pc_url),
+            InlineKeyboardButton("🖥️ 𝙋C ↗️", url=pc_url),
             InlineKeyboardButton("📱 𝙈𝙤́𝙫𝙞𝙡 ↗️", url=mobile_url),
             InlineKeyboardButton("📺 𝙏𝙑 ↗️", url=tv_url),
         ],
@@ -962,7 +962,7 @@ def _help_text() -> str:
         "<b>2. Pipe-combo (.txt)</b>\n"
         "<code>email:pass | Country=US | NetflixId=ct%3D…</code>\n\n"
         "<b>3. JSON (.json)</b>\n"
-        '<code>[{"name":"NetflixId","value":"ct%3D…"}]</code>\n\n'
+        '<code>[{"name":"NetflixId","value":"ct%3D…"}]</code>\n\n"
         "<b>4. Archivo ZIP (.zip)</b>\n"
         "Comprime múltiples archivos <code>.txt</code> o <code>.json</code>.\n\n"
         "━━━━━━━━━━━━━━━━━━━━━━\n"
