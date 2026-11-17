@@ -235,7 +235,7 @@ def _save_credits(data: dict) -> None:
 
 def get_user_credits_info(uid: int) -> dict:
     if is_admin(uid):
-        return {"type": "owner", "credits": 'Ilimitado <tg-emoji emoji-id="5084979757905347540">👑</tg-emoji>', "can_use": True}
+        return {"type": "owner", "credits": 'ILIMITADOS <tg-emoji emoji-id="5116163917713769254">⭐️</tg-emoji>', "can_use": True}
 
     data = _load_credits()
     user_data = data.get(str(uid), {})
@@ -244,7 +244,7 @@ def get_user_credits_info(uid: int) -> dict:
     if user_data.get("is_premium"):
         creds = user_data.get("credits", "unlimited")
         if creds == "unlimited":
-            return {"type": "premium", "credits": 'Ilimitado <tg-emoji emoji-id="5116163917713769254">⭐️</tg-emoji>', "can_use": True}
+            return {"type": "premium", "credits": 'ILIMITADOS <tg-emoji emoji-id="5116163917713769254">⭐️</tg-emoji>', "can_use": True}
         try:
             c_val = int(creds)
         except ValueError:
@@ -753,27 +753,27 @@ def _main_panel_text(update: Update, uid: int) -> str:
     
     cred_info = get_user_credits_info(uid)
     if is_admin(uid):
-        role_lbl = '👑 ROL: PROPIETARIO'
-        credits_lbl = '💎 CRÉDITOS: ILIMITADOS'
+        role_line = '<tg-emoji emoji-id="6026057596979385040">🛡️</tg-emoji> <b>ROL:</b> PROPIETARIO'
+        credits_line = '<tg-emoji emoji-id="5116648080787112958">💰</tg-emoji> <b>CRÉDITOS:</b> ILIMITADOS'
     elif cred_info["type"] == "premium":
-        role_lbl = '🛡️ ROL: ADMINISTRADOR / PREMIUM'
-        credits_lbl = f'💎 CRÉDITOS: {cred_info["credits"]}'
+        role_line = '<tg-emoji emoji-id="6026057596979385040">🛡️</tg-emoji> <b>ROL:</b> ADMINISTRADOR / PREMIUM'
+        credits_line = f'<tg-emoji emoji-id="5116648080787112958">💰</tg-emoji> <b>CRÉDITOS:</b> {cred_info["credits"]}'
     else:
-        role_lbl = '👤 ROL: FREE'
-        credits_lbl = f'💎 CRÉDITOS: {cred_info["credits"]}'
+        role_line = '<tg-emoji emoji-id="5116582462276764538">👤</tg-emoji> <b>ROL:</b> FREE'
+        credits_line = f'<tg-emoji emoji-id="5116648080787112958">💰</tg-emoji> <b>CRÉDITOS:</b> {cred_info["credits"]}'
 
     state_lbl = "🔴 MANTENIMIENTO" if is_maintenance() else 'ONLINE <tg-emoji emoji-id="5085022089103016925">⚡️</tg-emoji> 5G'
     vault_count = len(_load_vault())
 
     return (
-        f'<tg-emoji emoji-id="5085022089103016925">👋</tg-emoji> <b>HEY {name}!</b>\n\n'
+        f'<tg-emoji emoji-id="4918354603281482671">👋</tg-emoji> <b>HEY {name}!</b>\n\n'
         f'<tg-emoji emoji-id="5085022089103016925">🎬</tg-emoji> <b>BILL CYPHER CHK NF ></b> <tg-emoji emoji-id="5116163917713769254">⚡️</tg-emoji>\n\n'
-        f'<tg-emoji emoji-id="5084923566848213749">👤</tg-emoji> <b>NAME:</b> {name}\n'
+        f'<tg-emoji emoji-id="5116582462276764538">👤</tg-emoji> <b>NAME:</b> {name}\n'
         f'<tg-emoji emoji-id="5118686540985271080">🆔</tg-emoji> <b>CHAT ID:</b> <code>{uid}</code>\n'
-        f'<tg-emoji emoji-id="4915791289489818259">🛡️</tg-emoji> <b>{role_lbl}</b>\n'
-        f'<tg-emoji emoji-id="5116648080787112958">💰</tg-emoji> <b>{credits_lbl}</b>\n'
-        f'<tg-emoji emoji-id="5116648080787112958">📦</tg-emoji> <b>STOCK BAÚL:</b> <code>{vault_count} cuentas</code>\n'
-        f'<tg-emoji emoji-id="4904936030232117798">🟢</tg-emoji> <b>ESTADO:</b> {state_lbl}\n\n'
+        f'{role_line}\n'
+        f'{credits_line}\n'
+        f'<tg-emoji emoji-id="5118686540985271080">📦</tg-emoji> <b>STOCK BAÚL:</b> <code>{vault_count} cuentas</code>\n'
+        f'<tg-emoji emoji-id="6025904064783454041">🟢</tg-emoji> <b>ESTADO:</b> {state_lbl}\n\n'
         f'<tg-emoji emoji-id="5085022089103016925">👇</tg-emoji> <b>SELECT AN OPTION FROM THE MENU BELOW TO PROCEED:</b>'
     )
 
@@ -798,18 +798,18 @@ def _main_panel_markup(uid: int) -> InlineKeyboardMarkup:
 
     rows = [
         [
-            InlineKeyboardButton("⚡ GEN COOKIE 🍷", callback_data="panel:gencookie"),
+            InlineKeyboardButton("success:⚡ GEN COOKIE 🍷", callback_data="panel:gencookie"),
         ],
         [
-            InlineKeyboardButton("👥 REFER & EARN (FREE)", callback_data="panel:donate"),
-            InlineKeyboardButton("💎 PREMIUM PLANS", callback_data="panel:info"),
+            InlineKeyboardButton("success:👥 REFER & EARN (FREE)", callback_data="panel:donate"),
+            InlineKeyboardButton("primary:💎 PREMIUM PLANS", callback_data="panel:info"),
         ],
         [
-            InlineKeyboardButton("📋 INSTRUCTIONS", callback_data="panel:help"),
-            InlineKeyboardButton("⚙️ SETTINGS", callback_data="panel:settings"),
+            InlineKeyboardButton("primary:📋 INSTRUCTIONS", callback_data="panel:help"),
+            InlineKeyboardButton("primary:⚙️ SETTINGS", callback_data="panel:settings"),
         ],
         [
-            InlineKeyboardButton("🔒 CAMBIAR PW [BETA]", callback_data="panel:changepw"),
+            InlineKeyboardButton("primary:🔒 CAMBIAR PW [BETA]", callback_data="panel:changepw"),
         ],
         *admin_buttons,
     ]
@@ -817,7 +817,7 @@ def _main_panel_markup(uid: int) -> InlineKeyboardMarkup:
 
 def _panel_back_markup() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("🔙 VOLVER AL PANEL", callback_data="panel:back")]
+        [InlineKeyboardButton("success:🔙 VOLVER AL PANEL", callback_data="panel:back")]
     ])
 
 async def _send_banner_panel(update: Update, text: str, markup: InlineKeyboardMarkup) -> None:
@@ -943,7 +943,7 @@ def _info_text(uid: int) -> str:
     active       = len(_ACTIVE_USERS)
 
     return (
-        "📊 <b>Estadísticas en Tiempo Real</b>\n"
+        "📊 <b>ESTADÍSTICAS EN TIEMPO REAL</b>\n"
         "━━━━━━━━━━━━━━━━━━━━━━\n\n"
         f"⏱️ <b>Uptime:</b> {uptime}\n"
         f"📦 <b>Total Chequeado:</b> {total_checks}\n"
@@ -979,7 +979,7 @@ def _cancel_keyboard(msg_id: int) -> InlineKeyboardMarkup:
 
 
 # ---------------------------------------------------------------------------
-# Formateadores de tarjetas de resultados
+# Formateadores de tarjetas de resultados (Estilo Mejorado y Organizado)
 # ---------------------------------------------------------------------------
 def make_progress_bar(done: int, total: int, width: int = 14) -> str:
     if total == 0:
@@ -1079,7 +1079,7 @@ def format_result_basic(result: dict, index: int = 1, total: int = 1, source: st
         "━━━━━━━━━━━━━━━━━━━━━━",
         _status_line(status, plan),
         "",
-        "👤 <b>Account</b>",
+        "👤 <b>ACCOUNT</b>",
     ]
     if name:
         lines.append(f"  • Name: {name}")
@@ -1090,7 +1090,7 @@ def format_result_basic(result: dict, index: int = 1, total: int = 1, source: st
         lines.append(f"  • Phone: {phone}")
 
     lines.append("")
-    lines.append("📋 <b>Subscription</b>")
+    lines.append("📋 <b>SUBSCRIPTION</b>")
     lines.append(f"  • País: {_country_display(country)}")
     lines.append(f"  • Plan: {plan or 'Desconocido'}")
     lines.append(f"  • Calidad: {quality} · {streams} screens")
@@ -1108,7 +1108,7 @@ def format_result_basic(result: dict, index: int = 1, total: int = 1, source: st
         lines.append(f"🍪 <code>NetflixId={nf_id}</code>\n")
 
     if issues:
-        lines.append("⚠️ <b>Problemas de la cuenta</b>")
+        lines.append("⚠️ <b>PROBLEMAS DE LA CUENTA</b>")
         for issue in issues:
             lines.append(f"  🔴 {issue}")
         lines.append("")
@@ -1155,7 +1155,7 @@ def format_result_full(result: dict, index: int = 1, total: int = 1, source: str
         lines.append(f"📁 <b>Origen:</b> <code>{source}</code>")
     lines.append(_status_line(status, plan))
     lines.append("")
-    lines.append("👤 <b>Detalles de la cuenta:</b>")
+    lines.append("👤 <b>DETALLES DE LA CUENTA:</b>")
     if name:
         lines.append(f"  • Name: {name}")
     lines.append(f"  • Email: <code>{email}</code>")
@@ -1197,13 +1197,13 @@ def format_result_full(result: dict, index: int = 1, total: int = 1, source: str
     issues = result.get("account_issues") or []
     if issues:
         lines.append("")
-        lines.append("⚠️ <b>Alertas de la cuenta:</b>")
+        lines.append("⚠️ <b>ALERTAS DE LA CUENTA:</b>")
         for issue in issues:
             lines.append(f"  🔴 {issue}")
 
     lines.append("")
     if nf_id:
-        lines.append("🍪 <b>Cookie:</b>")
+        lines.append("🍪 <b>COOKIE:</b>")
         lines.append(f"<code>NetflixId={nf_id}</code>")
 
     lines.append("")
@@ -1746,7 +1746,7 @@ async def process_cookie_sets(update: Update, status_msg, cookie_sets: list[tupl
             pass
 
         final_summary = (
-            "📊 <b>Estadísticas Finales:</b>\n"
+            "📊 <b>ESTADÍSTICAS FINALES</b>\n"
             "━━━━━━━━━━━━━━━━━━━━━━\n"
             f"● 📦 <b>Total Cuentas :</b> <code>{total}</code>\n"
             f"● ✅ <b>Cuentas Válidas :</b> <code>{hits}</code>\n"
