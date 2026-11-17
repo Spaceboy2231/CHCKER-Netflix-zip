@@ -566,12 +566,12 @@ def build_official_login_keyboard(raw_token: str) -> InlineKeyboardMarkup:
 
     buttons = [
         [
-            InlineKeyboardButton("🖥️ 𝙋C ↗️", url=pc_url),
+            InlineKeyboardButton("🖥️ 𝙋𝘾 ↗️", url=pc_url),
             InlineKeyboardButton("📱 𝙈𝙤́𝙫𝙞𝙡 ↗️", url=mobile_url),
             InlineKeyboardButton("📺 𝙏𝙑 ↗️", url=tv_url),
         ],
         [
-            InlineKeyboardButton("🔄 𝙍\u200b𝙀𝙂𝙀𝙉 𝘾𝙊𝙊𝙆𝙄𝙀", callback_data="panel:gencookie"),
+            InlineKeyboardButton("🔄 𝙍\u200b𝙀𝙂𝙀N 𝘾𝙊𝙊𝙆𝙄𝙀", callback_data="panel:gencookie"),
             InlineKeyboardButton("🔙 𝙋𝙖𝙣𝙚𝙡", callback_data="panel:back"),
         ]
     ]
@@ -962,7 +962,7 @@ def _help_text() -> str:
         "<b>2. Pipe-combo (.txt)</b>\n"
         "<code>email:pass | Country=US | NetflixId=ct%3D…</code>\n\n"
         "<b>3. JSON (.json)</b>\n"
-        '<code>[{"name":"NetflixId","value":"ct%3D…"}]</code>\n\n"
+        '<code>[{"name":"NetflixId","value":"ct%3D…"}]</code>\n\n'
         "<b>4. Archivo ZIP (.zip)</b>\n"
         "Comprime múltiples archivos <code>.txt</code> o <code>.json</code>.\n\n"
         "━━━━━━━━━━━━━━━━━━━━━━\n"
