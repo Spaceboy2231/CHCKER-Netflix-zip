@@ -745,22 +745,22 @@ def _set_delivery(user_id: int, mode: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Panel Principal Estilo Netflix TV Login Bot (Emojis Animados & Estilos Success/Primary)
+# Panel Principal Estilo Netflix TV Login Bot (Roles Dinámicos, Colores Success/Primary)
 # ---------------------------------------------------------------------------
 def _main_panel_text(update: Update, uid: int) -> str:
     user = update.effective_user
     name = (user.full_name if user else "USUARIO").upper()
     
     cred_info = get_user_credits_info(uid)
-    if cred_info["type"] == "owner":
-        role_lbl = '<tg-emoji emoji-id="5084979757905347540">👑</tg-emoji> PROPIETARIO (ILIMITADO)'
-        status_plan = '⚡ ACTIVO (VIP 5G)'
+    if is_admin(uid):
+        role_lbl = '👑 ROL: PROPIETARIO'
+        credits_lbl = '💎 CRÉDITOS: ILIMITADOS'
     elif cred_info["type"] == "premium":
-        role_lbl = '<tg-emoji emoji-id="5085022089103016925">⚡️</tg-emoji> PREMIUM'
-        status_plan = f'⚡ ACTIVO ({cred_info["credits"]})'
+        role_lbl = '🛡️ ROL: ADMINISTRADOR / PREMIUM'
+        credits_lbl = f'💎 CRÉDITOS: {cred_info["credits"]}'
     else:
-        role_lbl = '<tg-emoji emoji-id="5116582462276764538">👤</tg-emoji> USUARIO'
-        status_plan = f'🎯 ACTIVACIONES DIARIAS ({cred_info["credits"]})'
+        role_lbl = '👤 ROL: FREE'
+        credits_lbl = f'💎 CRÉDITOS: {cred_info["credits"]}'
 
     state_lbl = "🔴 MANTENIMIENTO" if is_maintenance() else 'ONLINE <tg-emoji emoji-id="5085022089103016925">⚡️</tg-emoji> 5G'
     vault_count = len(_load_vault())
@@ -770,7 +770,8 @@ def _main_panel_text(update: Update, uid: int) -> str:
         f'<tg-emoji emoji-id="5085022089103016925">🎬</tg-emoji> <b>BILL CYPHER CHK NF ></b> <tg-emoji emoji-id="5116163917713769254">⚡️</tg-emoji>\n\n'
         f'<tg-emoji emoji-id="5084923566848213749">👤</tg-emoji> <b>NAME:</b> {name}\n'
         f'<tg-emoji emoji-id="5118686540985271080">🆔</tg-emoji> <b>CHAT ID:</b> <code>{uid}</code>\n'
-        f'<tg-emoji emoji-id="4915791289489818259">🛡️</tg-emoji> <b>STATUS:</b> {status_plan}\n'
+        f'<tg-emoji emoji-id="4915791289489818259">🛡️</tg-emoji> <b>{role_lbl}</b>\n'
+        f'<tg-emoji emoji-id="5116648080787112958">💰</tg-emoji> <b>{credits_lbl}</b>\n'
         f'<tg-emoji emoji-id="5116648080787112958">📦</tg-emoji> <b>STOCK BAÚL:</b> <code>{vault_count} cuentas</code>\n'
         f'<tg-emoji emoji-id="4904936030232117798">🟢</tg-emoji> <b>ESTADO:</b> {state_lbl}\n\n'
         f'<tg-emoji emoji-id="5085022089103016925">👇</tg-emoji> <b>SELECT AN OPTION FROM THE MENU BELOW TO PROCEED:</b>'
@@ -797,7 +798,7 @@ def _main_panel_markup(uid: int) -> InlineKeyboardMarkup:
 
     rows = [
         [
-            InlineKeyboardButton("📺 ACTIVATE TV / GEN COOKIE ⚡", callback_data="panel:gencookie"),
+            InlineKeyboardButton("⚡ GEN COOKIE 🍷", callback_data="panel:gencookie"),
         ],
         [
             InlineKeyboardButton("👥 REFER & EARN (FREE)", callback_data="panel:donate"),
