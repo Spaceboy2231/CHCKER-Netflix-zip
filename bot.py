@@ -571,7 +571,7 @@ def build_official_login_keyboard(raw_token: str) -> InlineKeyboardMarkup:
             InlineKeyboardButton("📺 𝙏𝙑 ↗️", url=tv_url),
         ],
         [
-            InlineKeyboardButton("🔄 𝙍\u200b𝙀𝙂𝙀N 𝘾𝙊𝙊𝙆𝙄𝙀", callback_data="panel:gencookie"),
+            InlineKeyboardButton("🔄 𝙍\u200b𝙀𝙂𝙀𝙉 𝘾𝙊𝙊𝙆𝙄𝙀", callback_data="panel:gencookie"),
             InlineKeyboardButton("🔙 𝙋𝙖𝙣𝙚𝙡", callback_data="panel:back"),
         ]
     ]
@@ -745,31 +745,35 @@ def _set_delivery(user_id: int, mode: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Panel Principal Compacto (Estilo Kaori con Emojis Animados Oficiales)
+# Panel Principal Estilo Netflix TV Login Bot (Emojis Animados & Estilos Success/Primary)
 # ---------------------------------------------------------------------------
-def _main_panel_text(uid: int) -> str:
-    mode_lbl = "Full" if _get_mode(uid) == "full" else "Básico"
-    dlv_lbl  = f'Cards <tg-emoji emoji-id="5116468787377341336">💬</tg-emoji>' if _get_delivery(uid) == "cards" else f'ZIP <tg-emoji emoji-id="5118686540985271080">📦</tg-emoji>'
-
+def _main_panel_text(update: Update, uid: int) -> str:
+    user = update.effective_user
+    name = (user.full_name if user else "USUARIO").upper()
+    
     cred_info = get_user_credits_info(uid)
     if cred_info["type"] == "owner":
-        role_lbl = '<tg-emoji emoji-id="5084979757905347540">👑</tg-emoji> Propietario'
+        role_lbl = '<tg-emoji emoji-id="5084979757905347540">👑</tg-emoji> PROPIETARIO (ILIMITADO)'
+        status_plan = '⚡ ACTIVO (VIP 5G)'
     elif cred_info["type"] == "premium":
-        role_lbl = '<tg-emoji emoji-id="5085022089103016925">⚡️</tg-emoji> Premium'
+        role_lbl = '<tg-emoji emoji-id="5085022089103016925">⚡️</tg-emoji> PREMIUM'
+        status_plan = f'⚡ ACTIVO ({cred_info["credits"]})'
     else:
-        role_lbl = '<tg-emoji emoji-id="5116582462276764538">👤</tg-emoji> Usuario'
+        role_lbl = '<tg-emoji emoji-id="5116582462276764538">👤</tg-emoji> USUARIO'
+        status_plan = f'🎯 ACTIVACIONES DIARIAS ({cred_info["credits"]})'
 
-    state_lbl = "🔴 Mantenimiento" if is_maintenance() else 'Online <tg-emoji emoji-id="5085022089103016925">⚡️</tg-emoji> 5G'
+    state_lbl = "🔴 MANTENIMIENTO" if is_maintenance() else 'ONLINE <tg-emoji emoji-id="5085022089103016925">⚡️</tg-emoji> 5G'
     vault_count = len(_load_vault())
 
     return (
-        f'<tg-emoji emoji-id="5085022089103016925">⚡️</tg-emoji> <b>{to_sans_bold_italic("BILL CYPHER CHK NF")}</b> <tg-emoji emoji-id="5085022089103016925">⚡️</tg-emoji> 𝟱𝗚\n'
-        "━━━━━━━━━━━━━━━━━━━━━━\n"
-        f'<tg-emoji emoji-id="5084979757905347540">👑</tg-emoji> <b>Rol:</b> {role_lbl} │ <tg-emoji emoji-id="5084923566848213749">🐾</tg-emoji> <b>Créditos:</b> <code>{cred_info["credits"]}</code>\n'
-        f'<tg-emoji emoji-id="5118686540985271080">📦</tg-emoji> <b>Stock:</b> <code>{vault_count} cuentas</code> │ <tg-emoji emoji-id="4904936030232117798">⚙️</tg-emoji> <b>Ajustes:</b> {mode_lbl} · {dlv_lbl}\n'
-        f'<tg-emoji emoji-id="4915791289489818259">✅</tg-emoji> <b>Estado:</b> {state_lbl}\n'
-        "━━━━━━━━━━━━━━━━━━━━━━\n"
-        f'<tg-emoji emoji-id="5085022089103016925">⚡️</tg-emoji> <i>Envía tu archivo o genera una cuenta abajo:</i>'
+        f'<tg-emoji emoji-id="5085022089103016925">👋</tg-emoji> <b>HEY {name}!</b>\n\n'
+        f'<tg-emoji emoji-id="5085022089103016925">🎬</tg-emoji> <b>BILL CYPHER CHK NF ></b> <tg-emoji emoji-id="5116163917713769254">⚡️</tg-emoji>\n\n'
+        f'<tg-emoji emoji-id="5084923566848213749">👤</tg-emoji> <b>NAME:</b> {name}\n'
+        f'<tg-emoji emoji-id="5118686540985271080">🆔</tg-emoji> <b>CHAT ID:</b> <code>{uid}</code>\n'
+        f'<tg-emoji emoji-id="4915791289489818259">🛡️</tg-emoji> <b>STATUS:</b> {status_plan}\n'
+        f'<tg-emoji emoji-id="5116648080787112958">📦</tg-emoji> <b>STOCK BAÚL:</b> <code>{vault_count} cuentas</code>\n'
+        f'<tg-emoji emoji-id="4904936030232117798">🟢</tg-emoji> <b>ESTADO:</b> {state_lbl}\n\n'
+        f'<tg-emoji emoji-id="5085022089103016925">👇</tg-emoji> <b>SELECT AN OPTION FROM THE MENU BELOW TO PROCEED:</b>'
     )
 
 def _main_panel_markup(uid: int) -> InlineKeyboardMarkup:
@@ -793,18 +797,18 @@ def _main_panel_markup(uid: int) -> InlineKeyboardMarkup:
 
     rows = [
         [
-            InlineKeyboardButton("⚡ GEN COOKIE 🍷", callback_data="panel:gencookie"),
+            InlineKeyboardButton("📺 ACTIVATE TV / GEN COOKIE ⚡", callback_data="panel:gencookie"),
         ],
         [
-            InlineKeyboardButton("💜 Donar Cookies", callback_data="panel:donate"),
-            InlineKeyboardButton("📶 Estadísticas", callback_data="panel:info"),
+            InlineKeyboardButton("👥 REFER & EARN (FREE)", callback_data="panel:donate"),
+            InlineKeyboardButton("💎 PREMIUM PLANS", callback_data="panel:info"),
         ],
         [
-            InlineKeyboardButton("⚙️ Configuración", callback_data="panel:settings"),
-            InlineKeyboardButton("💬 Formatos", callback_data="panel:help"),
+            InlineKeyboardButton("📋 INSTRUCTIONS", callback_data="panel:help"),
+            InlineKeyboardButton("⚙️ SETTINGS", callback_data="panel:settings"),
         ],
         [
-            InlineKeyboardButton("🔒 Cambiar PW [Beta]", callback_data="panel:changepw"),
+            InlineKeyboardButton("🔒 CAMBIAR PW [BETA]", callback_data="panel:changepw"),
         ],
         *admin_buttons,
     ]
@@ -812,7 +816,7 @@ def _main_panel_markup(uid: int) -> InlineKeyboardMarkup:
 
 def _panel_back_markup() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("🔙 Volver al Panel", callback_data="panel:back")]
+        [InlineKeyboardButton("🔙 VOLVER AL PANEL", callback_data="panel:back")]
     ])
 
 async def _send_banner_panel(update: Update, text: str, markup: InlineKeyboardMarkup) -> None:
@@ -1813,7 +1817,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         await update.message.reply_text(MAINTENANCE_TEXT, parse_mode=ParseMode.HTML)
         return
 
-    text = _main_panel_text(uid)
+    text = _main_panel_text(update, uid)
     markup = _main_panel_markup(uid)
     await _send_banner_panel(update, text, markup)
 
@@ -1828,7 +1832,7 @@ async def panel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     if data == "panel:back":
         await query.answer()
-        await _edit_panel_message(query, _main_panel_text(uid), _main_panel_markup(uid))
+        await _edit_panel_message(query, _main_panel_text(update, uid), _main_panel_markup(uid))
 
     elif data == "panel:settings":
         await query.answer()
@@ -1910,7 +1914,7 @@ async def panel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         new_state = not is_maintenance()
         set_maintenance(new_state)
         await query.answer(f"Mantenimiento {'ACTIVADO 🔴' if new_state else 'DESACTIVADO 🟢'}", show_alert=True)
-        await _edit_panel_message(query, _main_panel_text(uid), _main_panel_markup(uid))
+        await _edit_panel_message(query, _main_panel_text(update, uid), _main_panel_markup(uid))
 
         if _USERS_FILE.exists():
             uids = [u.strip() for u in _USERS_FILE.read_text(encoding="utf-8").splitlines() if u.strip().isdigit()]
@@ -1944,7 +1948,7 @@ async def panel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 if "users" in d and isinstance(d["users"], list):
                     _USERS_FILE.write_text("\n".join(d["users"]) + "\n", encoding="utf-8")
                 await query.message.reply_text(f"✅ <b>Sincronización completa:</b> {len(d.get('vault', []))} cuentas restauradas desde la nube.", parse_mode=ParseMode.HTML)
-                await _edit_panel_message(query, _main_panel_text(uid), _main_panel_markup(uid))
+                await _edit_panel_message(query, _main_panel_text(update, uid), _main_panel_markup(uid))
             else:
                 await query.message.reply_text("⚠️ No se encontró mensaje fijado de respaldo en tu chat.", parse_mode=ParseMode.HTML)
         except Exception as e:
@@ -3381,7 +3385,7 @@ def main() -> None:
             BotCommand("backup",        "Descargar respaldo de baúl y créditos [Admin]"),
             BotCommand("restore",       "Restaurar respaldo desde archivo [Admin]"),
             BotCommand("proxy",         "Gestor de proxies [Admin]"),
-            BotCommand("users",         "Descargar lista de usuarios [Admin]"),
+            BotCommand("users",         "Descargar lista de usuarios [Admin]тегоuser
             BotCommand("broadcast",     "Enviar notificación masiva [Admin]"),
             BotCommand("setbanner",     "Configurar video de cabecera [Admin]"),
         ]
