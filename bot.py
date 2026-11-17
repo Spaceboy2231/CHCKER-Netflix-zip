@@ -566,7 +566,7 @@ def build_official_login_keyboard(raw_token: str) -> InlineKeyboardMarkup:
 
     buttons = [
         [
-            InlineKeyboardButton("🖥️ 𝙋C ↗️", url=pc_url),
+            InlineKeyboardButton("🖥️ 𝙋𝘾 ↗️", url=pc_url),
             InlineKeyboardButton("📱 𝙈𝙤́𝙫𝙞𝙡 ↗️", url=mobile_url),
             InlineKeyboardButton("📺 𝙏𝙑 ↗️", url=tv_url),
         ],
@@ -801,8 +801,8 @@ def _main_panel_markup(uid: int) -> InlineKeyboardMarkup:
             InlineKeyboardButton("⚡ GEN COOKIE 🍷", callback_data="panel:gencookie"),
         ],
         [
-            InlineKeyboardButton("👥 REFER & EARN (FREE)", callback_data="panel:donate"),
-            InlineKeyboardButton("💎 PREMIUM PLANS", callback_data="panel:info"),
+            InlineKeyboardButton("👥 DONAR COOKIES", callback_data="panel:donate"),
+            InlineKeyboardButton("📊 ESTADÍSTICAS", callback_data="panel:info"),
         ],
         [
             InlineKeyboardButton("📋 INSTRUCTIONS", callback_data="panel:help"),
