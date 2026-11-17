@@ -3385,7 +3385,7 @@ def main() -> None:
             BotCommand("backup",        "Descargar respaldo de baúl y créditos [Admin]"),
             BotCommand("restore",       "Restaurar respaldo desde archivo [Admin]"),
             BotCommand("proxy",         "Gestor de proxies [Admin]"),
-            BotCommand("users",         "Descargar lista de usuarios [Admin]тегоuser
+            BotCommand("users",         "Descargar lista de usuarios [Admin]"),
             BotCommand("broadcast",     "Enviar notificación masiva [Admin]"),
             BotCommand("setbanner",     "Configurar video de cabecera [Admin]"),
         ]
